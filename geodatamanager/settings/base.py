@@ -24,9 +24,13 @@ BASE_DIR = PROJECT_DIR.parent
 
 # Application definition
 
-INSTALLED_APPS = [
-    "home",
-    "search",
+LOCAL_APPS = [ "home",
+                "search",
+                "catalog"
+                ]
+
+INSTALLED_APPS = LOCAL_APPS + [
+   
     "wagtail.contrib.forms",
     "wagtail.contrib.redirects",
     "wagtail.embeds",
@@ -47,7 +51,7 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-]
+] 
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
