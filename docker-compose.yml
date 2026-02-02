@@ -63,7 +63,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
   pgstac:
-    image: ghcr.io/stac-utils/pgstac:latest
+    image: ghcr.io/stac-utils/pgstac:v0.9.9
     container_name: geodatamanager_pgstac
     environment:
       POSTGRES_DB: pgstac
@@ -73,20 +73,45 @@ services:
       - "5434:5432"
     volumes:
       - pgstac_data:/var/lib/postgresql/data
-  
+  pgstac_migrate:
+    image: python:3.12-slim
+    depends_on:
+      - pgstac
+    environment:
+      PGHOST: pgstac
+      PGPORT: ${PG_STAC_POSTGRES_PORT}
+      PGDATABASE: ${PG_STAC_POSTGRES_DB}
+      PGUSER: ${PG_STAC_POSTGRES_USER}
+      PGPASSWORD: ${PG_STAC_POSTGRES_PASSWORD}
+    entrypoint: /bin/bash
+    command: >
+      -lc "pip install --no-cache-dir 'pypgstac[psycopg]' &&
+         pypgstac migrate --dsn postgresql://${PG_STAC_POSTGRES_USER}:${PG_STAC_POSTGRES_PASSWORD}@pgstac:5432/${PG_STAC_POSTGRES_DB}"
+
   stac_api:
     image: ghcr.io/stac-utils/stac-fastapi-pgstac:latest
     container_name: geodatamanager_stac_api
     depends_on:
       - pgstac
     environment:
-      POSTGRES_USER: ${PG_STAC_POSTGRES_USER}
-      POSTGRES_PASSWORD: ${PG_STAC_POSTGRES_PASSWORD}
-      POSTGRES_DB: pgstac
+      pguser: ${PG_STAC_POSTGRES_USER}
+      pgpassword: ${PG_STAC_POSTGRES_PASSWORD}
+      pgdatabase: pgstac
+      pghost: pgstac
       POSTGRES_HOST_READER: pgstac
       POSTGRES_HOST_WRITER: pgstac
+      pgport: 5432
+      ENABLE_TRANSACTIONS_EXTENSIONS: "true"
+      ENABLED_EXTENSIONS: "transactions,bulk_transactions"
+      APP_HOST: "0.0.0.0"
+      APP_PORT: "8080"
       # Tell it where it is hosted (optional but useful for links)
       STAC_FASTAPI_API_ROOT: http://nginx/stac
+      CORS_ORIGINS: "http://localhost,http://localhost:3000"
+      CORS_METHODS: "GET,POST,PUT,PATCH,DELETE,OPTIONS"
+      CORS_HEADERS: "*"
+    command: python -m stac_fastapi.pgstac.app
+      
     ports:
       - "8081:8080"
 

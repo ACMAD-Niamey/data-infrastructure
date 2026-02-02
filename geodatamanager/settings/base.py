@@ -28,10 +28,15 @@ BASE_DIR = PROJECT_DIR.parent
 LOCAL_APPS = [ "home",
                 "search",
                 "catalog",
-                "ingest"
+                "ingest",
+                "uploads",
                 ]
 
-INSTALLED_APPS = LOCAL_APPS + [
+THIRD_PARTY_APPS = [
+    "rest_framework",
+]
+
+INSTALLED_APPS = LOCAL_APPS + THIRD_PARTY_APPS + [
    
     "wagtail.contrib.forms",
     "wagtail.contrib.redirects",
@@ -102,6 +107,16 @@ DATABASES = {
         "PORT": os.getenv("POSTGRES_PORT", "5432"),
     }
 }
+
+DATABASES["pgstac"] = {
+    "ENGINE": "django.db.backends.postgresql",
+    "NAME": os.getenv("PG_STAC_POSTGRES_DB", "pgstac"),
+    "USER": os.getenv("PG_STAC_POSTGRES_USER", "pgstac"),
+    "PASSWORD": os.getenv("PG_STAC_POSTGRES_PASSWORD", ""),
+    "HOST": os.getenv("PG_STAC_POSTGRES_HOST", "pgstac"),
+    "PORT": os.getenv("PG_STAC_POSTGRES_PORT", "5432"),
+}
+
 
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-default-key")
@@ -199,3 +214,11 @@ WAGTAILADMIN_BASE_URL = "http://example.com"
 # if untrusted users are allowed to upload files -
 # see https://docs.wagtail.org/en/stable/advanced_topics/deploying.html#user-uploaded-files
 WAGTAILDOCS_EXTENSIONS = ['csv', 'docx', 'key', 'odt', 'pdf', 'pptx', 'rtf', 'txt', 'xlsx', 'zip']
+
+REST_FRAMEWORK = {
+    "DEFAULT_RENDERER_CLASSES": (
+        "rest_framework.renderers.JSONRenderer",
+        "rest_framework.renderers.BrowsableAPIRenderer",
+    )
+}
+

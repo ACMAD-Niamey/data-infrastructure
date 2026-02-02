@@ -4,7 +4,8 @@ from celery import shared_task
 from botocore.client import Config
 import requests
 from datetime import datetime, timezone
-
+import botocore
+from typing import Optional
 
 from .models import IngestionRun
 
@@ -24,11 +25,13 @@ def stac_base():
     # use nginx path if you added /stac/ routing, otherwise http://stac_api:8080
     return os.getenv("STAC_API_URL", "http://stac_api:8080").rstrip("/")
 
-def ensure_collection(collection_id: str, title: str = None):
+def ensure_collection(collection_id: str, title: Optional[str] = None):
     base = stac_base()
     r = requests.get(f"{base}/collections/{collection_id}", timeout=15)
     if r.status_code == 200:
         return
+    if r.status_code != 404:
+        r.raise_for_status()
 
     # Minimal STAC Collection (expand later)
     payload = {
@@ -36,15 +39,17 @@ def ensure_collection(collection_id: str, title: str = None):
         "type": "Collection",
         "title": title or collection_id,
         "description": title or collection_id,
-        "license": "proprietary",
+        "links": [],
+        "license": "CC-BY-4.0",
         "extent": {
             "spatial": {"bbox": [[-180.0, -90.0, 180.0, 90.0]]},
             "temporal": {"interval": [[None, None]]},
         },
     }
     rc = requests.post(f"{base}/collections", json=payload, timeout=20)
+    if rc.status_code == 409:
+        return
     rc.raise_for_status()
-
 
 def build_item(dataset_id: str, payload: dict):
     # prefer full stac_item if provided
@@ -76,12 +81,14 @@ def build_item(dataset_id: str, payload: dict):
     item_id = payload.get("item_id") or f"{dataset_id}_{props.get('datetime','')}".replace(":", "").replace("+", "")
 
     return {
+        "stac_version": "1.0.0",
         "id": item_id,
         "type": "Feature",
         "collection": dataset_id,
         "bbox": bbox,
         "geometry": geometry,
         "properties": props,
+        "links": [],
         "assets": {
             "data": {
                 "href": href,
@@ -94,9 +101,13 @@ def build_item(dataset_id: str, payload: dict):
 def post_item(item: dict):
     base = stac_base()
     cid = item["collection"]
-    r = requests.post(f"{base}/collections/{cid}/items", json=item, timeout=25)
-    r.raise_for_status()
-    return r.json()
+    url = f"{base}/collections/{cid}/items"
+
+    r = requests.post(url, json=item, timeout=25)
+    if r.status_code >= 400:
+        raise RuntimeError(f"STAC item POST failed {r.status_code}: {r.text}")
+    return r.json() if r.content else None
+
 
 @shared_task
 def process_ingestion_run(run_id: int):
@@ -119,6 +130,17 @@ def process_ingestion_run(run_id: int):
             raise ValueError("asset.href must look like s3://bucket/path/to/file.tif")
 
         client = s3_client()
+
+        # create bucket if missing (dev-friendly)
+        try:
+            client.head_bucket(Bucket=bucket)
+        except botocore.exceptions.ClientError as e:
+            code = e.response.get("Error", {}).get("Code", "")
+            if code in ("404", "NoSuchBucket", "NotFound"):
+                client.create_bucket(Bucket=bucket)
+            else:
+                raise
+
         client.head_object(Bucket=bucket, Key=key)
 
         # ensure collection exists
@@ -139,3 +161,4 @@ def process_ingestion_run(run_id: int):
         run.error_message = str(e)
         run.save(update_fields=["status", "error_message", "updated_at"])
         return {"ok": False, "error": str(e)}
+1
