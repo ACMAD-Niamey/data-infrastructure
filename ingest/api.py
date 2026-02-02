@@ -8,6 +8,8 @@ from .auth import HeaderAPIKeyAuthentication
 from .models import IngestionRun
 from .permissions import HasAPIKey
 
+from .tasks import process_ingestion_run
+
 
 
 
@@ -49,8 +51,12 @@ class IngestDatasetItemView(APIView):
             status="accepted",
             payload=payload,
         )
+        process_ingestion_run.delay(run.id)
 
         return Response(
             {"run_id": run.id, "status": run.status},
             status=status.HTTP_202_ACCEPTED,
         )
+
+
+
