@@ -11,6 +11,20 @@ services:
       - db
       - redis
       - minio
+  tipg:
+    image: ghcr.io/developmentseed/tipg:latest
+    container_name: geodatamanager_tipg
+    environment:
+      # your main app PostGIS db
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      # optional but helpful
+      TIPG_DEBUG: ${TIPG_DEBUG:-false}
+      TIPG_CORS_ORIGINS: "http://localhost,http://localhost:3000"
+    ports:
+      - "8082:8080"
+    depends_on:
+      - db
+
   
   worker:
     build: .
