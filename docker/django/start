@@ -1,0 +1,21 @@
+#!/bin/bash
+set -o errexit
+set -o nounset
+
+echo "Running migrations..."
+python3 manage.py migrate --noinput
+
+echo "Collecting static..."
+python3 manage.py collectstatic --noinput
+echo "Static files collected."
+
+# Wagtail: optional, but helpful for sanity
+python3 manage.py check
+
+if [ "${DEBUG:-False}" == "True" ]; then
+    echo "DEBUG=True -> running Django dev server"
+    exec python3 manage.py runserver 0.0.0.0:8000
+else
+    echo "DEBUG=False -> running gunicorn"
+    exec gunicorn geodatamanager.wsgi:application --bind 0.0.0.0:8000 --workers 3
+fi
