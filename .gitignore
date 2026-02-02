@@ -1,2 +1,5 @@
 venv_geo
 .env
+__pycache__/
+*static
+*media
