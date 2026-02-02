@@ -26,7 +26,8 @@ BASE_DIR = PROJECT_DIR.parent
 
 LOCAL_APPS = [ "home",
                 "search",
-                "catalog"
+                "catalog",
+                "ingest"
                 ]
 
 INSTALLED_APPS = LOCAL_APPS + [
