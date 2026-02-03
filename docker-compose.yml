@@ -12,18 +12,28 @@ services:
       - redis
       - minio
   tipg:
-    image: ghcr.io/developmentseed/tipg:latest
+    image: ghcr.io/developmentseed/tipg:1.0.1
     container_name: geodatamanager_tipg
     environment:
       # your main app PostGIS db
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASS: ${POSTGRES_PASSWORD}
+      POSTGRES_DBNAME: ${POSTGRES_DB}
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      DB_MIN_CONN_SIZE: 1
+      DB_MAX_CONN_SIZE: 10
       # optional but helpful
       TIPG_DEBUG: ${TIPG_DEBUG:-false}
       TIPG_CORS_ORIGINS: "http://localhost,http://localhost:3000"
     ports:
       - "8082:8080"
+    command:
+      bash -c "bash /tmp/scripts/wait-for-it.sh -t 120 -h db -p 5432 && uvicorn tipg.main:app --host 0.0.0.0 --port 8080"
     depends_on:
       - db
+    volumes:
+      - ./dockerfiles/scripts:/tmp/scripts
 
   
   worker:
@@ -68,7 +78,7 @@ services:
       - web
 
   db:
-    image: postgres:16
+    image: kartoza/postgis:18-3.6
     container_name: geodatamanager_db
     environment:
       POSTGRES_DB: ${POSTGRES_DB}

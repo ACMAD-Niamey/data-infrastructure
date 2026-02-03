@@ -20,6 +20,7 @@ RUN sed -i 's/\r$//g' /entrypoint && chmod +x /entrypoint
 COPY ./docker/django/start /start
 
 RUN chmod +x /start  && sed -i 's/\r$//g' /start*
+RUN chmod +x ./dockerfiles/scripts/wait-for-it.sh 
 
 ENTRYPOINT ["/entrypoint"]
 
