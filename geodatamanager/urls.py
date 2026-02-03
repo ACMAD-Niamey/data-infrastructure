@@ -7,14 +7,28 @@ from wagtail import urls as wagtail_urls
 from wagtail.documents import urls as wagtaildocs_urls
 
 from search import views as search_views
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
+
+api_patterns = [
+    path("api/vector/", include("vector_ingest.urls")),
+    path("api/catalog/", include("catalog.urls")),
+    path("api/ingest/", include("ingest.urls")),
+]
+
 
 urlpatterns = [
+    path('api/schema/', SpectacularAPIView.as_view(patterns=api_patterns), name='schema'),
+    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
     path("django-admin/", admin.site.urls),
     path("admin/", include(wagtailadmin_urls)),
     path("documents/", include(wagtaildocs_urls)),
     path("search/", search_views.search, name="search"),
     path("api/catalog/", include("catalog.urls")),
     path("api/ingest/", include("ingest.urls")),
+    path("api/vector/", include("vector_ingest.urls")),
+
+   
+
 ]
 
 

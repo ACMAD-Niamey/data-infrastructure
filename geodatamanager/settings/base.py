@@ -30,10 +30,13 @@ LOCAL_APPS = [ "home",
                 "catalog",
                 "ingest",
                 "uploads",
+                "vector_ingest",
                 ]
 
 THIRD_PARTY_APPS = [
     "rest_framework",
+    "drf_spectacular",
+    "rest_framework.authtoken",
 ]
 
 INSTALLED_APPS = LOCAL_APPS + THIRD_PARTY_APPS + [
@@ -108,6 +111,15 @@ DATABASES = {
     }
 }
 
+DATABASES["gis"] = {
+    "ENGINE": "django.db.backends.postgresql",
+    "NAME": os.getenv("POSTGRES_DB", "geodatamanager"),
+    "USER": os.getenv("POSTGRES_USER", "geodatamanager"),
+    "PASSWORD": os.getenv("POSTGRES_PASSWORD", "geodatamanager"),
+    "HOST": os.getenv("POSTGRES_HOST", "db"),
+    "PORT": os.getenv("POSTGRES_PORT", "5432"),
+}
+
 DATABASES["pgstac"] = {
     "ENGINE": "django.db.backends.postgresql",
     "NAME": os.getenv("PG_STAC_POSTGRES_DB", "pgstac"),
@@ -116,6 +128,9 @@ DATABASES["pgstac"] = {
     "HOST": os.getenv("PG_STAC_POSTGRES_HOST", "pgstac"),
     "PORT": os.getenv("PG_STAC_POSTGRES_PORT", "5432"),
 }
+
+
+
 
 
 
@@ -219,6 +234,46 @@ REST_FRAMEWORK = {
     "DEFAULT_RENDERER_CLASSES": (
         "rest_framework.renderers.JSONRenderer",
         "rest_framework.renderers.BrowsableAPIRenderer",
-    )
+    ),
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
+
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "GeodataManager API",
+    "VERSION": "0.1.0",
+    "COMPONENT_SPLIT_REQUEST": True,
+
+    # Only include your DRF API namespace
+    "SCHEMA_PATH_PREFIX": r"^/api/",
+
+       "COMPONENTS": {
+        "securitySchemes": {
+            "ApiKeyAuth": {
+                "type": "apiKey",
+                "in": "header",
+                "name": "X-API-KEY",
+            }
+        }
+    },
+ 
+}
+
+
+MINIO_ENDPOINT = os.environ.get("MINIO_ENDPOINT", "minio:9000")
+MINIO_ACCESS_KEY = os.environ.get("MINIO_ACCESS_KEY", "")
+MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY", "")
+MINIO_USE_SSL = os.environ.get("MINIO_USE_SSL", "false").lower() == "true"
+MINIO_ARCHIVE_BUCKET = os.environ.get("MINIO_ARCHIVE_BUCKET", "geodata-archive")
+
+
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost",
+    "http://127.0.0.1",
+]
+if os.getenv("DJANGO_ALLOWED_HOSTS"):
+    for host in os.getenv("DJANGO_ALLOWED_HOSTS").split(","):
+        CSRF_TRUSTED_ORIGINS.append(f"http://{host}")
+        CSRF_TRUSTED_ORIGINS.append(f"https://{host}")
+
 

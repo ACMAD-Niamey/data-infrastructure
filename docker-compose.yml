@@ -7,6 +7,7 @@ services:
     volumes:
       - .:/app
       - static_volume:/static
+      - media_volume:/app/media 
     depends_on:
       - db
       - redis
@@ -16,11 +17,14 @@ services:
     container_name: geodatamanager_tipg
     environment:
       # your main app PostGIS db
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASS: ${POSTGRES_PASSWORD}
-      POSTGRES_DBNAME: ${POSTGRES_DB}
-      POSTGRES_HOST: db
-      POSTGRES_PORT: 5432
+      DATABASE_URL: postgresql://geodatamanager:${POSTGRES_PASSWORD}@db:5432/geodatamanager
+      TIPG_DB_SCHEMA: tiles
+      TIPG_CATALOG_TTL: 100
+      # POSTGRES_USER: ${POSTGRES_USER}
+      # POSTGRES_PASS: ${POSTGRES_PASSWORD}
+      # POSTGRES_DBNAME: ${POSTGRES_DB}
+      # POSTGRES_HOST: db
+      # POSTGRES_PORT: 5432
       DB_MIN_CONN_SIZE: 1
       DB_MAX_CONN_SIZE: 10
       # optional but helpful
@@ -43,6 +47,8 @@ services:
     command: celery -A geodatamanager worker -l info
     volumes:
       - .:/app
+      - static_volume:/static
+      - media_volume:/app/media
     depends_on:
       - db
       - redis
@@ -145,3 +151,4 @@ volumes:
   static_volume:
   minio_data:
   pgstac_data:
+  media_volume: 
