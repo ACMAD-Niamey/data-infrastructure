@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 
+
 def to_dekad_start(d: date) -> date:
     # 1–10 => 1st, 11–20 => 11th, 21+ => 21st
     if d.day <= 10:

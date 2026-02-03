@@ -145,10 +145,35 @@ services:
     ports:
       - "8081:8080"
 
+  titiler:
+    container_name: geodatamanager_titiler
+    image: ghcr.io/developmentseed/titiler:1.1.1
+    platform: linux/amd64
+    ports:
+      - "8000:80"
+    environment:
+      - TITILER_API_DISABLE_CORS=False
+      - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
+      - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
+      - AWS_S3_ENDPOINT=${MINIO_ENDPOINT}
+      - AWS_S3_SECURE=false
+      - AWS_S3_REGION_NAME=us-east-1
+      - AWS_HTTPS="false"
+    depends_on:
+      - minio
+
+    volumes:
+      - ${PORTAL_RASTERS_VOLUME}:/data
+    restart: on-failure
+
 
 volumes:
   pgdata:
   static_volume:
   minio_data:
   pgstac_data:
-  media_volume: 
+  media_volume:
+
+networks:
+  default:
+    name: data_infra_network 
