@@ -6,12 +6,16 @@ services:
     command: /start
     volumes:
       - .:/app
-      - static_volume:/static
-      - media_volume:/app/media 
+      - ${STATIC_VOLUME}:/home/app/web/static
+      - ${MEDIA_VOLUME}:/app/media
     depends_on:
       - db
       - redis
       - minio
+
+    networks:
+      - data_infra_network
+
   tipg:
     image: ghcr.io/developmentseed/tipg:1.0.1
     container_name: geodatamanager_tipg
@@ -20,15 +24,11 @@ services:
       DATABASE_URL: postgresql://geodatamanager:${POSTGRES_PASSWORD}@db:5432/geodatamanager
       TIPG_DB_SCHEMA: tiles
       TIPG_CATALOG_TTL: 100
-      # POSTGRES_USER: ${POSTGRES_USER}
-      # POSTGRES_PASS: ${POSTGRES_PASSWORD}
-      # POSTGRES_DBNAME: ${POSTGRES_DB}
-      # POSTGRES_HOST: db
-      # POSTGRES_PORT: 5432
       DB_MIN_CONN_SIZE: 1
       DB_MAX_CONN_SIZE: 10
       # optional but helpful
       TIPG_DEBUG: ${TIPG_DEBUG:-false}
+      TIPG_ONLY_SPATIAL_TABLES: "true"
       TIPG_CORS_ORIGINS: "http://localhost,http://localhost:3000"
     ports:
       - "8082:8080"
@@ -38,6 +38,8 @@ services:
       - db
     volumes:
       - ./dockerfiles/scripts:/tmp/scripts
+    networks:
+      - data_infra_network
 
   
   worker:
@@ -47,18 +49,22 @@ services:
     command: celery -A geodatamanager worker -l info
     volumes:
       - .:/app
-      - static_volume:/static
-      - media_volume:/app/media
+      - ${STATIC_VOLUME}:/home/app/web/static
+      - ${MEDIA_VOLUME}:/app/media
     depends_on:
       - db
       - redis
       - minio
+    networks:
+      - data_infra_network
 
   redis:
     image: redis:7-alpine
     container_name: geodatamanager_redis
     ports:
       - "6379:6379"
+    networks:
+      - data_infra_network
   minio:
     image: minio/minio
     container_name: geodatamanager_minio
@@ -70,7 +76,9 @@ services:
       - "9000:9000"
       - "9001:9001"
     volumes:
-      - minio_data:/data
+      - ${MINIO_VOLUME}:/data
+    networks:
+      - data_infra_network
 
   nginx:
     image: nginx:1.25-alpine
@@ -79,9 +87,12 @@ services:
       - "80:80"
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - static_volume:/static
+      - ${STATIC_VOLUME}:/static_files
+      - ${MEDIA_VOLUME}:/media_files
     depends_on:
       - web
+    networks:
+      - data_infra_network
 
   db:
     image: kartoza/postgis:18-3.6
@@ -91,7 +102,10 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - ${PGDATA_VOLUME}:/var/lib/postgresql
+    networks:
+      - data_infra_network
+
   pgstac:
     image: ghcr.io/stac-utils/pgstac:v0.9.9
     container_name: geodatamanager_pgstac
@@ -103,6 +117,9 @@ services:
       - "5434:5432"
     volumes:
       - pgstac_data:/var/lib/postgresql/data
+
+    networks:
+      - data_infra_network
   pgstac_migrate:
     image: python:3.12-slim
     depends_on:
@@ -117,6 +134,8 @@ services:
     command: >
       -lc "pip install --no-cache-dir 'pypgstac[psycopg]' &&
          pypgstac migrate --dsn postgresql://${PG_STAC_POSTGRES_USER}:${PG_STAC_POSTGRES_PASSWORD}@pgstac:5432/${PG_STAC_POSTGRES_DB}"
+    networks:
+      - data_infra_network
 
   stac_api:
     image: ghcr.io/stac-utils/stac-fastapi-pgstac:latest
@@ -144,6 +163,8 @@ services:
       
     ports:
       - "8081:8080"
+    networks:
+      - data_infra_network
 
   titiler:
     container_name: geodatamanager_titiler
@@ -165,15 +186,17 @@ services:
     volumes:
       - ${PORTAL_RASTERS_VOLUME}:/data
     restart: on-failure
+    networks:
+      - data_infra_network
 
 
 volumes:
-  pgdata:
+  # pgdata:
+  #   name: ${PGDATA_VOLUME:-geomgr_pgdata}
   static_volume:
-  minio_data:
   pgstac_data:
   media_volume:
 
 networks:
-  default:
-    name: data_infra_network 
+  data_infra_network:
+    driver: bridge  
