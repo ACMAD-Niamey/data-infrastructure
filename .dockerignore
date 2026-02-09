@@ -37,3 +37,12 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+
+venv_geo
+.env
+__pycache__/
+*static
+*media
+*staticfiles
+*geomgr_pgdata
+*data

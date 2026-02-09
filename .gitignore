@@ -3,3 +3,6 @@ venv_geo
 __pycache__/
 *static
 *media
+*staticfiles
+*geomgr_pgdata
+*data
