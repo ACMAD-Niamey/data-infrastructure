@@ -1,6 +1,6 @@
 # GeoDataManager
 
-A comprehensive Django-based geospatial data management system for handling vector and raster geospatial data with PostGIS, integrated with Celery for asynchronous task processing, and MinIO for cloud-native object storage.
+A comprehensive python-based geospatial data management system for handling vector and raster geospatial data with PostGIS, integrated with Celery for asynchronous task processing, and MinIO for cloud-native object storage.
 
 ## Project Overview
 
