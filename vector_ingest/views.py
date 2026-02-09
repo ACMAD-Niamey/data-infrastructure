@@ -31,7 +31,6 @@ class VectorIngestUploadView(APIView):
         return Response(VectorIngestStatusSerializer(job).data, status=http_status.HTTP_201_CREATED)
 
 class VectorIngestStatusView(APIView):
-    # authentication_classes = [HeaderAPIKeyAuthentication]
     permission_classes = [IsAuthenticated]
     def get(self, request, job_id):
         job = get_object_or_404(VectorIngestJob, id=job_id)
