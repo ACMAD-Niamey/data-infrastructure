@@ -1,5 +1,6 @@
 import logging
 import os
+import json
 
 from celery import shared_task
 from django.core.cache import cache
@@ -12,6 +13,29 @@ from ingest.tasks import process_ingestion_run
 
 logger = logging.getLogger(__name__)
 
+
+def _set_bucket_public(client, bucket: str):
+    """
+    Set bucket policy to allow public read access (download only).
+    This allows files to be accessed via HTTP without authentication.
+    """
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {"AWS": "*"},
+                "Action": ["s3:GetObject"],
+                "Resource": [f"arn:aws:s3:::{bucket}/*"]
+            }
+        ]
+    }
+    
+    try:
+        client.put_bucket_policy(Bucket=bucket, Policy=json.dumps(policy))
+        logger.info(f"Set bucket {bucket} to public read access")
+    except Exception as e:
+        logger.warning(f"Failed to set public policy on bucket {bucket}: {e}")
 
 
 def _extract_raster_bbox_geometry(file_path: str):
@@ -125,6 +149,8 @@ def upload_file_to_minio(
         except Exception as e:
             logger.info("Creating bucket %s: %s", bucket, e)
             client.create_bucket(Bucket=bucket)
+            # Set bucket to public read access
+            _set_bucket_public(client, bucket)
 
         file_size = os.path.getsize(file_path)
         logger.info("Uploading file %s (%s bytes)", file_path, file_size)

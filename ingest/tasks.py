@@ -23,6 +23,33 @@ def s3_client():
         region_name="us-east-1",
     )
 
+def set_bucket_public(client, bucket: str):
+    """
+    Set bucket policy to allow public read access (download only).
+    This allows files to be accessed via HTTP without authentication.
+    """
+    import json
+    
+    policy = {
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Effect": "Allow",
+                "Principal": {"AWS": "*"},
+                "Action": ["s3:GetObject"],
+                "Resource": [f"arn:aws:s3:::{bucket}/*"]
+            }
+        ]
+    }
+    
+    try:
+        client.put_bucket_policy(Bucket=bucket, Policy=json.dumps(policy))
+    except Exception as e:
+        # Log but don't fail if policy setting fails
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.warning(f"Failed to set public policy on bucket {bucket}: {e}")
+
 def stac_base():
     # use nginx path if you added /stac/ routing, otherwise http://stac_api:8080
     return os.getenv("STAC_API_URL", "http://stac_api:8080").rstrip("/")
@@ -140,6 +167,8 @@ def process_ingestion_run(run_id: int):
             code = e.response.get("Error", {}).get("Code", "")
             if code in ("404", "NoSuchBucket", "NotFound"):
                 client.create_bucket(Bucket=bucket)
+                # Set bucket to public read access
+                set_bucket_public(client, bucket)
             else:
                 raise
 
