@@ -13,6 +13,7 @@ api_patterns = [
     path("api/vector/", include("vector_ingest.urls")),
     path("api/catalog/", include("catalog.urls")),
     path("api/ingest/", include("ingest.urls")),
+    path("api/uploads/", include("uploads.urls")),
 ]
 
 
@@ -26,6 +27,7 @@ urlpatterns = [
     path("api/catalog/", include("catalog.urls")),
     path("api/ingest/", include("ingest.urls")),
     path("api/vector/", include("vector_ingest.urls")),
+    path("api/uploads/", include("uploads.urls")),
 
    
 

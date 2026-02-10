@@ -1,7 +1,9 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
+from drf_spectacular.utils import extend_schema
 
 from .models import Layer
+from .serializers import UILayersResponseSerializer, LayerSerializer
 
 
 class UILayersView(APIView):
@@ -9,6 +11,13 @@ class UILayersView(APIView):
     Read-only config endpoint consumed by React/MapLibre.
     Returns only layers whose dataset is published for UI.
     """
+    
+    @extend_schema(
+        responses={200: UILayersResponseSerializer},
+        tags=["catalog"],
+        summary="Get UI layer configurations",
+        description="Returns all published layers with their dataset metadata, tile configurations, and visualization parameters.",
+    )
     def get(self, request):
         layers = (
             Layer.objects

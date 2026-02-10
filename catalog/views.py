@@ -4,6 +4,12 @@ from django.db import connections
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
+from drf_spectacular.utils import extend_schema, OpenApiParameter
+
+from .serializers import (
+    DatasetAvailabilityRequestSerializer,
+    DatasetAvailabilityResponseSerializer,
+)
 
 
 def to_dekad_start(d: date) -> date:
@@ -15,9 +21,31 @@ def to_dekad_start(d: date) -> date:
     return d.replace(day=21)
 
 class DatasetAvailabilityView(APIView):
+    """
+    Get available dates for a dataset from pgSTAC.
+    Returns dates aggregated by the specified cadence (daily, dekadal, or monthly).
+    """
     # reuse your API key auth, same as ingest
     # permission_classes = [HasAPIKey]
 
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="cadence",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                description="Temporal cadence to aggregate availability (daily, dekadal, or monthly)",
+                enum=["daily", "dekadal", "monthly"],
+                default="daily",
+            ),
+        ],
+        responses={200: DatasetAvailabilityResponseSerializer},
+        tags=["catalog"],
+        summary="Get dataset availability",
+        description="Returns available dates for a dataset from pgSTAC, aggregated by cadence. "
+                    "Daily returns individual dates, dekadal returns 10-day periods, "
+                    "monthly returns year-month strings.",
+    )
     def get(self, request, dataset_id: str):
         cadence = (request.query_params.get("cadence") or "daily").lower()
         # If you have cadence in Wagtail, you can fetch it here instead.

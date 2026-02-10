@@ -11,7 +11,6 @@ from .models import VectorIngestJob
 from .serializers import VectorIngestCreateSerializer, VectorIngestStatusSerializer
 from .tasks import run_vector_ingest_pipeline
 from ingest.auth import HeaderAPIKeyAuthentication
-# from ingest.permissions import HasAPIKey
 
 class VectorIngestUploadView(APIView):
     parser_classes = (MultiPartParser, FormParser)
