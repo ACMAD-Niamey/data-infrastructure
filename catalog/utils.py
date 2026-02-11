@@ -2,15 +2,19 @@ import http
 import requests
 import os 
 import logging
+import json
+
+from catalog.models import Layer
 
 stac_api_url = os.getenv("STAC_API_URL", "http://stac_api:8080")
-titiler_url = os.getenv("TITILER_URL", "http://titiler/")
-minio_endpoint = os.getenv("MINIO_PUBLIC_ENDPOINT", "http://minio:9000")
+titiler_url = os.getenv("TITILER_URL", "http://titiler")
+minio_endpoint = os.getenv("MINIO_PUBLIC_ENDPOINT", "http://localhost:9000")
 tile_matrix_id = os.getenv("TileMatrixSetId", default="WorldCRS84Quad")
 https_end_point_url = os.getenv("HTTPS_ENDPOINT_URL")    
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
+
 
 class DatasetVisualization:
 
@@ -19,7 +23,7 @@ class DatasetVisualization:
         self.dataset_id = dataset_id
         self.cadence = cadence
         self.stack_items =None 
-        self.stack__item_url = None 
+        self.stack_item_url = None 
         self.http_url = None
 
 
@@ -87,6 +91,7 @@ class DatasetVisualization:
     def _query_stac(self, start, end):
         """Query STAC API with datetime range."""
         url = f"{stac_api_url}/collections/{self.dataset_id}/items"
+        log.info(f"Querying STAC API at {url} with datetime range {start} to {end}")
         params = {"datetime": f"{start}/{end}", "limit": 100}
         
         response = requests.get(url, params=params, timeout=10)
@@ -116,13 +121,25 @@ class DatasetVisualization:
         start, end = handler(year, month, day)
         self.stack_items = self._query_stac(start, end)
         return self.stack_items
+
+    def get_tile_params_for_dataset(self):
+        """
+        Return tile params for all layers tied to this dataset_id.
+
+        Returns:
+            list: Tile params objects (JSON) for each layer.
+        """
+        return list(
+            Layer.objects.filter(dataset__dataset_id=self.dataset_id)
+            .values_list("tile_params", flat=True)
+        )
     
     def get_s3_url(self):
         """for now just get the first item in the stack """
         if self.stack_items is not None:
-            self.stack__item_url = self.stack_items[0]['assets']['data']
+            self.stack_item_url = self.stack_items[0]['assets']['data']
         
-        return self.stack__item_url
+        return self.stack_item_url
 
     
     def s3_to_http_url(self):
@@ -131,19 +148,24 @@ class DatasetVisualization:
         if s3_stack_item:
             s3_url = s3_stack_item["href"]
             path = s3_url.replace("s3://", "")
+            self.http_url = f"{minio_endpoint}/{path}"
         return f"{minio_endpoint}/{path}"
     
-    def get_titiler_url(self, color_map="viridis", replace_url=False):
+    def get_titiler_url(self, color_map={}, replace_url=False):
         try:
             titiler_request_url = f"{titiler_url}/cog/WebMercatorQuad/tilejson.json?url={self.http_url}&tile_format=png&tileMatrixSetId={tile_matrix_id}&colormap={color_map}"
+            log.info(f"Requesting TiTiler URL: {titiler_request_url}")
             tiled_output = requests.get(titiler_request_url) 
             if tiled_output.status_code == 200:
                 log.info(f"TiTiler request successful:")
-                tiled_output['tiles'] = [self.replace_url_with_titiler(url) for url in tiled_output.get('tiles', [])] if replace_url else tiled_output
+                if replace_url:
+                    tiled_output['tiles'] = [self.replace_url_with_titiler(url) for url in tiled_output.get('tiles', [])] if replace_url else tiled_output
                 return tiled_output
+            else:
+                log.error(f"TiTiler request failed with status code {tiled_output.status_code}: {tiled_output.text}")
             
         except Exception as e:
-            log.error(f"Error converting S3 URL to HTTP: {e}")
+            log.error(f"Error creating titiler URL: {e}")
             return None
         
     
@@ -162,7 +184,7 @@ class DatasetVisualization:
         titiler_endpoint = f"{replaced_str}/titiler"
         return url.replace(replaced_str, titiler_endpoint)
     
-    def hex_to_rgb(hex):
+    def hex_to_rgb(self,hex):
         """
         Convert hex color to RGB tuple.
         Args:
@@ -175,6 +197,86 @@ class DatasetVisualization:
 
 
     def get_visualization(self):
+        """
+        Get visualization parameters for the dataset, including tile URL and color map.
+        Returns:
+            dict: Visualization parameters including 'tile_url' and 'color_map'.
+        """
+        self.get_dataset_items()
+        self.s3_to_http_url()
+        style_parameters = self.get_tile_params_for_dataset()
+
+        log.info(f"Style parameters for dataset {self.dataset_id} goten ")
         
-        pass
+        cmap = self.get_color_map_titiler(style_parameters[0]) if style_parameters else {}
+        log.info(f"Tile params for dataset {self.dataset_id}: {cmap}")
+        titiler_url = self.get_titiler_url(color_map=cmap if cmap else {})
+
+        return titiler_url
+     
+
+    def get_stac_tile_url(self):
+        try:
+            stac_item = self.stack_items[0]
+            item_id = stac_item['id']
+            stac_item_url = f"{stac_api_url}/collections/{self.dataset_id}/items/{item_id}"
+            tile_url = f"{titiler_url}/stac/tiles/WebMercatorQuad/{{z}}/{{x}}/{{y}}?url={stac_item_url}&tile_format=png&tileMatrixSetId={tile_matrix_id}&assets=data"
+            return tile_url
+        except Exception as e:
+            log.error(f"Error occured generation stac tile URL: {e}")
+            return None
         
+    def get_style_map_parameters(self):
+       pass 
+
+    def get_color_map_descrete(self,style):
+        """
+        Create a color map for discrete values.
+        Args:
+            style (dict): Style dictionary containing 'palette' and 'max' keys.
+        Returns:
+            str: JSON string of color map of rgb colors.
+        """
+        color_map = dict()
+        max_value = int(style.get('max'))
+        for i in range(max_value):
+            color_map[i+1] = self.hex_to_rgb(style['palette'][i])
+        return json.dumps(color_map)
+    
+    def get_color_map_linear(self, style:dict):
+        color_map = []
+        min_value = int(style.get('min', 0))
+        color_map.append(([min_value , style['values'][0]], self.hex_to_rgb(style['palette'][0])))
+
+        values = style.get('values')
+
+        # Loop over values to create ranges
+        for i in range(len(values) - 1):
+            val_range = [values[i], values[i + 1]]
+            rgba = self.hex_to_rgb(style["palette"][i + 1])
+            color_map.append((val_range, rgba))
+
+        return json.dumps(color_map)
+    
+    def get_color_map_titiler(self,style):
+
+        scheme = style.get("scheme")
+        if scheme == 'linear':
+            # check if values exists 
+            if style.get('values') is not None:
+                color_map = self.get_color_map_linear(style)
+            else:
+                raise ValueError("Values are required for linear scheme")
+        elif scheme == 'descrete':
+            color_map = self.get_color_map_descrete(style)
+        else:
+            raise ValueError(f"Unknown scheme: {scheme}")
+        return color_map
+
+
+if __name__ == "__main__":
+    viz = DatasetVisualization("2025-12", "trees", "monthly")
+    items = viz.get_dataset_items()
+    http_url = viz.s3_to_http_url()
+    titiler =viz.get_titiler_url()
+
