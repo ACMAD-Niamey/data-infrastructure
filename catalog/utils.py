@@ -25,6 +25,7 @@ class DatasetVisualization:
         self.stack_items =None 
         self.stack_item_url = None 
         self.http_url = None
+        self.legend_dict = None
 
 
     
@@ -129,10 +130,11 @@ class DatasetVisualization:
         Returns:
             list: Tile params objects (JSON) for each layer.
         """
-        return list(
-            Layer.objects.filter(dataset__dataset_id=self.dataset_id)
-            .values_list("tile_params", flat=True)
-        )
+        dataset_info = Layer.objects.filter(dataset__dataset_id=self.dataset_id).values("tile_params", "legend").first()
+
+        self.legend_dict = dataset_info["legend"] if dataset_info else None
+
+        return dataset_info["tile_params"] if dataset_info else None
     
     def get_s3_url(self):
         """for now just get the first item in the stack """
@@ -151,7 +153,7 @@ class DatasetVisualization:
             self.http_url = f"{minio_endpoint}/{path}"
         return f"{minio_endpoint}/{path}"
     
-    def get_titiler_url(self, color_map={}, replace_url=False):
+    def get_titiler_url(self, color_map={}, replace_url=True):
         try:
             titiler_request_url = f"{titiler_url}/cog/WebMercatorQuad/tilejson.json?url={self.http_url}&tile_format=png&tileMatrixSetId={tile_matrix_id}&colormap={color_map}"
             log.info(f"Requesting TiTiler URL: {titiler_request_url}")
@@ -208,7 +210,7 @@ class DatasetVisualization:
 
         log.info(f"Style parameters for dataset {self.dataset_id} goten ")
         
-        cmap = self.get_color_map_titiler(style_parameters[0]) if style_parameters else {}
+        cmap = self.get_color_map_titiler(style_parameters) if style_parameters else {}
         log.info(f"Tile params for dataset {self.dataset_id}: {cmap}")
         titiler_url = self.get_titiler_url(color_map=cmap if cmap else {})
 
