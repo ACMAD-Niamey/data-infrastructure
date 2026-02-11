@@ -139,6 +139,14 @@ SECRET_KEY = os.getenv("DJANGO_SECRET_KEY", "django-insecure-default-key")
 DEBUG = os.getenv("DJANGO_DEBUG", "0") == "1"
 ALLOWED_HOSTS = os.getenv("DJANGO_ALLOWED_HOSTS", "*").split(",")
 
+CSRF_TRUSTED_ORIGINS = [
+    "http://localhost",
+    "http://127.0.0.1",
+] + [f"http://{host}" for host in os.getenv("DJANGO_ALLOWED_HOSTS", "").split(",") if host] 
+
+CORS_ORIGIN_ALLOW_ALL = True
+CORS_ALLOW_CREDENTIALS = True
+
 # Password validation
 # https://docs.djangoproject.com/en/6.0/ref/settings/#auth-password-validators
 
