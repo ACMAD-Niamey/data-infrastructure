@@ -3,7 +3,7 @@ import boto3
 from botocore.client import Config
 
 def minio_client():
-    endpoint = os.environ.get("MINIO_ENDPOINT_INTERNAL", "http://minio:9000")
+    endpoint = os.environ.get("MINIO_ENDPOINT", "http://minio:9000")
     # Ensure endpoint has protocol prefix
     if not endpoint.startswith(("http://", "https://")):
         endpoint = f"http://{endpoint}"

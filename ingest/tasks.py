@@ -11,7 +11,7 @@ from .models import IngestionRun
 
 
 def s3_client():
-    endpoint = os.getenv("MINIO_ENDPOINT_INTERNAL", "http://minio:9000")
+    endpoint = os.getenv("MINIO_ENDPOINT", "http://minio:9000")
     if not endpoint.startswith(("http://", "https://")):
         endpoint = f"http://{endpoint}"
     return boto3.client(
