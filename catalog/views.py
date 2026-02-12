@@ -7,9 +7,12 @@ from rest_framework import status
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 
 from .serializers import (
-    DatasetAvailabilityRequestSerializer,
     DatasetAvailabilityResponseSerializer,
+    DatasetVisualizationRequestSerializer,
+    DatasetVisualizationResponseSerializer
 )
+
+from .utils import DatasetVisualization
 
 
 def to_dekad_start(d: date) -> date:
@@ -110,3 +113,64 @@ class DatasetAvailabilityView(APIView):
             },
             status=status.HTTP_200_OK,
         )
+
+class DatasetVisualizationView(APIView):
+    """
+    Get visualization parameters for a dataset.
+    Returns a URL to a titiler endpoint that can be used to visualize the dataset on the frontend.
+    """
+    @extend_schema(
+        parameters=[
+            OpenApiParameter(
+                name="date",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                description="Specific date to visualize (YYYY-MM or YYYY-MM-DD)",
+                required=True,
+            ),
+            OpenApiParameter(
+                name="cadence",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                description="Temporal cadence for visualization",
+                enum=["daily", "dekadal", "monthly"],
+                required=True,
+            ),
+        ],
+        responses={200: DatasetVisualizationResponseSerializer},
+        tags=["catalog"],
+        summary="Get dataset visualization parameters",
+        description="Returns a json containing a URL to a titiler endpoint for visualizing the dataset on the frontend. "
+                    "The titiler URL is generated based on the dataset and date, and can be used to display "
+                    "the dataset as a map layer in the UI.",
+    )
+    def get(self, request, dataset_id: str):
+        serializer = DatasetVisualizationRequestSerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        date = serializer.validated_data["date"]
+        cadence = serializer.validated_data["cadence"] 
+
+        try:
+            visualization_info = DatasetVisualization(date, dataset_id, cadence)
+            
+            titiler_info = visualization_info.get_visualization()
+
+            if not titiler_info:
+                return Response({"detail": "No visualization available for this dataset/date"}, status=404)
+            titiler_url = titiler_info.get("tiles")
+
+            return Response(
+                {
+                    "dataset_id": dataset_id,
+                    "cadence": visualization_info.cadence,
+                    "titiler_url": titiler_url if titiler_url else None,
+                    "titiler_info": titiler_info,
+                    "legend": visualization_info.legend_dict,
+                },
+                status=status.HTTP_200_OK,
+            )
+        except ValueError as e:
+            return Response({"detail": str(e)}, status=400)
+
+
+  

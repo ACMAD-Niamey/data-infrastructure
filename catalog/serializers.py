@@ -1,4 +1,17 @@
 from rest_framework import serializers
+import re
+
+
+class YearMonthOrDateField(serializers.CharField):
+    """Accept YYYY-MM or YYYY-MM-DD strings."""
+
+    def to_internal_value(self, data):
+        value = super().to_internal_value(data)
+        if not re.fullmatch(r"\d{4}-\d{2}(-\d{2})?", value):
+            raise serializers.ValidationError(
+                "Date must be in YYYY-MM or YYYY-MM-DD format."
+            )
+        return value
 
 
 class DatasetSerializer(serializers.Serializer):
@@ -68,4 +81,31 @@ class DatasetAvailabilityResponseSerializer(serializers.Serializer):
     max = serializers.DateField(
         allow_null=True,
         help_text="Latest available date"
+    )
+
+
+class DatasetVisualizationRequestSerializer(serializers.Serializer):
+    """Request serializer for dataset visualization parameters"""
+    date = YearMonthOrDateField(
+        required=True,
+        help_text="Specific date to visualize (YYYY-MM or YYYY-MM-DD)"
+    )
+    cadence = serializers.ChoiceField(
+        choices=["daily", "dekadal", "monthly"],
+        required=True,
+        help_text="Temporal cadence for visualization"
+    )
+
+class DatasetVisualizationResponseSerializer(serializers.Serializer):
+    """Response serializer for dataset visualization parameters"""
+    dataset_id = serializers.CharField(max_length=80)
+    cadence = serializers.CharField(max_length=10)
+    titiler_url = serializers.URLField(
+        help_text="URL to the titiler endpoint for visualizing this dataset"
+    )
+    titiler_info = serializers.JSONField(
+        help_text="Additional info from titiler for visualization"
+    )
+    legend = serializers.JSONField(
+        help_text="Legend configuration for visualizing this dataset"
     )
