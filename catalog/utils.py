@@ -8,7 +8,7 @@ from catalog.models import Layer
 
 stac_api_url = os.getenv("STAC_API_URL", "http://stac_api:8080")
 titiler_url = os.getenv("TITILER_URL", "http://titiler")
-minio_endpoint = os.getenv("MINIO_PUBLIC_ENDPOINT", "http://localhost:9000")
+minio_endpoint = os.getenv("MINIO_ENDPOINT", "http://minio:9000")
 tile_matrix_id = os.getenv("TileMatrixSetId", default="WorldCRS84Quad")
 https_end_point_url = os.getenv("HTTPS_ENDPOINT_URL")    
 
