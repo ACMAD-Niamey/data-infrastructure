@@ -92,10 +92,29 @@ services:
       - ./nginx/${NGINX_CONFIG}:/etc/nginx/nginx.conf:ro
       - ${STATIC_VOLUME}:/static_files
       - ${MEDIA_VOLUME}:/media_files
+      - ${LETSENCRYPT_VOLUME:-./nginx/letsencrypt}:/etc/letsencrypt
     depends_on:
       - web
     networks:
       - data_infra_network
+  certbot:
+    image: certbot/certbot
+    container_name: climate_portal_certbot
+    volumes:
+      - ${LETSENCRYPT_VOLUME:-./nginx/letsencrypt}:/etc/letsencrypt
+      - ./nginx/webroot:/var/www/certbot
+    entrypoint: ""
+    command: certbot certonly --webroot --webroot-path=/var/www/certbot --email ${EMAIL} --agree-tos --no-eff-email -d ${DOMAIN} -d ${DOMAIN_MINIO_CONSOLE} -d {DOMAIN_MINIO}
+  
+  certbot-renew:
+    image: certbot/certbot
+    container_name: africadroughtapi_certbot_renew
+    volumes:
+      - ${LETSENCRYPT_VOLUME:-./nginx/letsencrypt}:/etc/letsencrypt
+      - ./nginx/webroot:/var/www/certbot
+    entrypoint: ""
+    command: >
+      sh -c "while :; do certbot renew --webroot --webroot-path=/var/www/certbot && echo 'Renewal complete'; sleep 12h; done"
 
   db:
     image: kartoza/postgis:18-3.6
