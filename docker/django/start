@@ -14,8 +14,8 @@ python3 manage.py check
 
 if [ "${DEBUG:-False}" == "True" ]; then
     echo "DEBUG=True -> running Django dev server"
-    exec python3 manage.py runserver 0.0.0.0:8000
+    exec python3 manage.py runserver 0.0.0.0:8070
 else
     echo "DEBUG=False -> running gunicorn"
-    exec gunicorn geodatamanager.wsgi:application --bind 0.0.0.0:8000 --workers 3
+    exec gunicorn geodatamanager.wsgi:application --bind 0.0.0.0:8070 --workers 3
 fi
