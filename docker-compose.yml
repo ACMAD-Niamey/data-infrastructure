@@ -175,12 +175,12 @@ services:
       - "8000:80"
     environment:
       - TITILER_API_DISABLE_CORS=False
-      - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
-      - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
-      - AWS_S3_ENDPOINT=${MINIO_ENDPOINT}
-      - AWS_S3_SECURE=false
-      - AWS_S3_REGION_NAME=us-east-1
-      - AWS_HTTPS="false"
+      # - AWS_ACCESS_KEY_ID=${MINIO_ROOT_USER}
+      # - AWS_SECRET_ACCESS_KEY=${MINIO_ROOT_PASSWORD}
+      # - AWS_S3_ENDPOINT=${MINIO_ENDPOINT}
+      # - AWS_S3_SECURE=false
+      # - AWS_S3_REGION_NAME=us-east-1
+      # - AWS_HTTPS="false"
     depends_on:
       - minio
 
