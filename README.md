@@ -367,19 +367,25 @@ Ensure your domains point to your server's IP address:
 Start with the non-SSL nginx configuration to allow Let's Encrypt to verify your domain:
 
 ```bash
-# 1. Start services with non-SSL configuration
-NGINX_CONFIG=default.conf docker-compose up -d nginx
+# 1. Update .env file to use non-SSL configuration
+# Set NGINX_CONFIG=default.conf in your .env file
 
-# 2. Obtain SSL certificates
+# 2. Start services with non-SSL configuration
+docker-compose up -d nginx
+
+# 3. Obtain SSL certificates
 docker-compose run --rm certbot
 
-# 3. Switch to SSL configuration
-NGINX_CONFIG=default_ssl.conf docker-compose up -d nginx
+# 4. Update .env file to use SSL configuration
+# Set NGINX_CONFIG=default_ssl.conf in your .env file
+
+# 5. Restart nginx with SSL configuration
+docker-compose up -d nginx
 ```
 
 #### 4. Automatic Certificate Renewal
 
-The `certbot-renew` service automatically renews certificates every 12 hours:
+The `certbot-renew` service checks for certificate renewal every 12 hours (certificates are automatically renewed when within 30 days of expiration):
 
 ```bash
 # Start the renewal service
