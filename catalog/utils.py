@@ -159,6 +159,7 @@ class DatasetVisualization:
             log.info(f"Requesting TiTiler URL: {titiler_request_url}")
             tiled_output = requests.get(titiler_request_url) 
             if tiled_output.status_code == 200:
+                tiled_output = tiled_output.json()
                 log.info(f"TiTiler request successful:")
                 if replace_url:
                     tiled_output['tiles'] = [self.replace_url_with_titiler(url) for url in tiled_output.get('tiles', [])] if replace_url else tiled_output
