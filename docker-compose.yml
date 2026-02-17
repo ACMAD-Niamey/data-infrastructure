@@ -169,7 +169,7 @@ services:
 
   titiler:
     container_name: geodatamanager_titiler
-    image: ghcr.io/developmentseed/titiler:1.1.1
+    image: ghcr.io/developmentseed/titiler:latest
     platform: linux/amd64
     ports:
       - "8000:80"
