@@ -93,6 +93,7 @@ services:
       - ${STATIC_VOLUME}:/static_files
       - ${MEDIA_VOLUME}:/media_files
       - ${LETSENCRYPT_VOLUME:-./nginx/letsencrypt}:/etc/letsencrypt
+      - ./nginx/webroot:/var/www/certbot
     depends_on:
       - web
     networks:
