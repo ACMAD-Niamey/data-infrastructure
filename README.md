@@ -252,6 +252,14 @@ MEDIA_VOLUME=/app/media
 
 # TiPG
 TIPG_DEBUG=false
+
+# SSL Certificates (for production with Let's Encrypt)
+EMAIL=admin@yourdomain.com                    # Email for Let's Encrypt notifications
+DOMAIN=yourdomain.com                         # Main domain name
+DOMAIN_MINIO_CONSOLE=console.yourdomain.com   # MinIO console subdomain
+DOMAIN_MINIO=s3.yourdomain.com                # MinIO API subdomain
+LETSENCRYPT_VOLUME=./nginx/letsencrypt        # Path to SSL certificates (optional, defaults to ./nginx/letsencrypt)
+NGINX_CONFIG=default_ssl.conf                 # Nginx configuration file (use default.conf for non-SSL, default_ssl.conf for SSL)
 ```
 
 ## Development Workflow
@@ -328,6 +336,65 @@ docker-compose -f docker-compose.yml up -d
 DJANGO_SETTINGS_MODULE=geodatamanager.settings.production python manage.py migrate
 DJANGO_SETTINGS_MODULE=geodatamanager.settings.production python manage.py collectstatic --noinput
 ```
+
+### SSL Certificate Setup with Let's Encrypt
+
+The project includes automated SSL certificate management using Certbot and Let's Encrypt. Follow these steps to set up HTTPS:
+
+#### 1. Configure Environment Variables
+
+Add the following variables to your `.env` file:
+
+```bash
+# SSL Certificate Configuration
+EMAIL=admin@yourdomain.com                    # Email for Let's Encrypt notifications
+DOMAIN=yourdomain.com                         # Main domain name
+DOMAIN_MINIO_CONSOLE=console.yourdomain.com   # MinIO console subdomain
+DOMAIN_MINIO=s3.yourdomain.com                # MinIO API subdomain
+LETSENCRYPT_VOLUME=./nginx/letsencrypt        # Path to SSL certificates (optional)
+NGINX_CONFIG=default.conf                     # Start with non-SSL config
+```
+
+#### 2. DNS Configuration
+
+Ensure your domains point to your server's IP address:
+- `yourdomain.com` → your server IP
+- `console.yourdomain.com` → your server IP
+- `s3.yourdomain.com` → your server IP
+
+#### 3. Obtain SSL Certificates
+
+Start with the non-SSL nginx configuration to allow Let's Encrypt to verify your domain:
+
+```bash
+# 1. Start services with non-SSL configuration
+NGINX_CONFIG=default.conf docker-compose up -d nginx
+
+# 2. Obtain SSL certificates
+docker-compose run --rm certbot
+
+# 3. Switch to SSL configuration
+NGINX_CONFIG=default_ssl.conf docker-compose up -d nginx
+```
+
+#### 4. Automatic Certificate Renewal
+
+The `certbot-renew` service automatically renews certificates every 12 hours:
+
+```bash
+# Start the renewal service
+docker-compose up -d certbot-renew
+
+# Check renewal logs
+docker-compose logs -f certbot-renew
+```
+
+#### Notes
+
+- Certificates are stored in the `LETSENCRYPT_VOLUME` directory
+- The certbot service obtains certificates for all three domains in a single request
+- Certificate renewal happens automatically; manual intervention is only needed if renewal fails
+- For testing, use Let's Encrypt staging environment to avoid rate limits
 
 ## Troubleshooting
 
