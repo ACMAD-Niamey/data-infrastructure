@@ -1,0 +1,5 @@
+services:
+  certbot:
+    profiles: ["prod"]  # disables it in default profile (i.e., dev)
+  certbot-renew:
+    profiles: ["prod"]
