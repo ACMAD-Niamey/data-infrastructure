@@ -104,7 +104,7 @@ services:
       - ${LETSENCRYPT_VOLUME:-./nginx/letsencrypt}:/etc/letsencrypt
       - ./nginx/webroot:/var/www/certbot
     entrypoint: ""
-    command: certbot certonly --webroot --webroot-path=/var/www/certbot --email ${EMAIL} --agree-tos --no-eff-email -d ${DOMAIN} -d ${DOMAIN_MINIO_CONSOLE} -d {DOMAIN_MINIO}
+    command: certbot certonly --webroot --webroot-path=/var/www/certbot --email ${EMAIL} --agree-tos --no-eff-email -d ${DOMAIN} -d ${DOMAIN_MINIO_CONSOLE} -d ${DOMAIN_MINIO}
   
   certbot-renew:
     image: certbot/certbot
@@ -114,7 +114,7 @@ services:
       - ./nginx/webroot:/var/www/certbot
     entrypoint: ""
     command: >
-      sh -c "while :; do certbot renew --webroot --webroot-path=/var/www/certbot && echo 'Renewal complete'; sleep 12h; done"
+      sh -c "while :; do certbot renew --webroot --webroot-path=/var/www/certbot && echo 'Renewal complete'; sleep 24h; done"
 
   db:
     image: kartoza/postgis:18-3.6
