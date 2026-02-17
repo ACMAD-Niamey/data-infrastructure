@@ -114,7 +114,7 @@ services:
       - ./nginx/webroot:/var/www/certbot
     entrypoint: ""
     command: >
-      sh -c "while :; do certbot renew --webroot --webroot-path=/var/www/certbot && echo 'Renewal complete'; sleep 12h; done"
+      sh -c "while :; do certbot renew --webroot --webroot-path=/var/www/certbot && echo 'Renewal complete'; sleep 24h; done"
 
   db:
     image: kartoza/postgis:18-3.6
