@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from drf_spectacular.utils import extend_schema, OpenApiParameter
+import os
 
 from .serializers import (
     DatasetAvailabilityResponseSerializer,
@@ -14,6 +15,7 @@ from .serializers import (
 
 from .utils import DatasetVisualization
 
+replace_titiler_url = os.getenv("REPLACE_TITILER_URL", "false").lower() in ("true", "1", "yes")
 
 def to_dekad_start(d: date) -> date:
     # 1–10 => 1st, 11–20 => 11th, 21+ => 21st
@@ -153,7 +155,7 @@ class DatasetVisualizationView(APIView):
         try:
             visualization_info = DatasetVisualization(date, dataset_id, cadence)
             
-            titiler_info = visualization_info.get_visualization()
+            titiler_info = visualization_info.get_visualization(replace_url=replace_titiler_url)
 
             if not titiler_info:
                 return Response({"detail": "No visualization available for this dataset/date"}, status=404)

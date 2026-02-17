@@ -153,17 +153,18 @@ class DatasetVisualization:
             self.http_url = f"{minio_endpoint}/{path}"
         return f"{minio_endpoint}/{path}"
     
-    def get_titiler_url(self, color_map={}, replace_url=True):
+    def get_titiler_url(self, color_map={}, replace_url=False):
         try:
             titiler_request_url = f"{titiler_url}/cog/WebMercatorQuad/tilejson.json?url={self.http_url}&tile_format=png&tileMatrixSetId={tile_matrix_id}&colormap={color_map}"
             log.info(f"Requesting TiTiler URL: {titiler_request_url}")
             tiled_output = requests.get(titiler_request_url) 
             if tiled_output.status_code == 200:
-                tiled_output = tiled_output.json()
                 log.info(f"TiTiler request successful:")
+                tiled_output_json = tiled_output.json()
+                
                 if replace_url:
-                    tiled_output['tiles'] = [self.replace_url_with_titiler(url) for url in tiled_output.get('tiles', [])] if replace_url else tiled_output
-                return tiled_output
+                    tiled_output_json['tiles'] = [self.replace_url_with_titiler(url) for url in tiled_output_json.get('tiles', [])] if replace_url else tiled_output_json
+                return tiled_output_json
             else:
                 log.error(f"TiTiler request failed with status code {tiled_output.status_code}: {tiled_output.text}")
             
@@ -199,7 +200,7 @@ class DatasetVisualization:
         return [int(hex[i:i+2], 16) for i in (0, 2, 4)]
 
 
-    def get_visualization(self):
+    def get_visualization(self, replace_url=False):
         """
         Get visualization parameters for the dataset, including tile URL and color map.
         Returns:
@@ -213,7 +214,7 @@ class DatasetVisualization:
         
         cmap = self.get_color_map_titiler(style_parameters) if style_parameters else {}
         log.info(f"Tile params for dataset {self.dataset_id}: {cmap}")
-        titiler_url = self.get_titiler_url(color_map=cmap if cmap else {})
+        titiler_url = self.get_titiler_url(color_map=cmap if cmap else {}, replace_url=replace_url)
 
         return titiler_url
      
