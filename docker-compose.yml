@@ -8,6 +8,8 @@ services:
       - .:/app
       - ${STATIC_VOLUME}:/home/app/web/static
       - ${MEDIA_VOLUME}:/app/media
+    ports:
+      - "8070"
     depends_on:
       - db
       - redis
