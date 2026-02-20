@@ -23,7 +23,7 @@ services:
     container_name: geodatamanager_tipg
     environment:
       # your main app PostGIS db
-      DATABASE_URL: postgresql://geodatamanager:${POSTGRES_PASSWORD}@db:5432/geodatamanager
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/geodatamanager
       TIPG_DB_SCHEMA: tiles
       TIPG_CATALOG_TTL: 100
       DB_MIN_CONN_SIZE: 1
