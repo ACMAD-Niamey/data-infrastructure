@@ -104,19 +104,9 @@ services:
     container_name: geodatamanager_certbot
     volumes:
       - ${LETSENCRYPT_VOLUME:-./nginx/letsencrypt}:/etc/letsencrypt
+      - ./nginx/webroot:/var/www/certbot
     entrypoint: ""
-    command: >
-      sh -c "certbot certonly
-      --manual
-      --preferred-challenges dns
-      --email ${EMAIL}
-      --agree-tos
-      --no-eff-email
-      -d ${DOMAIN}
-      -d ${DOMAIN_MINIO_CONSOLE}
-      -d ${DOMAIN_MINIO}"
-    stdin_open: true
-    tty: true
+    command: certbot certonly --webroot --webroot-path=/var/www/certbot --email ${EMAIL} --agree-tos --no-eff-email -d ${DOMAIN} -d ${DOMAIN_MINIO_CONSOLE} -d ${DOMAIN_MINIO}
   
   certbot-renew:
     image: certbot/certbot
