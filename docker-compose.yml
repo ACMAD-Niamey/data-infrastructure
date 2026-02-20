@@ -88,19 +88,18 @@ services:
     container_name: geodatamanager_nginx
     ports:
       - "80:80"
+      - "443:443"
     volumes:
       - ./nginx/${NGINX_CONFIG}:/etc/nginx/nginx.conf:ro
       - ${STATIC_VOLUME}:/static_files
       - ${MEDIA_VOLUME}:/media_files
       - ${LETSENCRYPT_VOLUME:-./nginx/letsencrypt}:/etc/letsencrypt
       - ./nginx/webroot:/var/www/certbot
-    depends_on:
-      - web
     networks:
       - data_infra_network
   certbot:
     image: certbot/certbot
-    container_name: climate_portal_certbot
+    container_name: geodatamanager_certbot
     volumes:
       - ${LETSENCRYPT_VOLUME:-./nginx/letsencrypt}:/etc/letsencrypt
       - ./nginx/webroot:/var/www/certbot
@@ -109,7 +108,7 @@ services:
   
   certbot-renew:
     image: certbot/certbot
-    container_name: africadroughtapi_certbot_renew
+    container_name: geodatamanager_certbot_renew
     volumes:
       - ${LETSENCRYPT_VOLUME:-./nginx/letsencrypt}:/etc/letsencrypt
       - ./nginx/webroot:/var/www/certbot
