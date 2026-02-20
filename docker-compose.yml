@@ -98,6 +98,7 @@ services:
       - ./nginx/webroot:/var/www/certbot
     networks:
       - data_infra_network
+    restart: on-failure
   certbot:
     image: certbot/certbot
     container_name: geodatamanager_certbot
