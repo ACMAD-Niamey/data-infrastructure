@@ -124,6 +124,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATA: /var/lib/postgresql/data
     volumes:
       - ${PGDATA_VOLUME}:/var/lib/postgresql
     networks:
@@ -140,6 +141,8 @@ services:
       - "5434:5432"
     volumes:
       - pgstac_data:/var/lib/postgresql/data
+    depends_on:
+      - db
 
     networks:
       - data_infra_network
