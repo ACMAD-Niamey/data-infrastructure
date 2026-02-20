@@ -14,7 +14,8 @@ services:
       - db
       - redis
       - minio
-
+      - nginx
+    restart: on-failure
     networks:
       - data_infra_network
 
