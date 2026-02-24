@@ -8,7 +8,6 @@ import requests
 from datetime import datetime, timezone
 import botocore
 from typing import Optional
-import logging
 
 from .models import IngestionRun
 
