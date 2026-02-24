@@ -24,6 +24,7 @@ type PortalProps = {
 
 const Portal = ({language}: PortalProps) => {
     const [activeLayer, setActiveLayer] = useState<DataLayer>('heat');
+  const [rightBarTab, setRightBarTab] = useState<'Legend' | 'Analysis'>('Legend');
     // const [language, setLanguage] = useState<Language>('en');
     const [showMobilePanel, setShowMobilePanel] = useState(false);
     const [selectedFeature, setSelectedFeature] = useState<SelectedFeature | null>(null);
@@ -49,15 +50,11 @@ const Portal = ({language}: PortalProps) => {
           <div className="flex-1 overflow-y-auto">
             <LayerControls 
               activeLayer={activeLayer} 
-              onLayerChange={setActiveLayer}
+              onLayerChange={(layer) => {
+                setActiveLayer(layer);
+                setRightBarTab('Analysis');
+              }}
               language={language}
-            />
-            <DataPanel 
-              activeLayer={activeLayer} 
-              language={language}
-              selectedFeature={selectedFeature}
-              selectedYear={selectedYear}
-              onYearChange={setSelectedYear}
             />
           </div>
         </div>
@@ -66,7 +63,15 @@ const Portal = ({language}: PortalProps) => {
         <div className="flex-1 min-h-0 relative">
           <Map 
           />
-          <RightBar />
+          <RightBar
+            activeLayer={activeLayer}
+            language={language}
+            selectedFeature={selectedFeature}
+            selectedYear={selectedYear}
+            onYearChange={setSelectedYear}
+            activeTab={rightBarTab}
+            onTabChange={setRightBarTab}
+          />
           
           {/* Mobile Controls Button */}
           <Button
@@ -84,7 +89,10 @@ const Portal = ({language}: PortalProps) => {
           isOpen={showMobilePanel}
           onClose={() => setShowMobilePanel(false)}
           activeLayer={activeLayer}
-          onLayerChange={setActiveLayer}
+          onLayerChange={(layer) => {
+            setActiveLayer(layer);
+            setRightBarTab('Analysis');
+          }}
           language={language}
         />
       </div>

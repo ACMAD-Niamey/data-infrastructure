@@ -1,9 +1,23 @@
-import {useState} from 'react'
+import { useEffect, useState } from 'react'
 import Legend from './Legend';
+import { DataPanel } from './DataPanel';
 import "../styles/rightbar.css"
 
-const RightBar = () => {
-    const [active_tab, setActive_tab] = useState("Legend");
+const RightBar = ({ activeLayer, language, selectedFeature, selectedYear, onYearChange, activeTab, onTabChange }) => {
+    const [active_tab, setActive_tab] = useState(activeTab || "Legend");
+
+    useEffect(() => {
+      if (activeTab) {
+        setActive_tab(activeTab);
+      }
+    }, [activeTab]);
+
+    const handleTabChange = (tab) => {
+      setActive_tab(tab);
+      if (onTabChange) {
+        onTabChange(tab);
+      }
+    };
 
     const getContent = () => {
         switch (active_tab) {
@@ -16,8 +30,13 @@ const RightBar = () => {
             case "Analysis":
                 return (
                     <div>
-                        
-                        <p>... Coming soon </p>
+                  <DataPanel
+                    activeLayer={activeLayer}
+                    language={language}
+                    selectedFeature={selectedFeature}
+                    selectedYear={selectedYear}
+                    onYearChange={onYearChange}
+                  />
                     </div>
                 );
             default:
@@ -29,7 +48,7 @@ const RightBar = () => {
     <div className="containter RightBarContainer">
     <div id="tabContainer">
       <div
-        onClick={() => setActive_tab("Legend")}
+        onClick={() => handleTabChange("Legend")}
         style={{
           cursor: "pointer",
           backgroundColor: active_tab === "Legend" ? "lightgray" : "",
@@ -38,7 +57,7 @@ const RightBar = () => {
         LEGEND
       </div>
       <div
-        onClick={() => setActive_tab("Analysis")}
+        onClick={() => handleTabChange("Analysis")}
         style={{
           cursor: "pointer",
           backgroundColor: active_tab === "Analysis" ? "lightgray" : "",
