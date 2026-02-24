@@ -1,4 +1,5 @@
 import os
+import tempfile
 import boto3
 from celery import shared_task
 from botocore.client import Config
@@ -127,6 +128,90 @@ def build_item(dataset_id: str, payload: dict):
         },
     }
 
+
+def extract_raster_bbox_geometry(file_path: str):
+    try:
+        from osgeo import gdal, osr
+    except Exception as e:
+        raise RuntimeError(f"GDAL import failed: {e}")
+
+    dataset = gdal.Open(file_path)
+    if dataset is None:
+        raise RuntimeError("GDAL could not open raster")
+
+    geotransform = dataset.GetGeoTransform()
+    if not geotransform:
+        raise RuntimeError("Missing geotransform")
+
+    x_min = geotransform[0]
+    y_max = geotransform[3]
+    x_res = geotransform[1]
+    y_res = geotransform[5]
+
+    x_max = x_min + (dataset.RasterXSize * x_res)
+    y_min = y_max + (dataset.RasterYSize * y_res)
+
+    source_srs = osr.SpatialReference()
+    source_wkt = dataset.GetProjection()
+    if source_wkt:
+        source_srs.ImportFromWkt(source_wkt)
+    else:
+        source_srs.ImportFromEPSG(4326)
+
+    target_srs = osr.SpatialReference()
+    target_srs.ImportFromEPSG(4326)
+
+    if source_srs.IsSame(target_srs):
+        bbox = [x_min, y_min, x_max, y_max]
+        geometry = {
+            "type": "Polygon",
+            "coordinates": [[
+                [x_min, y_min],
+                [x_min, y_max],
+                [x_max, y_max],
+                [x_max, y_min],
+                [x_min, y_min],
+            ]],
+        }
+        return bbox, geometry
+
+    transform = osr.CoordinateTransformation(source_srs, target_srs)
+    corners = [
+        (x_min, y_min),
+        (x_min, y_max),
+        (x_max, y_max),
+        (x_max, y_min),
+    ]
+    transformed = [transform.TransformPoint(x, y) for x, y in corners]
+    xs = [pt[0] for pt in transformed]
+    ys = [pt[1] for pt in transformed]
+
+    bbox = [min(xs), min(ys), max(xs), max(ys)]
+    geometry = {
+        "type": "Polygon",
+        "coordinates": [[
+            [xs[0], ys[0]],
+            [xs[1], ys[1]],
+            [xs[2], ys[2]],
+            [xs[3], ys[3]],
+            [xs[0], ys[0]],
+        ]],
+    }
+    return bbox, geometry
+
+
+def extract_bbox_geometry_from_s3_object(client, bucket: str, key: str):
+    suffix = os.path.splitext(key)[1] or ".tif"
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temp_file:
+            temp_path = temp_file.name
+        client.download_file(bucket, key, temp_path)
+        return extract_raster_bbox_geometry(temp_path)
+    finally:
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
+
 def post_item(item: dict):
     base = stac_base()
     cid = item["collection"]
@@ -173,6 +258,14 @@ def process_ingestion_run(run_id: int):
                 raise
 
         client.head_object(Bucket=bucket, Key=key)
+
+        if not isinstance(payload.get("stac_item"), dict):
+            if not payload.get("bbox") or not payload.get("geometry"):
+                bbox, geometry = extract_bbox_geometry_from_s3_object(client, bucket, key)
+                payload["bbox"] = bbox
+                payload["geometry"] = geometry
+                run.payload = payload
+                run.save(update_fields=["payload", "updated_at"])
 
         # ensure collection exists
         ensure_collection(run.dataset_id, title=run.dataset_id)
