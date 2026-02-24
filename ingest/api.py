@@ -3,14 +3,25 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from drf_spectacular.utils import extend_schema, OpenApiParameter
+from datetime import datetime, date
 
 from catalog.models import DatasetPage
-from .auth import HeaderAPIKeyAuthentication
+# from .auth import HeaderAPIKeyAuthentication
 from .models import IngestionRun
-from .permissions import HasAPIKey
+# from .permissions import HasAPIKey
 from .serializers import IngestRequestSerializer, IngestResponseSerializer
 
 from .tasks import process_ingestion_run
+
+
+def _json_safe(value):
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(v) for v in value]
+    return value
 
 
 
@@ -38,8 +49,8 @@ class IngestDatasetItemView(APIView):
     It validates the S3 path, creates necessary STAC collections,
     and posts the item metadata to the pgSTAC catalog.
     """
-    authentication_classes = [HeaderAPIKeyAuthentication]
-    permission_classes = [HasAPIKey]
+    # authentication_classes = [HeaderAPIKeyAuthentication]
+    permission_classes = [IsAuthenticated]
 
     @extend_schema(
         request=IngestRequestSerializer,
@@ -64,8 +75,9 @@ class IngestDatasetItemView(APIView):
         1. Upload file to MinIO (via /api/uploads/ or manually)
         2. Call this endpoint with the S3 path and metadata
         3. System validates file exists in MinIO
-        4. Creates STAC collection if needed
-        5. Posts STAC item to pgSTAC catalog
+        4. If `bbox` and `geometry` are missing (and `stac_item` is not provided), they are auto-extracted from the raster
+        5. Creates STAC collection if needed
+        6. Posts STAC item to pgSTAC catalog
         
         **Cadence-specific requirements:**
         - `daily` or `monthly`: Requires `datetime` field
@@ -97,7 +109,7 @@ class IngestDatasetItemView(APIView):
 
         serializer = IngestRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        payload = serializer.validated_data
+        payload = _json_safe(serializer.validated_data)
         
         err = validate_payload_for_cadence(dataset.cadence, payload)
         if err:
