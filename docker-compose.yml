@@ -142,8 +142,6 @@ services:
       - "5434:5432"
     volumes:
       - pgstac_data:/var/lib/postgresql/data
-    depends_on:
-      - db
 
     networks:
       - data_infra_network
