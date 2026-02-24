@@ -7,8 +7,12 @@ import requests
 from datetime import datetime, timezone
 import botocore
 from typing import Optional
+import logging
 
 from .models import IngestionRun
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
 
 
 def s3_client():
@@ -262,6 +266,7 @@ def process_ingestion_run(run_id: int):
         if not isinstance(payload.get("stac_item"), dict):
             if not payload.get("bbox") or not payload.get("geometry"):
                 bbox, geometry = extract_bbox_geometry_from_s3_object(client, bucket, key)
+                log.info(f"Extracted bbox {bbox} and geometry from raster for run {run_id}")
                 payload["bbox"] = bbox
                 payload["geometry"] = geometry
                 run.payload = payload
