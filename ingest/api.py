@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import IsAuthenticated
 from drf_spectacular.utils import extend_schema, OpenApiParameter
+from datetime import datetime, date
 
 from catalog.models import DatasetPage
 # from .auth import HeaderAPIKeyAuthentication
@@ -11,6 +12,16 @@ from .models import IngestionRun
 from .serializers import IngestRequestSerializer, IngestResponseSerializer
 
 from .tasks import process_ingestion_run
+
+
+def _json_safe(value):
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(v) for v in value]
+    return value
 
 
 
@@ -98,7 +109,7 @@ class IngestDatasetItemView(APIView):
 
         serializer = IngestRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        payload = serializer.validated_data
+        payload = _json_safe(serializer.validated_data)
         
         err = validate_payload_for_cadence(dataset.cadence, payload)
         if err:
