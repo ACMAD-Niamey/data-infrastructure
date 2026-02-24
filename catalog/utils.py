@@ -216,7 +216,7 @@ class DatasetVisualization:
             self.s3_to_http_url()
             style_parameters = self.get_tile_params_for_dataset()
 
-            log.info(f"Style parameters for dataset {self.dataset_id} goten ")
+            log.info(f"Style parameters for dataset {self.dataset_id} gotten ")
             
             cmap = self.get_color_map_titiler(style_parameters) if style_parameters else {}
             if cmap.get("band_visualization_params"):
