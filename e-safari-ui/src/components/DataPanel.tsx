@@ -1,12 +1,7 @@
-import { DataLayer, Language } from '../App';
-import { Card } from './ui/card';
-import { HeatStatistics } from './stats/HeatStatistics';
-import { GreenCoverStatistics } from './stats/GreenCoverStatistics';
-import { SatelliteStatistics } from './stats/SatelliteStatistics';
-import { ModeledStatistics } from './stats/ModeledStatistics';
-import { PointDataStatistics } from './stats/PointDataStatistics';
+import { Language } from '../types';
 import { SelectedFeatureStats } from './stats/SelectedFeatureStats';
-import { SelectedFeature } from '../App';
+import { SelectedFeature } from '../Portal';
+import { DataLayer, layerRegistry } from './layers/layerRegistry';
 
 interface DataPanelProps {
   activeLayer: DataLayer;
@@ -17,6 +12,8 @@ interface DataPanelProps {
 }
 
 export function DataPanel({ activeLayer, language, selectedFeature, selectedYear, onYearChange }: DataPanelProps) {
+  const activeConfig = layerRegistry.find((layer) => layer.id === activeLayer);
+
   return (
     <div className="p-4 space-y-4">
       {selectedFeature && (
@@ -27,17 +24,7 @@ export function DataPanel({ activeLayer, language, selectedFeature, selectedYear
         />
       )}
       
-      {activeLayer === 'heat' && <HeatStatistics language={language} />}
-      {activeLayer === 'green-cover' && <GreenCoverStatistics language={language} />}
-      {activeLayer === 'satellite' && <SatelliteStatistics language={language} />}
-      {activeLayer === 'modeled' && (
-        <ModeledStatistics 
-          language={language}
-          selectedYear={selectedYear || '2024'}
-          onYearChange={onYearChange || (() => {})}
-        />
-      )}
-      {activeLayer === 'point-data' && <PointDataStatistics language={language} />}
+      {activeConfig?.renderAnalysis({ language, selectedYear, onYearChange })}
     </div>
   );
 }

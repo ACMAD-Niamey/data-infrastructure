@@ -1,8 +1,9 @@
-import { DataLayer, Language } from '../App';
+import { Language } from '../types';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from './ui/sheet';
 import { LayerControls } from './LayerControls';
 import { DataPanel } from './DataPanel';
 import { ScrollArea } from './ui/scroll-area';
+import { DataLayer } from './layers/layerRegistry';
 
 interface MobileDrawerProps {
   isOpen: boolean;

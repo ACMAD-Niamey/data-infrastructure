@@ -8,9 +8,7 @@ import { Menu } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Language } from './types';
 import RightBar from './components/RightBar';
-
-export type DataLayer = 'heat' | 'green-cover' | 'satellite' | 'modeled' | 'point-data';
-// export type Language = 'en' | 'fr';
+import { DataLayer } from './components/layers/layerRegistry';
 
 export interface SelectedFeature {
   type: string;
