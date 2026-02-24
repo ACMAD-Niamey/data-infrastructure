@@ -1,5 +1,6 @@
 import os
 import tempfile
+import logging
 import boto3
 from celery import shared_task
 from botocore.client import Config
@@ -10,6 +11,9 @@ from typing import Optional
 import logging
 
 from .models import IngestionRun
+
+
+log = logging.getLogger(__name__)
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -290,4 +294,3 @@ def process_ingestion_run(run_id: int):
         run.error_message = str(e)
         run.save(update_fields=["status", "error_message", "updated_at"])
         return {"ok": False, "error": str(e)}
-1
