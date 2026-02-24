@@ -3,7 +3,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from './ui/sheet';
 import { LayerControls } from './LayerControls';
 import { DataPanel } from './DataPanel';
 import { ScrollArea } from './ui/scroll-area';
-import { DataLayer } from './layers/layerRegistry';
+import { DataLayer, LayerSelectOption, LayerSelectionValue, SelectorKey } from './layers/layerRegistry';
 
 interface MobileDrawerProps {
   isOpen: boolean;
@@ -11,6 +11,9 @@ interface MobileDrawerProps {
   activeLayer: DataLayer;
   onLayerChange: (layer: DataLayer) => void;
   language: Language;
+  selectionValues: Record<DataLayer, LayerSelectionValue>;
+  selectionOptions: Record<DataLayer, Partial<Record<SelectorKey, LayerSelectOption[]>>>;
+  onSelectionChange: (layer: DataLayer, field: SelectorKey, value?: string) => void;
 }
 
 const translations = {
@@ -27,7 +30,10 @@ export function MobileDrawer({
   onClose, 
   activeLayer, 
   onLayerChange,
-  language 
+  language,
+  selectionValues,
+  selectionOptions,
+  onSelectionChange,
 }: MobileDrawerProps) {
   const t = translations[language];
   
@@ -45,6 +51,9 @@ export function MobileDrawer({
               onClose();
             }}
             language={language}
+            selectionValues={selectionValues}
+            selectionOptions={selectionOptions}
+            onSelectionChange={onSelectionChange}
           />
           <DataPanel activeLayer={activeLayer} language={language} />
         </ScrollArea>

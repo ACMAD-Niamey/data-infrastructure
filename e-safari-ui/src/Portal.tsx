@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Map from './components/map';
 import { DataPanel } from './components/DataPanel';
 import { LayerControls } from './components/LayerControls';
@@ -8,7 +8,8 @@ import { Menu } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Language } from './types';
 import RightBar from './components/RightBar';
-import { DataLayer } from './components/layers/layerRegistry';
+import { DataLayer, layerRegistry, LayerSelectionValue, LayerSelectOption, SelectorKey } from './components/layers/layerRegistry';
+import { fetchSelectorOptions, getFallbackSelectorOptions } from './services/layersApi';
 
 export interface SelectedFeature {
   type: string;
@@ -28,10 +29,95 @@ const Portal = ({language}: PortalProps) => {
     const [selectedFeature, setSelectedFeature] = useState<SelectedFeature | null>(null);
     const [selectedYear, setSelectedYear] = useState('2024');
     const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
+    const [layerSelections, setLayerSelections] = useState<Record<DataLayer, LayerSelectionValue>>(
+      () =>
+        layerRegistry.reduce((accumulator, layer) => {
+          accumulator[layer.id] = {};
+          return accumulator;
+        }, {} as Record<DataLayer, LayerSelectionValue>)
+    );
+    const [layerSelectionOptions, setLayerSelectionOptions] = useState<
+      Record<DataLayer, Partial<Record<SelectorKey, LayerSelectOption[]>>>
+    >(() => layerRegistry.reduce((accumulator, layer) => {
+      accumulator[layer.id] = {};
+      return accumulator;
+    }, {} as Record<DataLayer, Partial<Record<SelectorKey, LayerSelectOption[]>>>));
 
     const handleLocationSelect = (location: { name: string; coords: [number, number] }) => {
         setMapCenter(location.coords);
       };
+
+    const handleSelectionChange = (layer: DataLayer, field: SelectorKey, value?: string) => {
+      const layerConfig = layerRegistry.find((item) => item.id === layer);
+      const selectors = layerConfig?.selection?.selectors || [];
+
+      setLayerSelections((previous) => {
+        const currentLayerSelection = previous[layer] || {};
+        const nextLayerSelection: LayerSelectionValue = {
+          ...currentLayerSelection,
+          [field]: value,
+        };
+
+        selectors.forEach((selector) => {
+          if (selector.dependsOn?.includes(field)) {
+            delete nextLayerSelection[selector.key];
+          }
+        });
+
+        return {
+          ...previous,
+          [layer]: nextLayerSelection,
+        };
+      });
+
+      if (layer === 'modeled' && field === 'year' && value) {
+        setSelectedYear(value);
+      }
+    };
+
+    useEffect(() => {
+      const activeConfig = layerRegistry.find((item) => item.id === activeLayer);
+      const selectors = activeConfig?.selection?.selectors || [];
+      const activeSelection = layerSelections[activeLayer] || {};
+
+      selectors.forEach((selector) => {
+        const dependenciesSatisfied = (selector.dependsOn || []).every((dependency) => Boolean(activeSelection[dependency]));
+        if (!dependenciesSatisfied) {
+          setLayerSelectionOptions((previous) => ({
+            ...previous,
+            [activeLayer]: {
+              ...previous[activeLayer],
+              [selector.key]: [],
+            },
+          }));
+          return;
+        }
+
+        fetchSelectorOptions({
+          layerId: activeLayer,
+          field: selector.key,
+          selection: activeSelection,
+        })
+          .then((options) => {
+            setLayerSelectionOptions((previous) => ({
+              ...previous,
+              [activeLayer]: {
+                ...previous[activeLayer],
+                [selector.key]: options.length ? options : getFallbackSelectorOptions(selector.key, language),
+              },
+            }));
+          })
+          .catch(() => {
+            setLayerSelectionOptions((previous) => ({
+              ...previous,
+              [activeLayer]: {
+                ...previous[activeLayer],
+                [selector.key]: getFallbackSelectorOptions(selector.key, language),
+              },
+            }));
+          });
+      });
+    }, [activeLayer, layerSelections, language]);
 
   return (
     <div className="h-full min-h-0 overflow-hidden flex flex-col bg-gray-50">
@@ -53,6 +139,9 @@ const Portal = ({language}: PortalProps) => {
                 setRightBarTab('Analysis');
               }}
               language={language}
+              selectionValues={layerSelections}
+              selectionOptions={layerSelectionOptions}
+              onSelectionChange={handleSelectionChange}
             />
           </div>
         </div>
@@ -92,6 +181,9 @@ const Portal = ({language}: PortalProps) => {
             setRightBarTab('Analysis');
           }}
           language={language}
+          selectionValues={layerSelections}
+          selectionOptions={layerSelectionOptions}
+          onSelectionChange={handleSelectionChange}
         />
       </div>
     </div>

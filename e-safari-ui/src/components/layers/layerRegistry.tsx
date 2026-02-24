@@ -1,4 +1,5 @@
 import { Thermometer, Trees, Satellite, Brain, MapPin, type LucideIcon } from "lucide-react";
+import type { ReactElement } from "react";
 import { HeatStatistics } from "../stats/HeatStatistics";
 import { GreenCoverStatistics } from "../stats/GreenCoverStatistics";
 import { SatelliteStatistics } from "../stats/SatelliteStatistics";
@@ -17,14 +18,36 @@ type LayerAnalysisArgs = {
   onYearChange?: (year: string) => void;
 };
 
+export type SelectorKey = "year" | "month" | "date" | "dekad" | "season";
+
+export type LayerSelectOption = {
+  value: string;
+  label: string;
+};
+
+export type SelectorConfig = {
+  key: SelectorKey;
+  label: LayerLabel;
+  required?: boolean;
+  dependsOn?: SelectorKey[];
+  minWidthPx?: number;
+};
+
+export type LayerSelectionConfig = {
+  selectors?: SelectorConfig[];
+};
+
 export type LayerConfig = {
   id: "heat" | "green-cover" | "satellite" | "modeled" | "point-data";
   icon: LucideIcon;
   color: string;
   label: LayerLabel;
   description: LayerLabel;
-  renderAnalysis: (args: LayerAnalysisArgs) => JSX.Element;
+  selection?: LayerSelectionConfig;
+  renderAnalysis: (args: LayerAnalysisArgs) => ReactElement;
 };
+
+export type LayerSelectionValue = Partial<Record<SelectorKey, string>>;
 
 export const layerRegistry: LayerConfig[] = [
   {
@@ -35,6 +58,13 @@ export const layerRegistry: LayerConfig[] = [
     description: {
       en: "Surface temperature distribution",
       fr: "Distribution de température de surface",
+    },
+    selection: {
+      selectors: [
+        { key: "year", label: { en: "Year", fr: "Année" }, required: true, minWidthPx: 110 },
+        { key: "month", label: { en: "Month", fr: "Mois" }, dependsOn: ["year"], minWidthPx: 130 },
+        { key: "date", label: { en: "Date", fr: "Date" }, dependsOn: ["year", "month"], minWidthPx: 100 },
+      ],
     },
     renderAnalysis: ({ language }) => <HeatStatistics language={language} />,
   },
@@ -47,6 +77,12 @@ export const layerRegistry: LayerConfig[] = [
       en: "Vegetation and tree canopy",
       fr: "Végétation et canopée",
     },
+    selection: {
+      selectors: [
+        { key: "year", label: { en: "Year", fr: "Année" }, required: true, minWidthPx: 110 },
+        { key: "season", label: { en: "Season", fr: "Saison" }, dependsOn: ["year"], minWidthPx: 140 },
+      ],
+    },
     renderAnalysis: ({ language }) => <GreenCoverStatistics language={language} />,
   },
   {
@@ -58,6 +94,13 @@ export const layerRegistry: LayerConfig[] = [
       en: "Remote sensing imagery",
       fr: "Imagerie de télédétection",
     },
+    selection: {
+      selectors: [
+        { key: "year", label: { en: "Year", fr: "Année" }, required: true, minWidthPx: 110 },
+        { key: "month", label: { en: "Month", fr: "Mois" }, dependsOn: ["year"], minWidthPx: 130 },
+        { key: "dekad", label: { en: "Dekad", fr: "Décade" }, dependsOn: ["year", "month"], minWidthPx: 130 },
+      ],
+    },
     renderAnalysis: ({ language }) => <SatelliteStatistics language={language} />,
   },
   {
@@ -68,6 +111,12 @@ export const layerRegistry: LayerConfig[] = [
     description: {
       en: "Climate predictions",
       fr: "Prévisions climatiques",
+    },
+    selection: {
+      selectors: [
+        { key: "year", label: { en: "Year", fr: "Année" }, required: true, minWidthPx: 110 },
+        { key: "season", label: { en: "Season", fr: "Saison" }, dependsOn: ["year"], minWidthPx: 140 },
+      ],
     },
     renderAnalysis: ({ language, selectedYear, onYearChange }) => (
       <ModeledStatistics
@@ -85,6 +134,11 @@ export const layerRegistry: LayerConfig[] = [
     description: {
       en: "Sun vs shade readings",
       fr: "Lectures soleil vs ombre",
+    },
+    selection: {
+      selectors: [
+        { key: "year", label: { en: "Year", fr: "Année" }, required: true, minWidthPx: 110 },
+      ],
     },
     renderAnalysis: ({ language }) => <PointDataStatistics language={language} />,
   },
