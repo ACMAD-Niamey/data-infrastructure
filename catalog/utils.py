@@ -153,9 +153,14 @@ class DatasetVisualization:
             self.http_url = f"{minio_endpoint}/{path}"
         return f"{minio_endpoint}/{path}"
     
-    def get_titiler_url(self, color_map={}, replace_url=False):
+    def get_titiler_url(self, color_map={}, replace_url=False, band_visualization_params=None):
         try:
-            titiler_request_url = f"{titiler_url}/cog/WebMercatorQuad/tilejson.json?url={self.http_url}&tile_format=png&tileMatrixSetId={tile_matrix_id}&colormap={color_map}"
+            titiler_request_url = f"{titiler_url}/cog/WebMercatorQuad/tilejson.json?url={self.http_url}&tile_format=png&tileMatrixSetId={tile_matrix_id}"
+            if color_map:
+                titiler_request_url += f"&color_map={color_map}"
+            if band_visualization_params:
+                titiler_request_url += f"&{band_visualization_params}"
+
             log.info(f"Requesting TiTiler URL: {titiler_request_url}")
             tiled_output = requests.get(titiler_request_url) 
             if tiled_output.status_code == 200:
@@ -206,17 +211,26 @@ class DatasetVisualization:
         Returns:
             dict: Visualization parameters including 'tile_url' and 'color_map'.
         """
-        self.get_dataset_items()
-        self.s3_to_http_url()
-        style_parameters = self.get_tile_params_for_dataset()
+        try:
+            self.get_dataset_items()
+            self.s3_to_http_url()
+            style_parameters = self.get_tile_params_for_dataset()
 
-        log.info(f"Style parameters for dataset {self.dataset_id} goten ")
-        
-        cmap = self.get_color_map_titiler(style_parameters) if style_parameters else {}
-        log.info(f"Tile params for dataset {self.dataset_id}: {cmap}")
-        titiler_url = self.get_titiler_url(color_map=cmap if cmap else {}, replace_url=replace_url)
+            log.info(f"Style parameters for dataset {self.dataset_id} goten ")
+            
+            cmap = self.get_color_map_titiler(style_parameters) if style_parameters else {}
+            if cmap.get("band_visualization_params"):
+                log.info(f"dataset {self.dataset_id} has band visualization parameters")
+                titiler_url = self.get_titiler_url(color_map={}, replace_url=replace_url, band_visualization_params=cmap["band_visualization_params"])
+            else:
+                titiler_url = self.get_titiler_url(color_map=cmap if cmap else {}, replace_url=replace_url)
+            
+            log.info(f"Tile params for dataset {self.dataset_id}: fectched")
 
-        return titiler_url
+            return titiler_url
+        except Exception as e:
+            log.error(f"Error getting visualization for dataset {self.dataset_id}: {e}")
+            return None
      
 
     def get_stac_tile_url(self):
@@ -266,13 +280,21 @@ class DatasetVisualization:
 
         scheme = style.get("scheme")
         if scheme == 'linear':
+            log.info("Creating linear color map")
             # check if values exists 
             if style.get('values') is not None:
                 color_map = self.get_color_map_linear(style)
             else:
                 raise ValueError("Values are required for linear scheme")
         elif scheme == 'descrete':
+            log.info("Creating discrete color map")
             color_map = self.get_color_map_descrete(style)
+        elif scheme == "band":
+            if style.get("band_visualization_params") is not None:
+                log.info("Using band visualization parameters as color map")
+            else:
+                raise ValueError("band_visualization_params are required for band scheme")
+            color_map = dict(band_visualization_params=style.get("band_visualization_params"))
         else:
             raise ValueError(f"Unknown scheme: {scheme}")
         return color_map
