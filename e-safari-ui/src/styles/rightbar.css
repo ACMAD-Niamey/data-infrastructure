@@ -1,0 +1,37 @@
+.RightBarContainer {
+    position: absolute;
+    right: 5%;
+    top: 20px;
+    background: #FFFF;
+    width: 300px;
+    z-index: 10;
+  }
+
+  #tabContainer {
+    display: flex;
+    justify-content: space-around;
+    background-color: #eee;
+    padding: 10px 0;
+    color: black;
+    font-family: Arial;
+    font-size: 14px;
+  }
+  
+  #contentContainer {
+    max-height: 450px;
+    overflow-y: auto;
+  }
+  
+  /* Media Queries */
+  @media (max-width: 768px) {
+    .RightBarContainer {
+      width: 200px;
+      max-height: 400px;
+    }
+  }
+
+  .legend-container {
+    display: flex;
+    flex-direction: column-reverse; /* Will reverse rendering visually */
+  }
+  

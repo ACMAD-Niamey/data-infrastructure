@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import Map from './components/map';
 import { DataPanel } from './components/DataPanel';
-import { Header } from './components/Header';
 import { LayerControls } from './components/LayerControls';
 import { MobileDrawer } from './components/MobileDrawer';
 import { SearchBar } from './components/SearchBar';
 import { Menu } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Language } from './types';
+import RightBar from './components/RightBar';
 
 export type DataLayer = 'heat' | 'green-cover' | 'satellite' | 'modeled' | 'point-data';
 // export type Language = 'en' | 'fr';
@@ -66,6 +66,7 @@ const Portal = ({language}: PortalProps) => {
         <div className="flex-1 min-h-0 relative">
           <Map 
           />
+          <RightBar />
           
           {/* Mobile Controls Button */}
           <Button
