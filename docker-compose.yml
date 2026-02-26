@@ -85,12 +85,12 @@ services:
       - data_infra_network
 
   nginx:
-    # image: nginx:1.25-alpine
+    image: nginx:1.25-alpine
     container_name: geodatamanager_nginx
-    build : 
-      context: .
-      dockerfile: nginx/Dockerfile
-    env_file: .env
+    # build : 
+    #   context: .
+    #   dockerfile: nginx/Dockerfile
+    # env_file: .env
     ports:
       - "80:80"
       - "443:443"
@@ -100,6 +100,7 @@ services:
       - ${MEDIA_VOLUME}:/media_files
       - ${LETSENCRYPT_VOLUME:-./nginx/letsencrypt}:/etc/letsencrypt
       - ./nginx/webroot:/var/www/certbot
+      - ${UI_DIR}:/usr/share/nginx/html
     networks:
       - data_infra_network
     restart: on-failure
