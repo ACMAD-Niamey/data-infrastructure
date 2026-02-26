@@ -17,6 +17,7 @@ client = Minio(
 
 bucket = "geodata"
 key = sys.argv[1]  #"path/your_big.tif"  
+dest_key = key.replace(".tif", "_optimized.tif")
 
 with NamedTemporaryFile(suffix=".tif") as src_tmp, NamedTemporaryFile(suffix=".tif") as dst_tmp:
     # Download original
@@ -43,6 +44,6 @@ with NamedTemporaryFile(suffix=".tif") as src_tmp, NamedTemporaryFile(suffix=".t
     )
 
     # Upload to SAME key (overwrites)
-    client.fput_object(bucket, key, dst_tmp.name)
+    client.fput_object(bucket, dest_key, dst_tmp.name)
 
 print("File replaced with optimized COG.")

@@ -6,3 +6,6 @@ __pycache__/
 *staticfiles
 *geomgr_pgdata
 *data
+e-safari-ui/build/
+nginx/webroot/
+ nginx/letsencrypt/
