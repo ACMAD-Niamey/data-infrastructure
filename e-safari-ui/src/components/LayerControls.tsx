@@ -2,6 +2,7 @@ import Select from 'react-select';
 import { Language } from '../types';
 import { Card } from './ui/card';
 import { DataLayer, layerRegistry, LayerSelectOption, LayerSelectionValue, SelectorConfig, SelectorKey } from './layers/layerRegistry';
+import '../styles/layercontrol.css';
 
 interface LayerControlsProps {
   activeLayer: DataLayer;
@@ -73,12 +74,13 @@ export function LayerControls({ activeLayer, onLayerChange, language, selectionV
                         <div key={`${layer.id}-${field.key}`} className="flex-1" style={{ minWidth: field.minWidthPx || 120 }}>
                           <p className="mb-1 text-xs text-gray-600">{field.label[language]}</p>
                           <Select
-                            classNamePrefix="layer-select"
+                            className='layer-select'
+                            classNamePrefix="layer-select-controls"
                             options={options}
                             value={selectedOption}
                             isClearable={!field.required}
                             isDisabled={!enabled}
-                            placeholder={language === 'fr' ? 'Sélectionner...' : 'Select...'}
+                            placeholder={language === 'fr' ? 'Sélectionner..' : 'Select..'}
                             onChange={(option) => onSelectionChange(layer.id, field.key, option?.value)}
                           />
                         </div>
