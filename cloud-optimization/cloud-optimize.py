@@ -12,13 +12,13 @@ load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
 MINIO_ACCESS_KEY = os.getenv("MINIO_ROOT_USER") or os.getenv("MINIO_ACCESS_KEY")
 MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY") or os.getenv("MINIO_ROOT_PASSWORD")
-MINIO_ENDPOINT_PUBLIC = os.getenv("MINIO_ENDPOINT_PUBLIC", "minio.acmad.org:9000")
+MINIO_ENDPOINT_PUBLIC = "minio.acmad.org" #os.getenv("MINIO_ENDPOINT_PUBLIC", "minio.acmad.org:9000")
 
 client = Minio(
     MINIO_ENDPOINT_PUBLIC,
     access_key=MINIO_ACCESS_KEY,
     secret_key=MINIO_SECRET_KEY,
-    secure=False,
+    secure=True,
 )
 
 bucket = "geodata"
