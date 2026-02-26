@@ -19,6 +19,10 @@ node_modules/
 coverage
 .python-version
 
+*.tif
+*.nc
+*.zip
+
 # Distribution / packaging
 .Python
 env/
@@ -45,14 +49,11 @@ __pycache__/
 *media
 *staticfiles
 *geomgr_pgdata
-*data
 
 .git
 **/.git
 node_modules
 **/node_modules
-data
-**/data
 pgdata
 **/pgdata
 minio
@@ -71,7 +72,10 @@ __pycache__/
 *media
 *staticfiles
 *geomgr_pgdata
-*data
+/data
+/data/**
+
+# But explicitly allow the UI source data folder
 !e-safari-ui/src/data/
 !e-safari-ui/src/data/**
 
