@@ -85,8 +85,11 @@ services:
       - data_infra_network
 
   nginx:
-    image: nginx:1.25-alpine
+    # image: nginx:1.25-alpine
     container_name: geodatamanager_nginx
+    build : 
+      context: ./nginx
+      dockerfile: Dockerfile
     ports:
       - "80:80"
       - "443:443"
