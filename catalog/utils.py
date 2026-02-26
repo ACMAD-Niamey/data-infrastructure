@@ -3,8 +3,10 @@ import requests
 import os 
 import logging
 import json
+from collections.abc import Mapping
 
 from catalog.models import Layer
+
 
 stac_api_url = os.getenv("STAC_API_URL", "http://stac_api:8080")
 titiler_url = os.getenv("TITILER_URL", "http://titiler")
@@ -168,7 +170,8 @@ class DatasetVisualization:
                 tiled_output_json = tiled_output.json()
                 
                 if replace_url:
-                    tiled_output_json['tiles'] = [self.replace_url_with_titiler(url) for url in tiled_output_json.get('tiles', [])] if replace_url else tiled_output_json
+                    log.info(f"Replacing URLs in TiTiler response with custom endpoint {tiled_output_json['tiles']}")
+                    tiled_output_json['tiles'] = [self.replace_url_with_titiler(url) for url in tiled_output_json['tiles']]
                 return tiled_output_json
             else:
                 log.error(f"TiTiler request failed with status code {tiled_output.status_code}: {tiled_output.text}")
@@ -219,7 +222,7 @@ class DatasetVisualization:
             log.info(f"Style parameters for dataset {self.dataset_id} gotten ")
             
             cmap = self.get_color_map_titiler(style_parameters) if style_parameters else {}
-            if cmap.get("band_visualization_params"):
+            if isinstance(cmap, Mapping):
                 log.info(f"dataset {self.dataset_id} has band visualization parameters")
                 titiler_url = self.get_titiler_url(color_map={}, replace_url=replace_url, band_visualization_params=cmap["band_visualization_params"])
             else:
