@@ -59,7 +59,7 @@ export function SatelliteStatistics({ language }: SatelliteStatisticsProps) {
             <Satellite className="size-4 text-blue-600 mt-1" />
             <div>
               <p className="text-xs text-gray-500">{t.resolution}</p>
-              <p className="text-lg text-blue-600 mt-1">10m</p>
+              <p className="text-lg text-blue-600 mt-1">50cm</p>
             </div>
           </div>
         </Card>
@@ -69,7 +69,7 @@ export function SatelliteStatistics({ language }: SatelliteStatisticsProps) {
             <Eye className="size-4 text-cyan-600 mt-1" />
             <div>
               <p className="text-xs text-gray-500">{t.coverage}</p>
-              <p className="text-lg text-cyan-600 mt-1">100%</p>
+              <p className="text-lg text-cyan-600 mt-1">%</p>
             </div>
           </div>
         </Card>
@@ -89,7 +89,7 @@ export function SatelliteStatistics({ language }: SatelliteStatisticsProps) {
             <Satellite className="size-4 text-green-600 mt-1" />
             <div>
               <p className="text-xs text-gray-500">{t.cloudCover}</p>
-              <p className="text-lg text-green-600 mt-1">8%</p>
+              <p className="text-lg text-green-600 mt-1">0%</p>
             </div>
           </div>
         </Card>

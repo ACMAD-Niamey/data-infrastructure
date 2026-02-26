@@ -72,4 +72,6 @@ __pycache__/
 *staticfiles
 *geomgr_pgdata
 *data
+!e-safari-ui/src/data/
+!e-safari-ui/src/data/**
 
