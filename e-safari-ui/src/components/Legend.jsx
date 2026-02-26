@@ -1,7 +1,6 @@
 
 import { useLegendStore } from "./stores/useLegendStore"
 
-
 const Legend = () => {
   const legends = useLegendStore((state) => state.legends);
 

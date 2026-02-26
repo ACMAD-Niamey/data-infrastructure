@@ -9,7 +9,9 @@ import { Button } from './components/ui/button';
 import { Language } from './types';
 import RightBar from './components/RightBar';
 import { DataLayer, layerRegistry, LayerSelectionValue, LayerSelectOption, SelectorKey } from './components/layers/layerRegistry';
-import { fetchSelectorOptions, getFallbackSelectorOptions } from './services/layersApi';
+import { add_image_layer, remove_image_layer } from './components/Maputils.js';
+import { useMap } from './components/MapContext.jsx';
+import { fetchSelectorOptions, fetchSatelliteAvailability, fetchSatelliteVisualization, getFallbackSelectorOptions } from './services/layersApi';
 
 export interface SelectedFeature {
   type: string;
@@ -42,6 +44,9 @@ const Portal = ({language}: PortalProps) => {
       accumulator[layer.id] = {};
       return accumulator;
     }, {} as Record<DataLayer, Partial<Record<SelectorKey, LayerSelectOption[]>>>));
+
+    const { mapRef } = useMap() ?? { mapRef: { current: null } };
+    const satelliteLayerId = 'satellite-drone-image';
 
     const handleLocationSelect = (location: { name: string; coords: [number, number] }) => {
         setMapCenter(location.coords);
@@ -81,6 +86,10 @@ const Portal = ({language}: PortalProps) => {
       const activeSelection = layerSelections[activeLayer] || {};
 
       selectors.forEach((selector) => {
+        if (activeLayer === 'satellite' && selector.key === 'date') {
+          return;
+        }
+
         const dependenciesSatisfied = (selector.dependsOn || []).every((dependency) => Boolean(activeSelection[dependency]));
         if (!dependenciesSatisfied) {
           setLayerSelectionOptions((previous) => ({
@@ -119,6 +128,101 @@ const Portal = ({language}: PortalProps) => {
       });
     }, [activeLayer, layerSelections, language]);
 
+    useEffect(() => {
+      if (activeLayer !== 'satellite') {
+        return;
+      }
+
+      fetchSatelliteAvailability({
+        cadence: 'monthly',
+      })
+        .then((availability) => {
+          const optionsWithMax = availability.max && !availability.options.some((option) => option.value === availability.max)
+            ? [{ value: availability.max, label: availability.max }, ...availability.options]
+            : availability.options;
+
+          const merged = optionsWithMax.reduce((accumulator, option) => {
+            if (!accumulator.some((item) => item.value === option.value)) {
+              accumulator.push(option);
+            }
+            return accumulator;
+          }, [] as LayerSelectOption[]);
+
+          setLayerSelectionOptions((previous) => ({
+            ...previous,
+            satellite: {
+              ...previous.satellite,
+              date: merged,
+            },
+          }));
+
+          const maxDate = availability.max;
+          if (!maxDate) {
+            return;
+          }
+
+          setLayerSelections((previous) => {
+            const currentDate = previous.satellite?.date;
+            const stillAvailable = availability.options.some((item) => item.value === currentDate) || currentDate === maxDate;
+
+            if (currentDate && stillAvailable) {
+              return previous;
+            }
+
+            return {
+              ...previous,
+              satellite: {
+                ...previous.satellite,
+                date: maxDate,
+              },
+            };
+          });
+        })
+        .catch(() => {
+          setLayerSelectionOptions((previous) => ({
+            ...previous,
+            satellite: {
+              ...previous.satellite,
+              date: getFallbackSelectorOptions('date', language),
+            },
+          }));
+        });
+    }, [activeLayer, language]);
+
+    useEffect(() => {
+      const map = mapRef?.current;
+      if (!map) {
+        return;
+      }
+
+      if (activeLayer !== 'satellite') {
+        remove_image_layer(map, satelliteLayerId);
+        return;
+      }
+
+      const selectedDate = layerSelections.satellite?.date;
+      if (!selectedDate) {
+        remove_image_layer(map, satelliteLayerId);
+        return;
+      }
+
+      fetchSatelliteVisualization({
+        cadence: 'monthly',
+        date: selectedDate,
+      })
+        .then((payload) => {
+          remove_image_layer(map, satelliteLayerId);
+          if (!payload.tileUrl) {
+            return;
+          }
+
+          add_image_layer(map, payload.tileUrl, satelliteLayerId, true, payload.bounds, true);
+        })
+        .catch(() => {
+          remove_image_layer(map, satelliteLayerId);
+        });
+    }, [activeLayer, layerSelections.satellite?.date, mapRef]);
+
   return (
     <div className="h-full min-h-0 overflow-hidden flex flex-col bg-gray-50">
       
@@ -148,8 +252,7 @@ const Portal = ({language}: PortalProps) => {
 
         {/* Map Container */}
         <div className="flex-1 min-h-0 relative">
-          <Map 
-          />
+          <Map />
           <RightBar
             activeLayer={activeLayer}
             language={language}

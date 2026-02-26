@@ -24,3 +24,5 @@ shell:
 	docker compose exec web python manage.py shell
 connectdb:
 	PGPASSWORD=${POSTGRES_PASSWORD} psql -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}
+certificate:
+	docker compose run --rm certbot

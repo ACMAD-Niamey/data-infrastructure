@@ -96,9 +96,7 @@ export const layerRegistry: LayerConfig[] = [
     },
     selection: {
       selectors: [
-        { key: "year", label: { en: "Year", fr: "Année" }, required: true, minWidthPx: 110 },
-        { key: "month", label: { en: "Month", fr: "Mois" }, dependsOn: ["year"], minWidthPx: 130 },
-        { key: "dekad", label: { en: "Dekad", fr: "Décade" }, dependsOn: ["year", "month"], minWidthPx: 130 },
+        { key: "date", label: { en: "Date", fr: "Date" }, required: true, minWidthPx: 170 },
       ],
     },
     renderAnalysis: ({ language }) => <SatelliteStatistics language={language} />,

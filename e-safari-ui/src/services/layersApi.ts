@@ -1,4 +1,5 @@
 import { DataLayer, LayerSelectOption, LayerSelectionValue, SelectorKey } from "../components/layers/layerRegistry";
+import axios from "axios";
 
 type FetchSelectorOptionsParams = {
   layerId: DataLayer;
@@ -10,7 +11,50 @@ type SelectorOptionsApiResponse = {
   options: LayerSelectOption[];
 };
 
-const apiBaseUrl = import.meta.env.VITE_LAYERS_API_BASE_URL || "";
+type SatelliteAvailabilityResponse = {
+  dataset_id: string;
+  cadence: string;
+  available: string[];
+  min?: string;
+  max?: string;
+};
+
+type SatelliteVisualizationResponse = {
+  dataset_id: string;
+  cadence: string;
+  titiler_url?: string[];
+  titiler_info?: {
+    tiles?: string[];
+    bounds?: [number, number, number, number];
+  };
+};
+
+export type BoundsObject = {
+  minx: number;
+  miny: number;
+  maxx: number;
+  maxy: number;
+};
+
+export type SatelliteAvailabilityResult = {
+  options: LayerSelectOption[];
+  max: string | null;
+  min: string | null;
+};
+
+export type SatelliteVisualizationResult = {
+  tileUrl: string | null;
+  bounds: BoundsObject | null;
+};
+
+const viteEnv = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env) || {};
+const apiBaseUrl = viteEnv.VITE_LAYERS_API_BASE_URL || "";
+const catalogBaseUrl = viteEnv.VITE_CATALOG_API_BASE_URL || "https://e-safari.acmad.org";
+
+const catalogClient = axios.create({
+  baseURL: catalogBaseUrl,
+  timeout: 15000,
+});
 
 const months = {
   en: ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"],
@@ -76,4 +120,62 @@ export const fetchSelectorOptions = async ({
   }
 
   return payload.options || [];
+};
+
+const toBoundsObject = (bounds?: [number, number, number, number]): BoundsObject | null => {
+  if (!bounds || bounds.length !== 4) {
+    return null;
+  }
+
+  const [minx, miny, maxx, maxy] = bounds;
+  return { minx, miny, maxx, maxy };
+};
+
+export const fetchSatelliteAvailability = async ({
+  datasetId = "drone-image",
+  cadence = "monthly",
+}: {
+  datasetId?: string;
+  cadence?: string;
+}): Promise<SatelliteAvailabilityResult> => {
+  const response = await catalogClient.get<SatelliteAvailabilityResponse>(
+    `/api/catalog/datasets/${datasetId}/availability/`,
+    { params: { cadence } },
+  );
+
+  const payload = response.data;
+  const available = payload.available || [];
+  const options = available
+    .slice()
+    .sort((left, right) => right.localeCompare(left))
+    .map((value) => ({ value, label: value }));
+
+  return {
+    options,
+    max: payload.max || null,
+    min: payload.min || null,
+  };
+};
+
+export const fetchSatelliteVisualization = async ({
+  datasetId = "drone-image",
+  cadence = "monthly",
+  date,
+}: {
+  datasetId?: string;
+  cadence?: string;
+  date: string;
+}): Promise<SatelliteVisualizationResult> => {
+  const response = await catalogClient.get<SatelliteVisualizationResponse>(
+    `/api/catalog/datasets/${datasetId}/visualization/`,
+    { params: { cadence, date } },
+  );
+
+  const payload = response.data;
+  const tileUrl = payload.titiler_url?.[0] || payload.titiler_info?.tiles?.[0] || null;
+
+  return {
+    tileUrl,
+    bounds: toBoundsObject(payload.titiler_info?.bounds),
+  };
 };
