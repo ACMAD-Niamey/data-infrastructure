@@ -61,6 +61,21 @@ services:
     networks:
       - data_infra_network
 
+  wis2_consumer:
+    build: .
+    container_name: geodatamanager_wis2_consumer
+    env_file: .env
+    command: python manage.py run_wis2_consumer
+    volumes:
+      - .:/app
+    depends_on:
+      - db
+      - redis
+    restart: on-failure
+    stop_grace_period: 10s
+    networks:
+      - data_infra_network
+
   redis:
     image: redis:7-alpine
     container_name: geodatamanager_redis
@@ -124,7 +139,10 @@ services:
       sh -c "while :; do certbot renew --webroot --webroot-path=/var/www/certbot && echo 'Renewal complete'; sleep 24h; done"
 
   db:
-    image: kartoza/postgis:18-3.6
+    # image: kartoza/postgis:18-3.6
+    build:
+      context: ./docker/db
+      dockerfile: Dockerfile
     container_name: geodatamanager_db
     environment:
       POSTGRES_DB: ${POSTGRES_DB}
@@ -133,6 +151,7 @@ services:
       PGDATA: /var/lib/postgresql/data
     volumes:
       - ${PGDATA_VOLUME}:/var/lib/postgresql
+      - ./docker/db/initdb:/docker-entrypoint-initdb.d
     networks:
       - data_infra_network
 

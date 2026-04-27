@@ -1,81 +1,37 @@
-# Django project
-/media/
-/static/
-*.sqlite3
-
-# Python and others
-__pycache__
-*.pyc
-.DS_Store
-*.swp
-/venv/
-/tmp/
-/.vagrant/
-/Vagrantfile.local
-node_modules/
-/npm-debug.log
-/.idea/
-.vscode
-coverage
-.python-version
-
-*.tif
-*.nc
-*.zip
-
-# Distribution / packaging
-.Python
-env/
-build/
-develop-eggs/
-dist/
-downloads/
-eggs/
-.eggs/
-lib/
-lib64/
-parts/
-sdist/
-var/
-wheels/
-*.egg-info/
-.installed.cfg
-*.egg
-
-venv_geo
-.env
-__pycache__/
-*static
-*media
-*staticfiles
-*geomgr_pgdata
-
+# Global things we never want in build context
 .git
-**/.git
+.gitignore
 node_modules
 **/node_modules
-pgdata
-**/pgdata
-minio
-**/minio
+
+# Python / Django things
+__pycache__
+*.pyc
+venv/
+venv_geo
+.env
+
+# Builds / dist / caches
+dist
+build
+*.egg-info
+coverage
+
+# Big binary artifacts
 *.tif
 *.nc
 *.zip
-static
-staticfiles
-media
+
+# MinIO / DB dump dirs
+minio
+pgdata
 geomgr_pgdata
-venv_geo
-.env
-__pycache__/
-*static
-*media
-*staticfiles
-*geomgr_pgdata
+
+# Static runtime data (but not source data inside e-safari-ui)
+# If you have runtime folders named 'data' at project root you can ignore them:
 /data
 /data/**
 
 # But explicitly allow the UI source data folder
 !e-safari-ui/src/data/
 !e-safari-ui/src/data/**
-

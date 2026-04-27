@@ -6,15 +6,9 @@ import { useMap } from "./MapContext.jsx";
 import BasemapsControl from "maplibre-gl-basemaps";
 import "maplibre-gl-basemaps/lib/basemaps.css";
 import { basemaps } from "./Common";
-import { add_image_layer, remove_image_layer } from "./Maputils";
 import "../styles/map.css";
 
-/**
- * @typedef {{ minx: number; miny: number; maxx: number; maxy: number }} Bounds
- * @typedef {{ url: string; layerName?: string; bounds?: Bounds | null; fitToBounds?: boolean }} SatelliteRaster
- * @param {{ satelliteRaster?: SatelliteRaster | null }} props
- */
-export default function MapComponent({ satelliteRaster = null }) {
+export default function MapComponent() {
   const mapContainer = useRef(null);
   const { mapRef } = useMap(); 
 
@@ -44,28 +38,6 @@ export default function MapComponent({ satelliteRaster = null }) {
       "bottom-right"
     );
   }, []); 
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) {
-      return;
-    }
-
-    const layerName = "satellite-imagery-overlay";
-    if (!satelliteRaster?.url) {
-      remove_image_layer(map, layerName);
-      return;
-    }
-
-    add_image_layer(
-      map,
-      satelliteRaster.url,
-      layerName,
-      true,
-      satelliteRaster.bounds ?? null,
-      satelliteRaster.fitToBounds ?? false,
-    );
-  }, [mapRef, satelliteRaster]);
 
   return (
     <div className="map-wrap">
