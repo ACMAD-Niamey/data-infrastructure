@@ -26,3 +26,68 @@ class ObservationStatsSerializer(serializers.Serializer):
     total_count = serializers.IntegerField()
     latest_timestamp = serializers.DateTimeField(allow_null=True)
     by_variable = VariableCountSerializer(many=True)
+
+
+# ---------------------------------------------------------------------------
+# Station stats API serializers
+# ---------------------------------------------------------------------------
+
+class VariableSummarySerializer(serializers.Serializer):
+    variable_code = serializers.CharField()
+    unit = serializers.CharField(allow_null=True)
+    record_count = serializers.IntegerField()
+    first_observation = serializers.DateTimeField(allow_null=True)
+    last_observation = serializers.DateTimeField(allow_null=True)
+
+
+class StationInfoSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    station_code = serializers.CharField()
+    name = serializers.CharField(allow_null=True)
+    country_code = serializers.CharField(allow_null=True)
+    station_type = serializers.CharField(allow_null=True)
+    is_active = serializers.BooleanField()
+    elevation_m = serializers.FloatField(allow_null=True)
+    latitude = serializers.FloatField(allow_null=True)
+    longitude = serializers.FloatField(allow_null=True)
+    total_records = serializers.IntegerField()
+    first_observation = serializers.DateTimeField(allow_null=True)
+    last_observation = serializers.DateTimeField(allow_null=True)
+    variables = VariableSummarySerializer(many=True)
+
+
+class StationListItemSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    station_code = serializers.CharField()
+    name = serializers.CharField(allow_null=True)
+    country_code = serializers.CharField(allow_null=True)
+    station_type = serializers.CharField(allow_null=True)
+    elevation_m = serializers.FloatField(allow_null=True)
+    latitude = serializers.FloatField(allow_null=True)
+    longitude = serializers.FloatField(allow_null=True)
+    variables_available = serializers.ListField(child=serializers.CharField())
+    latest_observed_at = serializers.DateTimeField(allow_null=True)
+
+
+class TimeSeriesRawBucketSerializer(serializers.Serializer):
+    period = serializers.DateTimeField()
+    value = serializers.FloatField(allow_null=True)
+    unit = serializers.CharField(allow_null=True)
+
+
+class TimeSeriesAggBucketSerializer(serializers.Serializer):
+    period = serializers.DateTimeField()
+    avg = serializers.FloatField(allow_null=True)
+    min = serializers.FloatField(allow_null=True)
+    max = serializers.FloatField(allow_null=True)
+    count = serializers.IntegerField()
+
+
+class StationStatsResponseSerializer(serializers.Serializer):
+    station_code = serializers.CharField()
+    station_name = serializers.CharField(allow_null=True)
+    variable = serializers.CharField()
+    aggregation = serializers.CharField()
+    start = serializers.CharField()
+    end = serializers.CharField()
+    data = serializers.ListField()
