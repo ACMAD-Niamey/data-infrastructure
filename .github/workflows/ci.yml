@@ -121,7 +121,7 @@ jobs:
 
     - name: Deploy to Vultr
       run: |
-        ssh -o StrictHostKeyChecking=no -p 2225 ${{ secrets.VULTR_USER }}@${{ secrets.VULTR_IP }} << 'EOF'
+        ssh -o StrictHostKeyChecking=no -p 2224 ${{ secrets.VULTR_USER }}@${{ secrets.VULTR_IP }} << 'EOF'
           cd Drought_advisory_system
           git pull origin production
           
