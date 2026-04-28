@@ -100,6 +100,7 @@ class ObservationReader:
         "hourly": "hour",
         "daily": "day",
         "monthly": "month",
+        "yearly": "year",
     }
 
     def station_info(self, station_code: str) -> dict | None:
