@@ -133,8 +133,6 @@ jobs:
           cd Drought_advisory_system
           git pull origin production
           
-          chmod +x ./docker/create_network.sh
-          ./docker/create_network.sh
           
           docker compose up -d --build
           docker compose --profile prod up -d
