@@ -35,7 +35,7 @@ jobs:
     env:
       PYTHONUNBUFFERED: 1
       POSTGRES_USER: postgres     
-      POSTGRES_PASS: postgres
+      POSTGRES_PASSWORD: postgres
       POSTGRES_DB: test_db
       POSTGRES_HOST: localhost
       POSTGRES_PORT: 5432
