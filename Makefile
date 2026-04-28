@@ -34,3 +34,5 @@ connectdb-container:
 	 docker exec -e PGPASSWORD=$(POSTGRES_PASSWORD) -it geodatamanager_db psql -U ${POSTGRES_USER} -d ${POSTGRES_DB} -h ${POSTGRES_HOST} 
 certificate:
 	docker compose run --rm certbot
+test:
+	docker compose exec web python3 manage.py test

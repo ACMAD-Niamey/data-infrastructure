@@ -1,0 +1,136 @@
+name: data infrastructure CI/CD Pipeline
+
+on:
+  push:
+    branches: [ develop, production ]
+  pull_request:
+    branches: [ develop, production ]
+
+
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgis:
+        image: kartoza/postgis:16
+        ports:
+          - 5432:5432
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test_db
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:alpine
+        ports:
+          - 6379:6379
+
+    env:
+      PYTHONUNBUFFERED: 1
+      POSTGRES_USER: postgres     
+      POSTGRES_PASS: postgres
+      POSTGRES_DB: test_db
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+      EMAIL_HOST_USER: ${{ secrets.EMAIL_HOST_USER }}
+      EMAIL_HOST_PASSWORD: ${{ secrets.EMAIL_HOST_PASSWORD }}
+      DEBUG: True
+      DJANGO_SECRET_KEY: ${{ secrets.SECRET_KEY }}
+      DJANGO_ALLOWED_HOSTS: ${{ secrets.ALLOWED_HOSTS }}
+      REDIS_URL: redis://localhost:6379/0
+      CACHE_LOCATION: redis://localhost:6379/1
+      CELERY_BACKEND: redis://localhost:6379/0
+      STATIC_VOLUME: ./staticfiles
+      MEDIA_VOLUME: ./media
+      COMPOSE_PROJECT_NAME: geomgr
+      PGDATA_VOLUME: ./geomgr_pgdata
+      UI_DIR: ./e-safari-ui
+      TITILER_URL: https://climatehub.acmad.org/titiler
+      NGINX_CONFIG: default.conf
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_ENDPOINT: minio:9000
+      MINIO_VOLUME: ./minio_data
+      MINIO_BUCKET: geodata
+
+      PG_STAC_POSTGRES_DB: pgstac
+      PG_STAC_POSTGRES_USER: pgstac
+      PG_STAC_POSTGRES_PASSWORD: pgstacpass
+      PG_STAC_POSTGRES_HOST: pgstac
+      PG_STAC_POSTGRES_PORT: 5432
+      PORTAL_RASTERS_VOLUME: ./data
+      TIPG_DEBUG: True
+      DOMAIN_MINIO_CONSOLE: console-minio.acmad.org
+      DOMAIN_MINIO: minio.acmad.org
+      DOMAIN: e-safari.acmad.org
+      
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Install GDAL
+      run: sudo apt-get update && sudo apt-get install -y libgdal-dev
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install GDAL and PROJ
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y gdal-bin libgdal-dev libproj-dev
+
+    - name: Install dependencies
+      run: |
+        export CPLUS_INCLUDE_PATH=/usr/include/gdal
+        export C_INCLUDE_PATH=/usr/include/gdal
+        pip install GDAL==3.8.4
+        pip install -r requirements.txt
+
+  
+
+    - name: Run migrations
+      run: python manage.py migrate
+
+    - name: Run tests
+      run: python manage.py test
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/production'
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Copy SSH key
+      uses: webfactory/ssh-agent@v0.9.0
+      with:
+        ssh-private-key: ${{ secrets.VULTR_SSH_KEY }}
+
+    - name: Deploy to Vultr
+      run: |
+        ssh -o StrictHostKeyChecking=no -p 2225 ${{ secrets.VULTR_USER }}@${{ secrets.VULTR_IP }} << 'EOF'
+          cd Drought_advisory_system
+          git pull origin production
+          
+          chmod +x ./docker/create_network.sh
+          ./docker/create_network.sh
+          
+          docker compose up -d --build
+          docker compose --profile prod up -d
+          docker builder prune -af
+         
+          
+        EOF
