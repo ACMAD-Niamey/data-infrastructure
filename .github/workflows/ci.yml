@@ -114,6 +114,14 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v3
 
+    - name: Debug secret presence
+      run: |
+        if [ -z "${{ secrets.VULTR_SSH_KEY }}" ]; then
+          echo "SECRET IS EMPTY"
+        else
+          echo "SECRET IS SET (length: ${#VULTR_SSH_KEY})"
+        fi
+
     - name: Copy SSH key
       uses: webfactory/ssh-agent@v0.9.0
       with:
