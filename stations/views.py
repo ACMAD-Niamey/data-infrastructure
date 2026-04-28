@@ -3,6 +3,8 @@ from __future__ import annotations
 import logging
 from datetime import datetime, timedelta, timezone
 
+from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
+from drf_spectacular.types import OpenApiTypes
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
@@ -18,7 +20,7 @@ from observations.serializers import (
 
 log = logging.getLogger(__name__)
 
-_VALID_AGG = {"raw", "hourly", "daily", "monthly"}
+_VALID_AGG = {"raw", "hourly", "daily", "monthly", "yearly"}
 
 
 def _default_end() -> str:
@@ -38,6 +40,16 @@ class StationListView(APIView):
     Each item includes available variable codes and the latest observation time.
     """
 
+    @extend_schema(
+        summary="List all stations",
+        description=(
+            "Returns all active stations that have at least one observation. "
+            "Each record includes coordinates, available variable codes, "
+            "and the timestamp of the most recent observation."
+        ),
+        responses={200: StationListItemSerializer(many=True)},
+        tags=["Stations"],
+    )
     def get(self, request):
         reader = ObservationReader()
         rows = reader.station_list()
@@ -53,6 +65,24 @@ class StationDetailView(APIView):
     plus per-variable record counts and date ranges.
     """
 
+    @extend_schema(
+        summary="Station detail",
+        description=(
+            "Returns metadata for a single station identified by `station_code`, "
+            "plus per-variable record counts and first/last observation timestamps."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name="station_code",
+                location=OpenApiParameter.PATH,
+                description="Station code (e.g. 60390 or WIGOS_0_20000_0_60401).",
+                required=True,
+                type=OpenApiTypes.STR,
+            ),
+        ],
+        responses={200: StationInfoSerializer, 404: None},
+        tags=["Stations"],
+    )
     def get(self, request, station_code: str):
         reader = ObservationReader()
         info = reader.station_info(station_code)
@@ -75,28 +105,95 @@ class StationStatsView(APIView):
     GET /api/stations/<station_code>/stats/
 
     Returns time-series statistics for one variable at a station.
-
-    Query parameters
-    ----------------
-    variable  : str   Required. One of: temp, dewpoint, rh, pressure,
-                      wind_speed, wind_direction, rainfall, visibility,
-                      elevation, solar_radiation
-    agg       : str   Aggregation level: raw | hourly | daily (default) | monthly
-    start     : str   Start date (ISO 8601). Default: 30 days ago.
-    end       : str   End date (ISO 8601). Default: today.
-
-    Response shape
-    --------------
-    Aggregated (hourly/daily/monthly):
-        {station_code, station_name, variable, aggregation, start, end,
-         data: [{period, avg, min, max, count}, ...]}
-
-    Raw:
-        {station_code, station_name, variable, aggregation, start, end,
-         data: [{period, value, unit}, ...]}
-        Raw mode is capped at 5000 rows.
     """
 
+    @extend_schema(
+        summary="Station time-series statistics",
+        description=(
+            "Returns aggregated or raw time-series for a single variable at a station.\n\n"
+            "**Aggregation modes** (`agg` parameter):\n"
+            "- `raw` — individual observations (capped at 5 000 rows); "
+            "data items contain `period`, `value`, `unit`.\n"
+            "- `hourly` — hourly avg / min / max / count.\n"
+            "- `daily` — daily avg / min / max / count *(default)*.\n"
+            "- `monthly` — monthly avg / min / max / count.\n"
+            "- `yearly` — yearly avg / min / max / count.\n\n"
+            "Pressure values stored in Pa are automatically converted to hPa."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name="station_code",
+                location=OpenApiParameter.PATH,
+                description="Station code (e.g. 60390).",
+                required=True,
+                type=OpenApiTypes.STR,
+            ),
+            OpenApiParameter(
+                name="variable",
+                location=OpenApiParameter.QUERY,
+                description=(
+                    "Variable to query. Common values: "
+                    "`temp`, `dewpoint`, `rh`, `pressure`, `wind_speed`, "
+                    "`wind_direction`, `rainfall`, `visibility`, `elevation`."
+                ),
+                required=True,
+                type=OpenApiTypes.STR,
+            ),
+            OpenApiParameter(
+                name="agg",
+                location=OpenApiParameter.QUERY,
+                description="Aggregation level (default: daily).",
+                required=False,
+                type=OpenApiTypes.STR,
+                enum=["raw", "hourly", "daily", "monthly", "yearly"],
+            ),
+            OpenApiParameter(
+                name="start",
+                location=OpenApiParameter.QUERY,
+                description=(
+                    "Start date inclusive (ISO 8601, e.g. 2026-04-01). "
+                    "Default: 30 days ago."
+                ),
+                required=False,
+                type=OpenApiTypes.DATE,
+            ),
+            OpenApiParameter(
+                name="end",
+                location=OpenApiParameter.QUERY,
+                description=(
+                    "End date inclusive (ISO 8601, e.g. 2026-04-27). "
+                    "Default: today."
+                ),
+                required=False,
+                type=OpenApiTypes.DATE,
+            ),
+        ],
+        responses={200: StationStatsResponseSerializer, 400: None, 404: None},
+        examples=[
+            OpenApiExample(
+                "Daily temperature — DAR-EL-BEIDA",
+                value={
+                    "station_code": "60390",
+                    "station_name": "DAR-EL-BEIDA",
+                    "variable": "temp",
+                    "aggregation": "daily",
+                    "start": "2026-04-01",
+                    "end": "2026-04-27",
+                    "data": [
+                        {
+                            "period": "2026-04-27T00:00:00Z",
+                            "avg": 18.1,
+                            "min": 14.2,
+                            "max": 24.8,
+                            "count": 4,
+                        }
+                    ],
+                },
+                response_only=True,
+            ),
+        ],
+        tags=["Stations"],
+    )
     def get(self, request, station_code: str):
         variable = request.query_params.get("variable", "").strip()
         if not variable:
