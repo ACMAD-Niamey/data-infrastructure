@@ -3,6 +3,7 @@ import { Button } from './ui/button';
 import { Globe, Leaf } from 'lucide-react';
 import { InfoModal } from './InfoModal';
 import acmadLogo from './images/acmadLogo.svg';
+import '../styles/header.css';
 
 interface HeaderProps {
   language: Language;
@@ -50,7 +51,9 @@ export function Header({ language, onLanguageChange }: HeaderProps) {
               <Globe className="size-4 mr-2" />
               {language === 'en' ? 'FR' : 'EN'}
             </Button>
-            <img src={acmadLogo} width="50" height="28" />
+            <div className="logo">
+              <img src={acmadLogo} width="45" height="45" />
+            </div>
           </div>
         </div>
         

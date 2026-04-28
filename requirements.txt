@@ -7,6 +7,7 @@ drf-spectacular==0.27.2
 psycopg[binary]>=3.1
 psycopg2==2.9.5
 python-slugify==8.0.4
+paho-mqtt==2.1.0
 gunicorn>=21.2
 celery>=5.3
 redis>=5.0
@@ -15,6 +16,7 @@ requests>=2.31
 minio==7.2.20
 whitenoise==6.6.0
 gdal==3.6.2
+eccodes>=2.36
 
 
 

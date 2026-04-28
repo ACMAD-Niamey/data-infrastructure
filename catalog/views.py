@@ -6,6 +6,10 @@ from rest_framework.response import Response
 from rest_framework import status
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 import os
+import logging
+
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
 
 from .serializers import (
     DatasetAvailabilityResponseSerializer,
@@ -154,7 +158,7 @@ class DatasetVisualizationView(APIView):
 
         try:
             visualization_info = DatasetVisualization(date, dataset_id, cadence)
-            
+            log.info(f'repalce {replace_titiler_url}')
             titiler_info = visualization_info.get_visualization(replace_url=replace_titiler_url)
 
             if not titiler_info:

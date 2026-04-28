@@ -364,6 +364,166 @@ lsof -i :8000
 kill -9 <PID>
 ```
 
+## Stations & Observations API
+
+The Stations API provides read-only access to weather station metadata and observation time-series. All queries use raw SQL (no ORM) and are served under `/api/stations/`.
+
+### Endpoints overview
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/api/stations/` | List all active stations that have observations |
+| `GET` | `/api/stations/<station_code>/` | Station detail + per-variable record counts |
+| `GET` | `/api/stations/<station_code>/stats/` | Time-series aggregation for one variable |
+
+Full interactive documentation (try-it-out) is available at `/api/docs/` under the **Stations** tag.
+
+---
+
+### `GET /api/stations/`
+
+Returns all active stations that have at least one observation.
+
+**Response**
+```json
+{
+  "count": 40,
+  "results": [
+    {
+      "id": 99,
+      "station_code": "60390",
+      "name": "DAR-EL-BEIDA",
+      "country_code": "DZA",
+      "station_type": "aws",
+      "elevation_m": 25.0,
+      "latitude": 36.69,
+      "longitude": 3.22,
+      "variables_available": ["dewpoint", "pressure", "rh", "temp", "wind_speed"],
+      "latest_observed_at": "2026-04-27T07:00:00Z"
+    }
+  ]
+}
+```
+
+---
+
+### `GET /api/stations/<station_code>/`
+
+Returns metadata for a single station plus per-variable record counts.
+
+**Path parameter**: `station_code` — e.g. `60390` or `WIGOS_0_20000_0_60401`
+
+**Response**
+```json
+{
+  "id": 99,
+  "station_code": "60390",
+  "name": "DAR-EL-BEIDA",
+  "country_code": "DZA",
+  "station_type": "aws",
+  "is_active": true,
+  "elevation_m": 25.0,
+  "latitude": 36.69,
+  "longitude": 3.22,
+  "total_records": 8,
+  "first_observation": "2026-04-27T07:00:00Z",
+  "last_observation": "2026-04-27T07:00:00Z",
+  "variables": [
+    {
+      "variable_code": "temp",
+      "unit": "degC",
+      "record_count": 1,
+      "first_observation": "2026-04-27T07:00:00Z",
+      "last_observation": "2026-04-27T07:00:00Z"
+    }
+  ]
+}
+```
+
+Returns `404` if the station code is not found.
+
+---
+
+### `GET /api/stations/<station_code>/stats/`
+
+Returns aggregated or raw time-series for a single variable at a station.
+
+**Path parameter**: `station_code`
+
+**Query parameters**
+
+| Parameter | Required | Default | Description |
+|-----------|----------|---------|-------------|
+| `variable` | Yes | — | Variable code: `temp`, `dewpoint`, `rh`, `pressure`, `wind_speed`, `wind_direction`, `rainfall`, `visibility`, `elevation` |
+| `agg` | No | `daily` | Aggregation level: `raw`, `hourly`, `daily`, `monthly`, `yearly` |
+| `start` | No | 30 days ago | Start date inclusive, ISO 8601 (e.g. `2026-04-01`) |
+| `end` | No | today | End date inclusive, ISO 8601 (e.g. `2026-04-27`) |
+
+**Aggregated response** (`agg=hourly|daily|monthly|yearly`)
+```json
+{
+  "station_code": "60390",
+  "station_name": "DAR-EL-BEIDA",
+  "variable": "temp",
+  "aggregation": "daily",
+  "start": "2026-04-01",
+  "end": "2026-04-27",
+  "data": [
+    {
+      "period": "2026-04-27T00:00:00Z",
+      "avg": 18.1,
+      "min": 14.2,
+      "max": 24.8,
+      "count": 4
+    }
+  ]
+}
+```
+
+**Raw response** (`agg=raw`, capped at 5 000 rows)
+```json
+{
+  "station_code": "60390",
+  "station_name": "DAR-EL-BEIDA",
+  "variable": "temp",
+  "aggregation": "raw",
+  "start": "2026-04-01",
+  "end": "2026-04-27",
+  "data": [
+    {
+      "period": "2026-04-27T07:00:00Z",
+      "value": 18.1,
+      "unit": "degC"
+    }
+  ]
+}
+```
+
+> **Note:** Pressure values stored internally in Pa are automatically normalised to hPa in all responses.
+
+---
+
+### Example requests
+
+```bash
+# List all stations
+curl http://localhost/api/stations/
+
+# Station detail
+curl http://localhost/api/stations/60390/
+
+# Daily temperature for April 2026
+curl "http://localhost/api/stations/60390/stats/?variable=temp&agg=daily&start=2026-04-01&end=2026-04-30"
+
+# Raw pressure readings (last 30 days, default window)
+curl "http://localhost/api/stations/60390/stats/?variable=pressure&agg=raw"
+
+# Monthly wind speed for a full year
+curl "http://localhost/api/stations/60390/stats/?variable=wind_speed&agg=monthly&start=2026-01-01&end=2026-12-31"
+```
+
+---
+
 ## Contributing
 
 1. Fork the repository
@@ -390,4 +550,4 @@ This project is part of the ACMAD e-Safari initiative.
 
 ---
 
-**Last Updated**: February 2026
+**Last Updated**: April 2026

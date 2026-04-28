@@ -31,6 +31,10 @@ LOCAL_APPS = [ "home",
                 "ingest",
                 "uploads",
                 "vector_ingest",
+                "weather_station_ingestion",
+                "observations",
+                "sources",
+                "stations",
                 ]
 
 THIRD_PARTY_APPS = [
@@ -61,6 +65,7 @@ INSTALLED_APPS = LOCAL_APPS + THIRD_PARTY_APPS + [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
+    "django.contrib.gis",
 ] 
 
 MIDDLEWARE = [
@@ -104,7 +109,7 @@ WSGI_APPLICATION = "geodatamanager.wsgi.application"
 
 DATABASES = {
     "default": {
-        "ENGINE": "django.db.backends.postgresql",
+        "ENGINE": "django.contrib.gis.db.backends.postgis",
         "NAME": os.getenv("POSTGRES_DB", "geodatamanager"),
         "USER": os.getenv("POSTGRES_USER", "geodatamanager"),
         "PASSWORD": os.getenv("POSTGRES_PASSWORD", "geodatamanager"),
@@ -132,7 +137,7 @@ DATABASES["pgstac"] = {
 }
 
 
-
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 
 
@@ -199,6 +204,10 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 MEDIA_ROOT = BASE_DIR / "media"
 MEDIA_URL = "/media/"
+
+WIS2_DOWNLOAD_DIR = BASE_DIR / "data" / "wis2_downloads"
+WIS2_KEEP_DOWNLOADED_FILES = True
+WIS2_MAX_PAYLOAD_PREVIEW_CHARS = 2000
 
 
 # Celery settings
@@ -287,6 +296,48 @@ MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY", "")
 MINIO_USE_SSL = os.environ.get("MINIO_USE_SSL", "false").lower() == "true"
 MINIO_ARCHIVE_BUCKET = os.environ.get("MINIO_ARCHIVE_BUCKET", "geodata-archive")
 
+
+WIS2_BROKER_HOST = os.environ.get("WIS2_BROKER_HOST", "globalbroker.meteo.fr")
+WIS2_BROKER_PORT = int(os.environ.get("WIS2_BROKER_PORT", "8883"))
+WIS2_BROKER_USERNAME = os.environ.get("WIS2_BROKER_USERNAME", "everyone")
+WIS2_BROKER_PASSWORD = os.environ.get("WIS2_BROKER_PASSWORD", "everyone")
+WIS2_TOPICS = [
+    ("cache/a/wis2/#", 0),
+]
+WIS2_STORE_FULL_PAYLOAD = False
+
+WIS2_DOWNLOAD_TIMEOUT = 60
+WIS2_MAX_PAYLOAD_PREVIEW_CHARS = 2000
+WIS2_ONLY_CACHE_TOPICS = True
+WIS2_STORE_TEXT_PREVIEW = True
+WIS2_DOWNLOAD_ENABLED = True
+WIS2_ALLOWED_CONTENT_TYPES = {
+    "text/plain",
+    "application/octet-stream",
+}
+AFRICA_TOPIC_KEYWORDS = (
+    "afr",
+    "africa",
+    "dakar",
+    "nairobi",
+    "cairo",
+)
+
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {
+        "console": {
+            "class": "logging.StreamHandler",
+        },
+    },
+    "loggers": {
+        "weather_station_ingestion": {
+            "handlers": ["console"],
+            "level": "INFO",
+        },
+    },
+}
 
 CSRF_TRUSTED_ORIGINS = [
     "http://localhost",

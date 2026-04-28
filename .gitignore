@@ -5,4 +5,9 @@ __pycache__/
 *media
 *staticfiles
 *geomgr_pgdata
-*data
+data
+e-safari-ui/build/
+nginx/webroot/
+nginx/letsencrypt/
+!e-safari-ui/src/data/
+!e-safari-ui/src/data/**
