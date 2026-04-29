@@ -44,6 +44,7 @@ class StationGeographyEnricher:
       1) Country name from the intersecting boundary's ``country_name``.
       2) Otherwise Nominatim reverse geocode (also fills ``admin1`` / ``admin2``).
       3) Otherwise existing ``Station.country_name``.
+      4) Final fallback: ISO3 ``Station.country_code`` -> country name via pycountry.
     """
 
     def __init__(self, *, timeout: int = 8, throttle_s: float = 1.0) -> None:
@@ -213,7 +214,7 @@ class StationGeographyEnricher:
 
         if not update.country_name:
             update.country_name = self._clean_text(
-                station.country_name or self._iso3_to_country_name(station.canonical_code)
+                station.country_name or self._iso3_to_country_name(station.country_code)
             )
 
         update_fields: list[str] = []
