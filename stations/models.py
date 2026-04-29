@@ -1,4 +1,5 @@
 from django.contrib.gis.db import models
+from django.contrib.postgres.indexes import GistIndex
 from django.core.validators import MaxValueValidator, MinValueValidator
 
 
@@ -31,6 +32,13 @@ class Station(models.Model):
         null=True,
         db_index=True,
         help_text="ISO 3166-1 alpha-3 country code.",
+    )
+    country_name = models.CharField(
+        max_length=150,
+        blank=True,
+        null=True,
+        db_index=True,
+        help_text="Human-readable country name derived from ISO mapping or reverse geocoding.",
     )
     admin1 = models.CharField(max_length=150, blank=True, null=True)
     admin2 = models.CharField(max_length=150, blank=True, null=True)
@@ -88,6 +96,39 @@ class Station(models.Model):
     @property
     def latitude(self):
         return self.geom.y if self.geom else None
+
+
+class CountryBoundary(models.Model):
+    country_name = models.CharField(max_length=150, unique=True, db_index=True)
+    country_code = models.CharField(max_length=3, blank=True, null=True, db_index=True)
+    geom = models.MultiPolygonField(srid=4326)
+    country_bounds = models.JSONField(blank=True, null=True)
+    source_feature_id = models.CharField(max_length=255, blank=True, null=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "country_boundaries"
+        indexes = [
+            GistIndex(fields=["geom"], name="country_boundaries_geom_gix"),
+            models.Index(fields=["country_name"], name="country_boundaries_name_idx"),
+            models.Index(fields=["country_code"], name="country_boundaries_code_idx"),
+        ]
+
+    def __str__(self) -> str:
+        return self.country_name
+
+    def update_bounds(self) -> None:
+        envelope = self.geom.envelope if self.geom else None
+        if not envelope:
+            self.country_bounds = None
+            return
+        xmin, ymin, xmax, ymax = envelope.extent
+        self.country_bounds = {
+            "west": float(xmin),
+            "south": float(ymin),
+            "east": float(xmax),
+            "north": float(ymax),
+        }
 
 
 class StationAlias(models.Model):

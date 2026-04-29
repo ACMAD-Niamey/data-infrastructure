@@ -32,7 +32,7 @@ services:
       # optional but helpful
       TIPG_DEBUG: ${TIPG_DEBUG:-false}
       TIPG_ONLY_SPATIAL_TABLES: "true"
-      TIPG_CORS_ORIGINS: "http://localhost,http://localhost:3000"
+      TIPG_CORS_ORIGINS: "http://localhost,http://localhost:3000, e-safari.acmad.org, ${TIPG_CORS_ORIGINS:-afrimet.acmad.org}"
     ports:
       - "8082:8080"
     command:
@@ -126,7 +126,7 @@ services:
       - ${LETSENCRYPT_VOLUME:-./nginx/letsencrypt}:/etc/letsencrypt
       - ./nginx/webroot:/var/www/certbot
     entrypoint: ""
-    command: certbot certonly --webroot --webroot-path=/var/www/certbot --email ${EMAIL} --agree-tos --no-eff-email -d ${DOMAIN} -d ${DOMAIN_MINIO_CONSOLE} -d ${DOMAIN_MINIO}
+    command: certbot certonly --webroot --webroot-path=/var/www/certbot --email ${EMAIL} --agree-tos --no-eff-email -d ${DOMAIN} -d ${DOMAIN_MINIO_CONSOLE} -d ${DOMAIN_MINIO} -d ${DOMAIN_AFRIMET:-afrimet.acmad.org}
   
   certbot-renew:
     image: certbot/certbot

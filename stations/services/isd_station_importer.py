@@ -47,6 +47,7 @@ import requests
 from django.contrib.gis.geos import Point
 
 from stations.models import Station
+from stations.services.station_geography_enricher import StationGeographyEnricher
 
 log = logging.getLogger(__name__)
 
@@ -114,6 +115,7 @@ class ISDStationImporter:
     def __init__(self, csv_url: str = ISD_CSV_URL, timeout: int = 60) -> None:
         self.csv_url = csv_url
         self.timeout = timeout
+        self.geography_enricher = StationGeographyEnricher()
 
     # ------------------------------------------------------------------
     # Public entry point
@@ -251,12 +253,18 @@ class ISDStationImporter:
             )
 
             if created:
+                self.geography_enricher.enrich_station_geography(station)
                 result.created += 1
                 return "created"
 
             # Update any missing fields on the existing record
             changed = self._apply_updates(station, row)
             if changed:
+                result.updated += 1
+                return "updated"
+
+            if not station.country_name or not station.admin1:
+                self.geography_enricher.enrich_station_geography(station)
                 result.updated += 1
                 return "updated"
 
@@ -281,8 +289,7 @@ class ISDStationImporter:
             "is_active": True,
         }
 
-    @staticmethod
-    def _apply_updates(station: Station, row: ISDRow) -> bool:
+    def _apply_updates(self, station: Station, row: ISDRow) -> bool:
         """Fill in any blank fields; return ``True`` if a save was needed."""
         changed = False
         if not station.name or station.name == station.station_code:
@@ -296,4 +303,5 @@ class ISDStationImporter:
             changed = True
         if changed:
             station.save(update_fields=["name", "country_code", "elevation_m", "updated_at"])
+            self.geography_enricher.enrich_station_geography(station)
         return changed

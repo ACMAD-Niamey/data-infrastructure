@@ -6,6 +6,7 @@ from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
 
 from stations.models import Station, StationAlias, StationSensor
+from stations.services.station_geography_enricher import StationGeographyEnricher
 from weather_station_ingestion.services.text_payload_parser import ExtractedStationObservation
 
 # Maximum distance for coordinate-based station matching.
@@ -22,6 +23,9 @@ class StationEnrichmentResult:
 
 
 class StationEnricherService:
+    def __init__(self) -> None:
+        self.geography_enricher = StationGeographyEnricher()
+
     def _match_station(self, obs: ExtractedStationObservation) -> Station | None:
         if obs.wmo_id:
             station = Station.objects.filter(wmo_id=obs.wmo_id).first()
@@ -98,6 +102,7 @@ class StationEnricherService:
 
         if changed:
             station.save()
+            self.geography_enricher.enrich_station_geography(station)
             return "updated"
 
         return "matched"
@@ -120,6 +125,7 @@ class StationEnricherService:
             station_type=Station.StationType.AWS,
             is_active=True,
         )
+        self.geography_enricher.enrich_station_geography(station)
         return station
 
     def _ensure_alias(self, station: Station, source_name: str | None, alias_code: str | None, alias_name: str | None) -> str:
@@ -189,6 +195,9 @@ class StationEnricherService:
                 sensor_action="none",
                 alias_action="none",
             )
+
+        if not station.country_name or not station.admin1:
+            self.geography_enricher.enrich_station_geography(station)
 
         alias_action = self._ensure_alias(
             station=station,
