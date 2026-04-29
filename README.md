@@ -335,6 +335,104 @@ docker compose exec web python manage.py sync_station_canonical_code
 Both source and destination must be on the same migration set
 (at least `stations.0009_widen_country_codes`).
 
+## Backfilling Historical NOAA ISD-Lite Observations
+
+Hourly historical observations from the NOAA Integrated Surface Database
+(ISD-Lite subset) can be loaded into the `observations` hypertable for any
+station that already exists locally. The ingest is **idempotent** thanks to the
+observations primary key `(station_id, variable_code, observed_at)` plus
+`bulk_create(ignore_conflicts=True)` -- safe to re-run.
+
+### Prerequisites
+
+- The target stations must exist. Run `python manage.py import_wmo_stations`
+  first if you don't have NOAA stations yet.
+- The host running the command needs outbound HTTPS to
+  `https://www.ncei.noaa.gov`.
+
+### Variables ingested
+
+ISD-Lite -> internal `Observation.variable_code`:
+
+| ISD-Lite column | Internal code     | Unit | Notes                      |
+| --------------- | ----------------- | ---- | -------------------------- |
+| `temp`          | `temp`            | degC | scaled / 10                |
+| `slp`           | `pressure`        | hPa  | scaled / 10                |
+| `wdir`          | `wind_direction`  | deg  |                            |
+| `wspd`          | `wind_speed`      | m/s  | scaled / 10                |
+| `prcp_1h`       | `rainfall`        | mm   | scaled / 10; trace -> 0.0  |
+
+`dewp`, `skyc`, and `prcp_6h` are intentionally skipped. Every row is tagged
+`qc_flag = 'noaa_isd_lite'` for easy querying or rollback.
+
+### Command
+
+```bash
+python manage.py ingest_noaa_isd_lite [--year YYYY | --years YYYY:YYYY] \
+    [--station-code 60001 ... | --africa-only] \
+    [--dispatch-celery] [--dry-run]
+```
+
+Flag reference:
+
+- `--year` / `--years` (required, mutually exclusive): single year or inclusive range.
+- `--station-code` (repeatable) or `--africa-only`: which stations to backfill.
+  Default if neither is given is `--africa-only` (WMO blocks 60-69).
+- `--dispatch-celery`: enqueue one Celery task per (station, year) instead of
+  running inline. Mutually exclusive with `--dry-run`.
+- `--dry-run`: fetch + parse + count, no DB writes.
+
+### Examples
+
+```bash
+# Smoke test: one station, one year, no writes
+docker compose exec web python manage.py ingest_noaa_isd_lite \
+    --year 2023 --station-code 60001 --dry-run
+
+# Real insert
+docker compose exec web python manage.py ingest_noaa_isd_lite \
+    --year 2023 --station-code 60001
+
+# Bulk African backfill via Celery (recommended for multi-year jobs)
+docker compose exec web python manage.py ingest_noaa_isd_lite \
+    --years 2020:2024 --africa-only --dispatch-celery
+```
+
+Per-station output looks like:
+
+```
+station=60001 year=2023 parsed=28537 written=28537 skipped_existing=0 error=-
+```
+
+On a second run for the same `(station, year)`, `written=0` and
+`skipped_existing` accounts for everything already in the DB.
+
+### Verification
+
+```sql
+-- Coverage per station/year/variable
+SELECT s.station_code,
+       EXTRACT(YEAR FROM o.observed_at)::int AS year,
+       o.variable_code,
+       COUNT(*) AS rows,
+       MIN(o.observed_at) AS first_obs,
+       MAX(o.observed_at) AS last_obs
+FROM observations o
+JOIN stations s ON s.id = o.station_id
+WHERE o.qc_flag = 'noaa_isd_lite'
+GROUP BY s.station_code, year, o.variable_code
+ORDER BY s.station_code, year, o.variable_code;
+
+-- Total NOAA ISD-Lite rows (should be stable across re-runs)
+SELECT COUNT(*) FROM observations WHERE qc_flag = 'noaa_isd_lite';
+```
+
+To roll back a backfill cohort entirely:
+
+```sql
+DELETE FROM observations WHERE qc_flag = 'noaa_isd_lite';
+```
+
 ## Testing
 
 Run tests with:
