@@ -14,6 +14,8 @@ STATION_LIST_ROW = {
     "station_code": "60390",
     "name": "DAR-EL-BEIDA",
     "country_code": "DZA",
+    "admin1": None,
+    "admin2": None,
     "station_type": "aws",
     "elevation_m": 25.0,
     "latitude": 36.69,
@@ -84,7 +86,14 @@ class StationListViewTests(TestCase):
 
     @patch("stations.views.ObservationReader")
     def test_returns_200_with_station_list(self, MockReader):
-        MockReader.return_value.station_list.return_value = [STATION_LIST_ROW]
+        mock_reader = MockReader.return_value
+        mock_reader.station_list.return_value = [STATION_LIST_ROW]
+        mock_reader.station_list_spatial_extent.return_value = {
+            "west": 3.0,
+            "south": 36.0,
+            "east": 4.0,
+            "north": 37.0,
+        }
 
         response = self.client.get(self.url)
 
@@ -92,20 +101,26 @@ class StationListViewTests(TestCase):
         self.assertEqual(response.data["count"], 1)
         self.assertEqual(len(response.data["results"]), 1)
         self.assertEqual(response.data["results"][0]["station_code"], "60390")
+        self.assertEqual(response.data["extent"]["west"], 3.0)
 
     @patch("stations.views.ObservationReader")
     def test_returns_200_with_empty_list(self, MockReader):
-        MockReader.return_value.station_list.return_value = []
+        mock_reader = MockReader.return_value
+        mock_reader.station_list.return_value = []
+        mock_reader.station_list_spatial_extent.return_value = None
 
         response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["count"], 0)
         self.assertEqual(response.data["results"], [])
+        self.assertIsNone(response.data["extent"])
 
     @patch("stations.views.ObservationReader")
     def test_response_contains_expected_fields(self, MockReader):
-        MockReader.return_value.station_list.return_value = [STATION_LIST_ROW]
+        mock_reader = MockReader.return_value
+        mock_reader.station_list.return_value = [STATION_LIST_ROW]
+        mock_reader.station_list_spatial_extent.return_value = None
 
         response = self.client.get(self.url)
         item = response.data["results"][0]
@@ -113,6 +128,32 @@ class StationListViewTests(TestCase):
         for field in ["station_code", "name", "country_code", "latitude", "longitude",
                       "variables_available", "latest_observed_at"]:
             self.assertIn(field, item)
+
+
+# ---------------------------------------------------------------------------
+# StationFacetsView
+# ---------------------------------------------------------------------------
+
+
+class StationFacetsViewTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.url = reverse("station-facets")
+
+    @patch("stations.views.ObservationReader")
+    def test_returns_facets(self, MockReader):
+        MockReader.return_value.station_facets.return_value = {
+            "countries": ["DZA", "NER"],
+            "admin1": ["Region A"],
+            "admin2": [],
+        }
+
+        response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["countries"], ["DZA", "NER"])
+        self.assertEqual(response.data["admin1"], ["Region A"])
+        self.assertEqual(response.data["admin2"], [])
 
 
 # ---------------------------------------------------------------------------

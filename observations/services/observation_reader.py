@@ -154,17 +154,50 @@ class ObservationReader:
             cols = [c[0] for c in cur.description]
             return [dict(zip(cols, row)) for row in cur.fetchall()]
 
-    def station_list(self) -> list[dict]:
+    @staticmethod
+    def _station_geo_filter_sql(
+        country_code: str | None,
+        admin1: str | None,
+        admin2: str | None,
+    ) -> tuple[str, list[Any]]:
+        """Returns fragment `` AND ...`` plus bind params for stations alias ``s``."""
+        parts: list[str] = []
+        params: list[Any] = []
+        if country_code and country_code.strip():
+            parts.append("s.country_code = %s")
+            params.append(country_code.strip().upper())
+        if admin1 and admin1.strip():
+            parts.append("s.admin1 = %s")
+            params.append(admin1.strip())
+        if admin2 and admin2.strip():
+            parts.append("s.admin2 = %s")
+            params.append(admin2.strip())
+        if not parts:
+            return "", []
+        return " AND " + " AND ".join(parts), params
+
+    def station_list(
+        self,
+        *,
+        country_code: str | None = None,
+        admin1: str | None = None,
+        admin2: str | None = None,
+    ) -> list[dict]:
         """
-        Return all active stations that have at least one observation,
-        with the list of variables available and the most recent observation time.
+        Return active stations that have at least one observation,
+        with variable codes and latest observation time.
+
+        Optional filters narrow by ISO country code (alpha-3), admin1, admin2 (exact match).
         """
-        sql = """
+        extra_sql, extra_params = self._station_geo_filter_sql(country_code, admin1, admin2)
+        sql = f"""
             SELECT
                 s.id,
                 s.station_code,
                 s.name,
                 s.country_code,
+                s.admin1,
+                s.admin2,
                 s.station_type,
                 s.elevation_m,
                 ST_Y(s.geom::geometry) AS latitude,
@@ -175,14 +208,110 @@ class ObservationReader:
             JOIN observations o ON o.station_id = s.id
             WHERE s.is_active = TRUE
               AND s.geom IS NOT NULL
+              {extra_sql}
             GROUP BY s.id, s.station_code, s.name, s.country_code,
+                     s.admin1, s.admin2,
                      s.station_type, s.elevation_m, s.geom
             ORDER BY s.country_code, s.name
         """
         with connection.cursor() as cur:
-            cur.execute(sql)
+            cur.execute(sql, extra_params)
             cols = [c[0] for c in cur.description]
             return [dict(zip(cols, row)) for row in cur.fetchall()]
+
+    def station_list_spatial_extent(
+        self,
+        *,
+        country_code: str | None = None,
+        admin1: str | None = None,
+        admin2: str | None = None,
+    ) -> dict[str, float] | None:
+        """
+        Bounding box (WGS84 degrees) for stations matching the same filters as station_list,
+        or None if no stations match.
+        """
+        extra_sql, extra_params = self._station_geo_filter_sql(country_code, admin1, admin2)
+        sql = f"""
+            SELECT
+                ST_XMin(box) AS west,
+                ST_YMin(box) AS south,
+                ST_XMax(box) AS east,
+                ST_YMax(box) AS north
+            FROM (
+                SELECT ST_Extent(s.geom::geometry) AS box
+                FROM stations s
+                JOIN observations o ON o.station_id = s.id
+                WHERE s.is_active = TRUE
+                  AND s.geom IS NOT NULL
+                  {extra_sql}
+            ) t
+            WHERE box IS NOT NULL
+        """
+        with connection.cursor() as cur:
+            cur.execute(sql, extra_params)
+            row = cur.fetchone()
+            if row is None or row[0] is None:
+                return None
+            west, south, east, north = row
+            return {
+                "west": float(west),
+                "south": float(south),
+                "east": float(east),
+                "north": float(north),
+            }
+
+    def station_facets(self) -> dict[str, Any]:
+        """Distinct country_code / admin1 / admin2 values for stations that have observations."""
+        sql = """
+            SELECT DISTINCT s.country_code
+            FROM stations s
+            JOIN observations o ON o.station_id = s.id
+            WHERE s.is_active = TRUE
+              AND s.geom IS NOT NULL
+              AND s.country_code IS NOT NULL
+              AND s.country_code <> ''
+            ORDER BY 1
+        """
+        with connection.cursor() as cur:
+            cur.execute(sql)
+            countries = [r[0] for r in cur.fetchall() if r[0]]
+
+        # Facets without cascading dependency for simplicity — UI passes country when narrowing
+        with connection.cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT s.admin1
+                FROM stations s
+                JOIN observations o ON o.station_id = s.id
+                WHERE s.is_active = TRUE
+                  AND s.geom IS NOT NULL
+                  AND s.admin1 IS NOT NULL
+                  AND TRIM(s.admin1) <> ''
+                ORDER BY 1
+                """
+            )
+            regions = [r[0] for r in cur.fetchall() if r[0]]
+
+        with connection.cursor() as cur:
+            cur.execute(
+                """
+                SELECT DISTINCT s.admin2
+                FROM stations s
+                JOIN observations o ON o.station_id = s.id
+                WHERE s.is_active = TRUE
+                  AND s.geom IS NOT NULL
+                  AND s.admin2 IS NOT NULL
+                  AND TRIM(s.admin2) <> ''
+                ORDER BY 1
+                """
+            )
+            districts = [r[0] for r in cur.fetchall() if r[0]]
+
+        return {
+            "countries": countries,
+            "admin1": regions,
+            "admin2": districts,
+        }
 
     def time_series_by_station_code(
         self,

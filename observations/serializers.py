@@ -61,12 +61,33 @@ class StationListItemSerializer(serializers.Serializer):
     station_code = serializers.CharField()
     name = serializers.CharField(allow_null=True)
     country_code = serializers.CharField(allow_null=True)
+    admin1 = serializers.CharField(allow_null=True, required=False)
+    admin2 = serializers.CharField(allow_null=True, required=False)
     station_type = serializers.CharField(allow_null=True)
     elevation_m = serializers.FloatField(allow_null=True)
     latitude = serializers.FloatField(allow_null=True)
     longitude = serializers.FloatField(allow_null=True)
     variables_available = serializers.ListField(child=serializers.CharField())
     latest_observed_at = serializers.DateTimeField(allow_null=True)
+
+
+class SpatialExtentSerializer(serializers.Serializer):
+    west = serializers.FloatField()
+    south = serializers.FloatField()
+    east = serializers.FloatField()
+    north = serializers.FloatField()
+
+
+class StationListResponseSerializer(serializers.Serializer):
+    count = serializers.IntegerField()
+    results = StationListItemSerializer(many=True)
+    extent = SpatialExtentSerializer(allow_null=True)
+
+
+class StationFacetsSerializer(serializers.Serializer):
+    countries = serializers.ListField(child=serializers.CharField())
+    admin1 = serializers.ListField(child=serializers.CharField())
+    admin2 = serializers.ListField(child=serializers.CharField())
 
 
 class TimeSeriesRawBucketSerializer(serializers.Serializer):

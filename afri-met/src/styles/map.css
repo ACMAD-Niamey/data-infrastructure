@@ -1,0 +1,24 @@
+/* Match e-safari-ui map shell so the GL canvas fills the flex area. */
+.maplibregl-ctrl-top-right,
+.maplibregl-ctrl-bottom-right {
+  margin: 12px;
+}
+
+.maplibregl-ctrl-basemaps .basemap {
+  width: 30px;
+  height: 30px;
+  margin: 2px;
+  border: 2px solid #64748b;
+  border-radius: 6px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  z-index: 10;
+}
+
+.maplibregl-ctrl-basemaps .basemap.active {
+  border-color: #22d3ee;
+}
+
+.maplibregl-ctrl-basemaps {
+  pointer-events: auto;
+}
