@@ -433,6 +433,61 @@ To roll back a backfill cohort entirely:
 DELETE FROM observations WHERE qc_flag = 'noaa_isd_lite';
 ```
 
+## WIS2 Download Retention Cleanup
+
+Downloaded WIS2/MQTT payload files can be cleaned up with a retention policy.
+Default retention is **7 days**, configurable to a shorter or longer window.
+
+### Defaults and configuration
+
+- Default retention: `WIS2_DOWNLOAD_RETENTION_DAYS=7`
+- Override globally via env var:
+  - `WIS2_DOWNLOAD_RETENTION_DAYS=<days>`
+- Override per-run via command:
+  - `--older-than-days <days>`
+
+### Safety rules
+
+Cleanup only targets rows where:
+- `processing_status IN (processed, skipped, failed)`
+- `received_at <= now - retention`
+- `local_file_path` is non-null/non-empty
+
+It does **not** touch pending/downloading logs.
+
+### Command usage
+
+```bash
+# Use default retention from settings/env (7 days by default)
+docker compose exec web python manage.py cleanup_wis2_downloads
+
+# Override retention for this run
+docker compose exec web python manage.py cleanup_wis2_downloads --older-than-days 3
+
+# Preview only (no file/DB changes)
+docker compose exec web python manage.py cleanup_wis2_downloads --dry-run
+```
+
+Invalid retention (`<= 0`) is rejected.
+
+### Output summary
+
+Each run prints:
+- `cutoff`: computed retention cutoff timestamp
+- `scanned`: candidate log rows evaluated
+- `deleted`: files successfully removed
+- `missing`: file paths that no longer existed on disk
+- `failed`: unlink failures
+- `paths_cleared`: DB rows whose `local_file_path` was nulled
+
+### Scheduling
+
+A daily Celery Beat schedule is configured to run at **03:00 UTC** using:
+- task: `weather_station_ingestion.tasks.cleanup_wis2_downloads_task`
+
+Make sure `celery beat` is running in the target environment; otherwise cleanup
+will only run when invoked manually.
+
 ## Testing
 
 Run tests with:
