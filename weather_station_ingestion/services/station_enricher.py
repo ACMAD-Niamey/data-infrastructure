@@ -196,7 +196,7 @@ class StationEnricherService:
                 alias_action="none",
             )
 
-        if not station.country_name or not station.admin1:
+        if not station.canonical_code or not station.country_name or not station.admin1:
             self.geography_enricher.enrich_station_geography(station)
 
         alias_action = self._ensure_alias(

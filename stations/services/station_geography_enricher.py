@@ -12,13 +12,14 @@ try:
 except ImportError:  # pragma: no cover - fallback for minimal runtime environments
     pycountry = None
 
-from stations.models import Station
+from stations.models import CountryBoundary, Station
 
 log = logging.getLogger(__name__)
 
 
 @dataclass
 class StationGeographyUpdate:
+    canonical_code: str | None = None
     country_name: str | None = None
     admin1: str | None = None
     admin2: str | None = None
@@ -53,6 +54,34 @@ class StationGeographyEnricher:
             return None
         country = pycountry.countries.get(alpha_3=iso3.upper())
         return country.name if country else None
+
+    @staticmethod
+    def _to_iso3(country_code: str | None) -> str | None:
+        if not country_code:
+            return None
+        cleaned = country_code.strip().upper()
+        if not cleaned:
+            return None
+        if pycountry is None:
+            return cleaned if len(cleaned) == 3 else None
+        if len(cleaned) == 3:
+            match = pycountry.countries.get(alpha_3=cleaned)
+            return cleaned if match else None
+        if len(cleaned) == 2:
+            match = pycountry.countries.get(alpha_2=cleaned)
+            return match.alpha_3 if match else None
+        return None
+
+    @staticmethod
+    def _boundary_for_station(station: Station) -> CountryBoundary | None:
+        if not station.geom:
+            return None
+        return (
+            CountryBoundary.objects
+            .filter(geom__intersects=station.geom)
+            .exclude(country_name__isnull=True)
+            .first()
+        )
 
     def _reverse_geocode(self, lat: float, lon: float) -> dict | None:
         try:
@@ -96,7 +125,10 @@ class StationGeographyEnricher:
 
         missing_sql = ""
         if only_missing:
-            missing_sql = " AND (s.country_name IS NULL OR TRIM(s.country_name) = '')"
+            missing_sql = (
+                " AND ((s.country_name IS NULL OR TRIM(s.country_name) = '')"
+                " OR (s.canonical_code IS NULL OR TRIM(s.canonical_code) = ''))"
+            )
 
         count_sql = f"""
             SELECT COUNT(*)
@@ -114,7 +146,8 @@ class StationGeographyEnricher:
 
         update_sql = f"""
             UPDATE stations AS s
-            SET country_name = cb.country_name,
+            SET country_name = COALESCE(NULLIF(TRIM(s.country_name), ''), cb.country_name),
+                canonical_code = COALESCE(NULLIF(TRIM(cb.country_code), ''), s.canonical_code),
                 updated_at = NOW()
             FROM country_boundaries AS cb
             WHERE s.geom IS NOT NULL
@@ -136,6 +169,14 @@ class StationGeographyEnricher:
     ) -> dict[str, str | None]:
         update = StationGeographyUpdate()
 
+        boundary = self._boundary_for_station(station)
+        if boundary:
+            boundary_code = self._to_iso3(boundary.country_code)
+            if boundary_code:
+                update.canonical_code = boundary_code
+            if boundary.country_name:
+                update.country_name = self._clean_text(boundary.country_name)
+
         # Nominatim-first when coordinates exist.
         if station.geom:
             payload = self._reverse_geocode(station.geom.y, station.geom.x)
@@ -151,20 +192,31 @@ class StationGeographyEnricher:
                 or address.get("city_district")
                 or address.get("municipality")
             )
-            if nominatim_country:
+            if nominatim_country and not update.country_name:
                 update.country_name = nominatim_country
             if nominatim_admin1:
                 update.admin1 = nominatim_admin1
             if nominatim_admin2:
                 update.admin2 = nominatim_admin2
 
-        # Resilient fallback for country name.
+        canonical_station_code = self._to_iso3(station.canonical_code)
+        if not update.canonical_code and canonical_station_code:
+            update.canonical_code = canonical_station_code
+
+        # Resilient fallback for canonical country code/name.
+        if not update.canonical_code and station.country_name and pycountry is not None:
+            match = pycountry.countries.get(name=station.country_name.strip())
+            if match:
+                update.canonical_code = match.alpha_3
         if not update.country_name:
             update.country_name = self._clean_text(
-                station.country_name or self._iso3_to_country_name(station.country_code)
+                station.country_name or self._iso3_to_country_name(update.canonical_code or station.canonical_code)
             )
 
         update_fields: list[str] = []
+        if update.canonical_code and update.canonical_code != self._to_iso3(station.canonical_code):
+            station.canonical_code = update.canonical_code
+            update_fields.append("canonical_code")
         if update.country_name and update.country_name != self._clean_text(station.country_name):
             station.country_name = update.country_name
             update_fields.append("country_name")
@@ -180,6 +232,7 @@ class StationGeographyEnricher:
             station.save(update_fields=update_fields)
 
         return {
+            "canonical_code": station.canonical_code,
             "country_name": station.country_name,
             "admin1": station.admin1,
             "admin2": station.admin2,
