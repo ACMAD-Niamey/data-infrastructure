@@ -3,6 +3,7 @@ import { fetchCountryBounds, fetchStationList } from "./api/stations";
 import type { CountryBoundsOption, SelectOption, SpatialExtent, StationListItem } from "./api/types";
 import { StationMap, type StationLegendMode } from "./components/StationMap";
 import { StationPanel } from "./components/StationPanel";
+import acmadLogo from "./assets/acmadLogo.svg";
 
 export default function App() {
   const [stations, setStations] = useState<StationListItem[]>([]);
@@ -65,6 +66,11 @@ export default function App() {
         <div className="flex flex-col">
           <span className="text-lg font-semibold tracking-tight text-cyan-400">Afri-Met</span>
           <span className="text-xs text-slate-400">Station observations explorer</span>
+        </div>
+        <div className="ml-auto flex items-center">
+          <div className="rounded bg-white p-1.5 shadow-[0_4px_10px_rgba(0,0,0,0.18)]">
+            <img src={acmadLogo} alt="ACMAD logo" className="h-9 w-9 object-contain" />
+          </div>
         </div>
       </header>
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col md:flex-row">
