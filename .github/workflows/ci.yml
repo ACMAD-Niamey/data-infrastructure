@@ -121,12 +121,10 @@ jobs:
 
     - name: Deploy to Vultr
       run: |
-        ssh -o StrictHostKeyChecking=no -p 2225 ${{ secrets.VULTR_USER }}@${{ secrets.VULTR_IP }} << 'EOF'
-          cd Drought_advisory_system
+        ssh -o StrictHostKeyChecking=no -p 2224 ${{ secrets.VULTR_USER }}@${{ secrets.VULTR_IP }} << 'EOF'
+          cd data-infrastructure
           git pull origin production
           
-          chmod +x ./docker/create_network.sh
-          ./docker/create_network.sh
           
           docker compose up -d --build
           docker compose --profile prod up -d

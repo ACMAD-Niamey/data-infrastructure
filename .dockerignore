@@ -3,7 +3,8 @@
 .gitignore
 node_modules
 **/node_modules
-
+nginx/letsencrypt/
+nginx/letsencrypt/**
 # Python / Django things
 __pycache__
 *.pyc
