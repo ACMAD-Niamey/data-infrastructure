@@ -58,7 +58,10 @@ class Command(BaseCommand):
         )
 
         fallback_queryset = Station.objects.order_by("id").filter(
-            Q(country_name__isnull=True) | Q(country_name__exact="")
+            Q(country_name__isnull=True)
+            | Q(country_name__exact="")
+            | Q(canonical_code__isnull=True)
+            | Q(canonical_code__exact="")
         )
         if limit:
             fallback_queryset = fallback_queryset.filter(id__in=station_ids)
@@ -71,10 +74,15 @@ class Command(BaseCommand):
         )
         for station in fallback_queryset:
             processed += 1
-            before = (station.country_name, station.admin1, station.admin2)
+            before = (station.canonical_code, station.country_name, station.admin1, station.admin2)
             result = enricher.enrich_station_geography(station, persist=not dry_run)
 
-            after = (result.get("country_name"), result.get("admin1"), result.get("admin2"))
+            after = (
+                result.get("canonical_code"),
+                result.get("country_name"),
+                result.get("admin1"),
+                result.get("admin2"),
+            )
             if after != before:
                 updated += 1
 

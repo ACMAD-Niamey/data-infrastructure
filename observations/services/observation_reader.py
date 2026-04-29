@@ -166,7 +166,7 @@ class ObservationReader:
         parts: list[str] = []
         params: list[Any] = []
         if country_code and country_code.strip():
-            parts.append("s.country_code = %s")
+            parts.append("s.canonical_code = %s")
             params.append(country_code.strip().upper())
         if admin1 and admin1.strip():
             parts.append("s.admin1 = %s")
@@ -267,14 +267,14 @@ class ObservationReader:
         """Distinct country/admin1 values for stations that have observations."""
         sql = """
             SELECT
-                MIN(s.country_code) AS country_code,
+                MIN(s.canonical_code) AS canonical_code,
                 TRIM(s.country_name) AS country_name
             FROM stations s
             JOIN observations o ON o.station_id = s.id
             WHERE s.is_active = TRUE
               AND s.geom IS NOT NULL
-              AND s.country_code IS NOT NULL
-              AND s.country_code <> ''
+              AND s.canonical_code IS NOT NULL
+              AND s.canonical_code <> ''
               AND s.country_name IS NOT NULL
               AND TRIM(s.country_name) <> ''
             GROUP BY TRIM(s.country_name)
@@ -291,7 +291,7 @@ class ObservationReader:
         admin1_params: list[Any] = []
         admin1_filter_sql = ""
         if country_code and country_code.strip():
-            admin1_filter_sql = " AND s.country_code = %s"
+            admin1_filter_sql = " AND s.canonical_code = %s"
             admin1_params.append(country_code.strip().upper())
 
         with connection.cursor() as cur:
@@ -321,11 +321,12 @@ class ObservationReader:
         if not countries:
             return []
 
-        boundary_rows = CountryBoundary.objects.exclude(country_bounds__isnull=True)
+        boundary_rows = CountryBoundary.objects.exclude(country_bounds__isnull=True).exclude(country_code__isnull=True)
 
         def _norm(v: str) -> str:
             return " ".join(v.strip().lower().split())
 
+        by_code = {row.country_code.strip().upper(): row for row in boundary_rows if row.country_code}
         by_name = {_norm(row.country_name): row for row in boundary_rows if row.country_name}
 
         options: list[dict[str, Any]] = []
@@ -334,7 +335,7 @@ class ObservationReader:
             label = (country.get("label") or "").strip()
             if not code or not label:
                 continue
-            boundary = by_name.get(_norm(label))
+            boundary = by_code.get(code) or by_name.get(_norm(label))
             if not boundary or not boundary.country_bounds:
                 continue
             options.append({"value": code, "label": label, "bounds": boundary.country_bounds})

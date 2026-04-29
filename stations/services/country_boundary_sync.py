@@ -31,6 +31,33 @@ class CountryBoundarySyncService:
         return None
 
     @staticmethod
+    def _first_code(props: dict, keys: list[str]) -> str | None:
+        """Return the first non-empty value for *keys* coerced to a string.
+
+        The WFS layer publishes ``country_code`` as a numeric value (e.g. ``90``),
+        so we need to accept ints/floats in addition to strings and emit a
+        normalized 3-char-max string suitable for ``country_boundaries.country_code``.
+        """
+        for key in keys:
+            value = props.get(key)
+            if value is None:
+                continue
+            if isinstance(value, str):
+                cleaned = value.strip()
+                if cleaned:
+                    return cleaned
+                continue
+            if isinstance(value, bool):
+                continue
+            if isinstance(value, int):
+                return str(value)
+            if isinstance(value, float):
+                if value.is_integer():
+                    return str(int(value))
+                return str(value)
+        return None
+
+    @staticmethod
     def _as_multipolygon(geometry: dict) -> MultiPolygon | None:
         geom = GEOSGeometry(json.dumps(geometry), srid=4326)
         if isinstance(geom, MultiPolygon):
@@ -75,9 +102,18 @@ class CountryBoundarySyncService:
                 result.skipped += 1
                 continue
 
-            country_code = self._first(
+            country_code = self._first_code(
                 props,
-                ["iso3", "ISO3", "iso_a3", "ISO_A3", "adm0_a3", "ADM0_A3"],
+                [
+                    "country_code",
+                    "COUNTRY_CODE",
+                    "iso3",
+                    "ISO3",
+                    "iso_a3",
+                    "ISO_A3",
+                    "adm0_a3",
+                    "ADM0_A3",
+                ],
             )
             mpoly = self._as_multipolygon(geometry)
             if not mpoly:

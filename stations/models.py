@@ -33,6 +33,13 @@ class Station(models.Model):
         db_index=True,
         help_text="ISO 3166-1 alpha-3 country code.",
     )
+    canonical_code = models.CharField(
+        max_length=8,
+        blank=True,
+        null=True,
+        db_index=True,
+        help_text="Canonical country code derived from country boundary dataset.",
+    )
     country_name = models.CharField(
         max_length=150,
         blank=True,
@@ -82,6 +89,7 @@ class Station(models.Model):
             models.Index(fields=["station_code"], name="stations_code_idx"),
             models.Index(fields=["wmo_id"], name="stations_wmo_idx"),
             models.Index(fields=["country_code"], name="stations_country_idx"),
+            models.Index(fields=["canonical_code"], name="stations_canonical_idx"),
             models.Index(fields=["station_type"], name="stations_type_idx"),
             models.Index(fields=["is_active"], name="stations_active_idx"),
         ]
@@ -100,7 +108,7 @@ class Station(models.Model):
 
 class CountryBoundary(models.Model):
     country_name = models.CharField(max_length=150, unique=True, db_index=True)
-    country_code = models.CharField(max_length=3, blank=True, null=True, db_index=True)
+    country_code = models.CharField(max_length=8, blank=True, null=True, db_index=True)
     geom = models.MultiPolygonField(srid=4326)
     country_bounds = models.JSONField(blank=True, null=True)
     source_feature_id = models.CharField(max_length=255, blank=True, null=True, db_index=True)
