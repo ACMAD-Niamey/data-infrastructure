@@ -29,9 +29,21 @@ class StationGeographyEnricher:
     """
     Enrich station geography once during station create/update.
 
-    Strategy:
-    1) Nominatim reverse geocode first (if coordinates exist) for canonical names.
-    2) Static ISO3 mapping as fallback for country_name.
+    Canonical strategy (must stay aligned with the bulk
+    ``enrich_country_from_boundaries`` path and the
+    ``sync_station_canonical_code`` management command):
+      - ``Station.canonical_code`` is set verbatim from the spatially-intersecting
+        ``country_boundaries.country_code`` (the layer's own code, which may be
+        numeric e.g. ``133``, ``40765``). No ISO3 derivation or pycountry lookup
+        is applied here, so MQTT-ingested stations match what the bulk command
+        writes. If no boundary intersects, ``canonical_code`` is left untouched.
+      - ``Station.country_code`` (the MQTT/ISO field) is never modified by this
+        service.
+
+    Country/admin name resolution:
+      1) Country name from the intersecting boundary's ``country_name``.
+      2) Otherwise Nominatim reverse geocode (also fills ``admin1`` / ``admin2``).
+      3) Otherwise existing ``Station.country_name``.
     """
 
     def __init__(self, *, timeout: int = 8, throttle_s: float = 1.0) -> None:
@@ -171,7 +183,7 @@ class StationGeographyEnricher:
 
         boundary = self._boundary_for_station(station)
         if boundary:
-            boundary_code = self._to_iso3(boundary.country_code)
+            boundary_code = (boundary.country_code or "").strip() or None
             if boundary_code:
                 update.canonical_code = boundary_code
             if boundary.country_name:
@@ -199,22 +211,14 @@ class StationGeographyEnricher:
             if nominatim_admin2:
                 update.admin2 = nominatim_admin2
 
-        canonical_station_code = self._to_iso3(station.canonical_code)
-        if not update.canonical_code and canonical_station_code:
-            update.canonical_code = canonical_station_code
-
-        # Resilient fallback for canonical country code/name.
-        if not update.canonical_code and station.country_name and pycountry is not None:
-            match = pycountry.countries.get(name=station.country_name.strip())
-            if match:
-                update.canonical_code = match.alpha_3
         if not update.country_name:
             update.country_name = self._clean_text(
-                station.country_name or self._iso3_to_country_name(update.canonical_code or station.canonical_code)
+                station.country_name or self._iso3_to_country_name(station.canonical_code)
             )
 
         update_fields: list[str] = []
-        if update.canonical_code and update.canonical_code != self._to_iso3(station.canonical_code):
+        existing_canonical = (station.canonical_code or "").strip() or None
+        if update.canonical_code and update.canonical_code != existing_canonical:
             station.canonical_code = update.canonical_code
             update_fields.append("canonical_code")
         if update.country_name and update.country_name != self._clean_text(station.country_name):
