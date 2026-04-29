@@ -1,29 +1,23 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchCountryBounds, fetchFacets, fetchStationList } from "./api/stations";
-import type { CountryBoundsOption, SelectOption, SpatialExtent, StationFacetsResponse, StationListItem } from "./api/types";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { fetchCountryBounds, fetchStationList } from "./api/stations";
+import type { CountryBoundsOption, SelectOption, SpatialExtent, StationListItem } from "./api/types";
 import { StationMap, type StationLegendMode } from "./components/StationMap";
 import { StationPanel } from "./components/StationPanel";
 
 export default function App() {
   const [stations, setStations] = useState<StationListItem[]>([]);
   const [extent, setExtent] = useState<SpatialExtent | null>(null);
-  const [facets, setFacets] = useState<StationFacetsResponse | null>(null);
   const [countryBounds, setCountryBounds] = useState<CountryBoundsOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
 
   const [country, setCountry] = useState("");
-  const [admin1, setAdmin1] = useState("");
 
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const observedStationCodes = useMemo(() => stations.map((s) => s.station_code), [stations]);
   const countryOptions = useMemo<SelectOption[]>(
     () => [...countryBounds].sort((a, b) => a.label.localeCompare(b.label)),
     [countryBounds],
-  );
-  const admin1Options = useMemo<SelectOption[]>(
-    () => (facets?.admin1 ?? []).map((v) => ({ value: v, label: v })),
-    [facets],
   );
   const [showObserved, setShowObserved] = useState(true);
   const [showNoObservation, setShowNoObservation] = useState(true);
@@ -36,18 +30,11 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    fetchFacets(country || undefined)
-      .then(setFacets)
-      .catch(() => setFacets({ countries: [], admin1: [] }));
-  }, [country]);
-
-  useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setListError(null);
     fetchStationList({
       country_code: country || undefined,
-      admin1: admin1 || undefined,
     })
       .then((res) => {
         if (!cancelled) {
@@ -64,7 +51,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [country, admin1]);
+  }, [country]);
 
   const onSelectStation = useCallback((code: string) => {
     setSelectedCode(code);
@@ -79,39 +66,28 @@ export default function App() {
           <span className="text-lg font-semibold tracking-tight text-cyan-400">Afri-Met</span>
           <span className="text-xs text-slate-400">Station observations explorer</span>
         </div>
-
-        <div className="flex flex-1 flex-wrap items-end gap-2 md:justify-end">
-          <FilterSelect
-            label="Country"
-            value={country}
-            options={countryOptions}
-            onChange={(v) => {
-              setCountry(v);
-              setAdmin1("");
-              const selected = countryBounds.find((c) => c.value === v);
-              if (selected) setExtent(selected.bounds);
-            }}
-          />
-          <FilterSelect
-            label="Region (admin1)"
-            value={admin1}
-            options={admin1Options}
-            disabled={!country}
-            placeholder={country ? "All" : "Select country first"}
-            onChange={setAdmin1}
-          />
-        </div>
       </header>
-
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col md:flex-row">
         <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="absolute left-4 top-4 z-10 w-full max-w-xs rounded-md border border-slate-700 bg-slate-950/85 p-2">
+            <FilterSelect
+              label="Country"
+              value={country}
+              options={countryOptions}
+              onChange={(v) => {
+                setCountry(v);
+                const selected = countryBounds.find((c) => c.value === v);
+                if (selected) setExtent(selected.bounds);
+              }}
+            />
+          </div>
           {loading && (
-            <div className="absolute left-4 top-4 z-10 rounded-md bg-slate-900/80 px-3 py-1 text-xs text-slate-300">
+            <div className="absolute left-4 top-24 z-10 rounded-md bg-slate-900/80 px-3 py-1 text-xs text-slate-300">
               Loading stations…
             </div>
           )}
           {listError && (
-            <div className="absolute left-4 top-12 z-10 max-w-md rounded-md bg-red-950/90 px-3 py-2 text-xs text-red-200">
+            <div className="absolute left-4 top-32 z-10 max-w-md rounded-md bg-red-950/90 px-3 py-2 text-xs text-red-200">
               {listError}
               <span className="mt-1 block text-slate-400">
                 Ensure Django is running and Vite proxies /api (see README).
@@ -197,22 +173,53 @@ function FilterSelect(props: {
   placeholder?: string;
   onChange: (v: string) => void;
 }) {
+  const datalistId = useId();
+  const selectedOption = props.options.find((o) => o.value === props.value) ?? null;
+  const [query, setQuery] = useState(selectedOption?.label ?? "");
+
+  useEffect(() => {
+    const nextLabel = selectedOption?.label ?? "";
+    if (query !== nextLabel) setQuery(nextLabel);
+  }, [selectedOption?.label]);
+
+  const resolveValue = (raw: string): string | null => {
+    const exact = props.options.find((o) => o.label.toLowerCase() === raw.trim().toLowerCase());
+    return exact?.value ?? null;
+  };
+
   return (
-    <label className="flex min-w-[140px] flex-col gap-1 text-[11px] font-medium uppercase tracking-wide text-slate-400">
+    <label className="flex w-full flex-col gap-1 text-[11px] font-medium uppercase tracking-wide text-slate-400">
       {props.label}
-      <select
+      <input
+        type="text"
+        list={datalistId}
         className="min-h-[44px] rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-slate-100"
-        value={props.value}
+        value={query}
         disabled={props.disabled}
-        onChange={(e) => props.onChange(e.target.value)}
-      >
-        <option value="">{props.placeholder ?? "All"}</option>
+        placeholder={props.placeholder ?? "All"}
+        onChange={(e) => {
+          const raw = e.target.value;
+          setQuery(raw);
+          if (!raw.trim()) {
+            props.onChange("");
+            return;
+          }
+          const value = resolveValue(raw);
+          if (value) props.onChange(value);
+        }}
+        onBlur={() => {
+          if (!query.trim()) return;
+          const value = resolveValue(query);
+          if (!value) {
+            setQuery(selectedOption?.label ?? "");
+          }
+        }}
+      />
+      <datalist id={datalistId}>
         {props.options.map((o) => (
-          <option key={o.value} value={o.value}>
-            {o.label}
-          </option>
+          <option key={o.value} value={o.label} />
         ))}
-      </select>
+      </datalist>
     </label>
   );
 }
