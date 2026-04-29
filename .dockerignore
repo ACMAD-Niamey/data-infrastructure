@@ -17,7 +17,7 @@ dist
 build
 *.egg-info
 coverage
-
+stations_export.ndjson
 # Big binary artifacts
 *.tif
 *.nc

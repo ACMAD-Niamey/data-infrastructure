@@ -293,6 +293,48 @@ The project uses Django ORM with the following main models:
 
 Migrations are located in each app's `migrations/` directory.
 
+## Migrating Stations Between Environments
+
+Locally-enriched stations (e.g. NOAA-imported with country/admin1/admin2 already filled
+in via Nominatim) can be copied into another environment without re-hitting any
+external API. Two management commands implement this:
+
+- `dump_stations_to_json <output.ndjson>` — serialize stations to NDJSON. Geometry
+  is exported as WKT. `id` is intentionally omitted so the destination assigns its
+  own primary keys. Optional flags: `--station-type synop` (repeatable),
+  `--only-missing-canonical`, `--limit N`.
+- `load_stations_from_json <input.ndjson>` — idempotent insert via
+  `bulk_create(ignore_conflicts=True)`. Conflicts on the unique `station_code`
+  column are silently skipped, so re-running is a safe no-op. Optional flags:
+  `--batch-size N` (default 500), `--dry-run`.
+
+Scope: only the `stations` table is moved. Aliases, sensors, and observations are
+not touched (aliases/sensors are recreated by MQTT ingestion on first message).
+No Nominatim or other HTTP calls happen during load — all enrichment values
+(`country_name`, `admin1`, `admin2`, `canonical_code`) are written verbatim.
+
+End-to-end workflow (local -> prod):
+
+```bash
+# 1) Local
+docker compose exec web python manage.py dump_stations_to_json /tmp/stations_export.ndjson
+docker compose cp web:/tmp/stations_export.ndjson ./stations_export.ndjson
+
+# 2) Ship to prod
+scp -P 2224 ./stations_export.ndjson linuxuser@<prod-host>:/tmp/
+
+# 3) On prod
+docker compose cp /tmp/stations_export.ndjson web:/tmp/stations_export.ndjson
+docker compose exec web python manage.py load_stations_from_json /tmp/stations_export.ndjson --dry-run
+docker compose exec web python manage.py load_stations_from_json /tmp/stations_export.ndjson
+
+# 4) Reconcile canonical_code from country_boundaries (DB-only, no Nominatim)
+docker compose exec web python manage.py sync_station_canonical_code
+```
+
+Both source and destination must be on the same migration set
+(at least `stations.0009_widen_country_codes`).
+
 ## Testing
 
 Run tests with:

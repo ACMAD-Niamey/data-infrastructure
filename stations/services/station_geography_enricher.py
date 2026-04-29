@@ -12,13 +12,14 @@ try:
 except ImportError:  # pragma: no cover - fallback for minimal runtime environments
     pycountry = None
 
-from stations.models import Station
+from stations.models import CountryBoundary, Station
 
 log = logging.getLogger(__name__)
 
 
 @dataclass
 class StationGeographyUpdate:
+    canonical_code: str | None = None
     country_name: str | None = None
     admin1: str | None = None
     admin2: str | None = None
@@ -28,9 +29,22 @@ class StationGeographyEnricher:
     """
     Enrich station geography once during station create/update.
 
-    Strategy:
-    1) Nominatim reverse geocode first (if coordinates exist) for canonical names.
-    2) Static ISO3 mapping as fallback for country_name.
+    Canonical strategy (must stay aligned with the bulk
+    ``enrich_country_from_boundaries`` path and the
+    ``sync_station_canonical_code`` management command):
+      - ``Station.canonical_code`` is set verbatim from the spatially-intersecting
+        ``country_boundaries.country_code`` (the layer's own code, which may be
+        numeric e.g. ``133``, ``40765``). No ISO3 derivation or pycountry lookup
+        is applied here, so MQTT-ingested stations match what the bulk command
+        writes. If no boundary intersects, ``canonical_code`` is left untouched.
+      - ``Station.country_code`` (the MQTT/ISO field) is never modified by this
+        service.
+
+    Country/admin name resolution:
+      1) Country name from the intersecting boundary's ``country_name``.
+      2) Otherwise Nominatim reverse geocode (also fills ``admin1`` / ``admin2``).
+      3) Otherwise existing ``Station.country_name``.
+      4) Final fallback: ISO3 ``Station.country_code`` -> country name via pycountry.
     """
 
     def __init__(self, *, timeout: int = 8, throttle_s: float = 1.0) -> None:
@@ -53,6 +67,34 @@ class StationGeographyEnricher:
             return None
         country = pycountry.countries.get(alpha_3=iso3.upper())
         return country.name if country else None
+
+    @staticmethod
+    def _to_iso3(country_code: str | None) -> str | None:
+        if not country_code:
+            return None
+        cleaned = country_code.strip().upper()
+        if not cleaned:
+            return None
+        if pycountry is None:
+            return cleaned if len(cleaned) == 3 else None
+        if len(cleaned) == 3:
+            match = pycountry.countries.get(alpha_3=cleaned)
+            return cleaned if match else None
+        if len(cleaned) == 2:
+            match = pycountry.countries.get(alpha_2=cleaned)
+            return match.alpha_3 if match else None
+        return None
+
+    @staticmethod
+    def _boundary_for_station(station: Station) -> CountryBoundary | None:
+        if not station.geom:
+            return None
+        return (
+            CountryBoundary.objects
+            .filter(geom__intersects=station.geom)
+            .exclude(country_name__isnull=True)
+            .first()
+        )
 
     def _reverse_geocode(self, lat: float, lon: float) -> dict | None:
         try:
@@ -96,7 +138,10 @@ class StationGeographyEnricher:
 
         missing_sql = ""
         if only_missing:
-            missing_sql = " AND (s.country_name IS NULL OR TRIM(s.country_name) = '')"
+            missing_sql = (
+                " AND ((s.country_name IS NULL OR TRIM(s.country_name) = '')"
+                " OR (s.canonical_code IS NULL OR TRIM(s.canonical_code) = ''))"
+            )
 
         count_sql = f"""
             SELECT COUNT(*)
@@ -114,7 +159,8 @@ class StationGeographyEnricher:
 
         update_sql = f"""
             UPDATE stations AS s
-            SET country_name = cb.country_name,
+            SET country_name = COALESCE(NULLIF(TRIM(s.country_name), ''), cb.country_name),
+                canonical_code = COALESCE(NULLIF(TRIM(cb.country_code), ''), s.canonical_code),
                 updated_at = NOW()
             FROM country_boundaries AS cb
             WHERE s.geom IS NOT NULL
@@ -136,6 +182,14 @@ class StationGeographyEnricher:
     ) -> dict[str, str | None]:
         update = StationGeographyUpdate()
 
+        boundary = self._boundary_for_station(station)
+        if boundary:
+            boundary_code = (boundary.country_code or "").strip() or None
+            if boundary_code:
+                update.canonical_code = boundary_code
+            if boundary.country_name:
+                update.country_name = self._clean_text(boundary.country_name)
+
         # Nominatim-first when coordinates exist.
         if station.geom:
             payload = self._reverse_geocode(station.geom.y, station.geom.x)
@@ -151,20 +205,23 @@ class StationGeographyEnricher:
                 or address.get("city_district")
                 or address.get("municipality")
             )
-            if nominatim_country:
+            if nominatim_country and not update.country_name:
                 update.country_name = nominatim_country
             if nominatim_admin1:
                 update.admin1 = nominatim_admin1
             if nominatim_admin2:
                 update.admin2 = nominatim_admin2
 
-        # Resilient fallback for country name.
         if not update.country_name:
             update.country_name = self._clean_text(
                 station.country_name or self._iso3_to_country_name(station.country_code)
             )
 
         update_fields: list[str] = []
+        existing_canonical = (station.canonical_code or "").strip() or None
+        if update.canonical_code and update.canonical_code != existing_canonical:
+            station.canonical_code = update.canonical_code
+            update_fields.append("canonical_code")
         if update.country_name and update.country_name != self._clean_text(station.country_name):
             station.country_name = update.country_name
             update_fields.append("country_name")
@@ -180,6 +237,7 @@ class StationGeographyEnricher:
             station.save(update_fields=update_fields)
 
         return {
+            "canonical_code": station.canonical_code,
             "country_name": station.country_name,
             "admin1": station.admin1,
             "admin2": station.admin2,
