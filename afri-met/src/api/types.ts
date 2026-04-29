@@ -10,6 +10,7 @@ export type StationListItem = {
   station_code: string;
   name: string | null;
   country_code: string | null;
+  country_name?: string | null;
   admin1?: string | null;
   admin2?: string | null;
   station_type: string | null;
@@ -27,9 +28,17 @@ export type StationListResponse = {
 };
 
 export type StationFacetsResponse = {
-  countries: string[];
+  countries: SelectOption[];
   admin1: string[];
-  admin2: string[];
+};
+
+export type SelectOption = {
+  value: string;
+  label: string;
+};
+
+export type CountryBoundsOption = SelectOption & {
+  bounds: SpatialExtent;
 };
 
 export type VariableSummary = {
@@ -45,6 +54,7 @@ export type StationDetailResponse = {
   station_code: string;
   name: string | null;
   country_code: string | null;
+  country_name?: string | null;
   station_type: string | null;
   is_active: boolean;
   elevation_m: number | null;

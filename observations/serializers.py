@@ -45,6 +45,7 @@ class StationInfoSerializer(serializers.Serializer):
     station_code = serializers.CharField()
     name = serializers.CharField(allow_null=True)
     country_code = serializers.CharField(allow_null=True)
+    country_name = serializers.CharField(allow_null=True, required=False)
     station_type = serializers.CharField(allow_null=True)
     is_active = serializers.BooleanField()
     elevation_m = serializers.FloatField(allow_null=True)
@@ -61,6 +62,7 @@ class StationListItemSerializer(serializers.Serializer):
     station_code = serializers.CharField()
     name = serializers.CharField(allow_null=True)
     country_code = serializers.CharField(allow_null=True)
+    country_name = serializers.CharField(allow_null=True, required=False)
     admin1 = serializers.CharField(allow_null=True, required=False)
     admin2 = serializers.CharField(allow_null=True, required=False)
     station_type = serializers.CharField(allow_null=True)
@@ -84,10 +86,20 @@ class StationListResponseSerializer(serializers.Serializer):
     extent = SpatialExtentSerializer(allow_null=True)
 
 
+class FacetOptionSerializer(serializers.Serializer):
+    value = serializers.CharField()
+    label = serializers.CharField()
+
+
+class CountryBoundsOptionSerializer(serializers.Serializer):
+    value = serializers.CharField()
+    label = serializers.CharField()
+    bounds = SpatialExtentSerializer()
+
+
 class StationFacetsSerializer(serializers.Serializer):
-    countries = serializers.ListField(child=serializers.CharField())
+    countries = FacetOptionSerializer(many=True)
     admin1 = serializers.ListField(child=serializers.CharField())
-    admin2 = serializers.ListField(child=serializers.CharField())
 
 
 class TimeSeriesRawBucketSerializer(serializers.Serializer):

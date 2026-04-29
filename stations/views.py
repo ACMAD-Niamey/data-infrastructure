@@ -11,6 +11,7 @@ from rest_framework import status
 
 from observations.services.observation_reader import ObservationReader
 from observations.serializers import (
+    CountryBoundsOptionSerializer,
     StationFacetsSerializer,
     StationListItemSerializer,
     StationInfoSerializer,
@@ -109,14 +110,43 @@ class StationFacetsView(APIView):
 
     @extend_schema(
         summary="Station filter facets",
-        description="Distinct geographic values present on stations that have observations.",
+        description="Distinct country/admin1 values present on stations that have observations.",
+        parameters=[
+            OpenApiParameter(
+                name="country_code",
+                location=OpenApiParameter.QUERY,
+                required=False,
+                type=OpenApiTypes.STR,
+                description="Optional ISO alpha-3 code to scope admin1 facet values.",
+            ),
+        ],
         responses={200: StationFacetsSerializer},
         tags=["Stations"],
     )
     def get(self, request):
         reader = ObservationReader()
-        data = reader.station_facets()
+        country_code = request.query_params.get("country_code")
+        data = reader.station_facets(country_code=country_code)
         return Response(StationFacetsSerializer(instance=data).data)
+
+
+class CountryBoundsView(APIView):
+    """
+    GET /api/stations/country-bounds/
+
+    Returns country options with precomputed bounds for fast map zoom.
+    """
+
+    @extend_schema(
+        summary="Country bounds options",
+        description="Countries with label/value and bounds payload for instant country zoom in the UI.",
+        responses={200: CountryBoundsOptionSerializer(many=True)},
+        tags=["Stations"],
+    )
+    def get(self, request):
+        reader = ObservationReader()
+        data = reader.country_bounds_options()
+        return Response(CountryBoundsOptionSerializer(data, many=True).data)
 
 
 class StationDetailView(APIView):

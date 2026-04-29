@@ -143,17 +143,16 @@ class StationFacetsViewTests(TestCase):
     @patch("stations.views.ObservationReader")
     def test_returns_facets(self, MockReader):
         MockReader.return_value.station_facets.return_value = {
-            "countries": ["DZA", "NER"],
+            "countries": [{"value": "DZA", "label": "Algeria"}, {"value": "NER", "label": "Niger"}],
             "admin1": ["Region A"],
-            "admin2": [],
         }
 
         response = self.client.get(self.url)
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.data["countries"], ["DZA", "NER"])
+        self.assertEqual(response.data["countries"][0]["value"], "DZA")
+        self.assertEqual(response.data["countries"][0]["label"], "Algeria")
         self.assertEqual(response.data["admin1"], ["Region A"])
-        self.assertEqual(response.data["admin2"], [])
 
 
 # ---------------------------------------------------------------------------

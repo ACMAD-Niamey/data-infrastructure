@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchFacets, fetchStationList } from "./api/stations";
-import type { SpatialExtent, StationFacetsResponse, StationListItem } from "./api/types";
+import { fetchCountryBounds, fetchFacets, fetchStationList } from "./api/stations";
+import type { CountryBoundsOption, SelectOption, SpatialExtent, StationFacetsResponse, StationListItem } from "./api/types";
 import { StationMap, type StationLegendMode } from "./components/StationMap";
 import { StationPanel } from "./components/StationPanel";
 
@@ -8,24 +8,38 @@ export default function App() {
   const [stations, setStations] = useState<StationListItem[]>([]);
   const [extent, setExtent] = useState<SpatialExtent | null>(null);
   const [facets, setFacets] = useState<StationFacetsResponse | null>(null);
+  const [countryBounds, setCountryBounds] = useState<CountryBoundsOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
 
   const [country, setCountry] = useState("");
   const [admin1, setAdmin1] = useState("");
-  const [admin2, setAdmin2] = useState("");
 
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const observedStationCodes = useMemo(() => stations.map((s) => s.station_code), [stations]);
+  const countryOptions = useMemo<SelectOption[]>(
+    () => [...countryBounds].sort((a, b) => a.label.localeCompare(b.label)),
+    [countryBounds],
+  );
+  const admin1Options = useMemo<SelectOption[]>(
+    () => (facets?.admin1 ?? []).map((v) => ({ value: v, label: v })),
+    [facets],
+  );
   const [showObserved, setShowObserved] = useState(true);
   const [showNoObservation, setShowNoObservation] = useState(true);
   const [legendMode, setLegendMode] = useState<StationLegendMode>("hide");
 
   useEffect(() => {
-    fetchFacets()
-      .then(setFacets)
-      .catch(() => setFacets({ countries: [], admin1: [], admin2: [] }));
+    fetchCountryBounds()
+      .then(setCountryBounds)
+      .catch(() => setCountryBounds([]));
   }, []);
+
+  useEffect(() => {
+    fetchFacets(country || undefined)
+      .then(setFacets)
+      .catch(() => setFacets({ countries: [], admin1: [] }));
+  }, [country]);
 
   useEffect(() => {
     let cancelled = false;
@@ -34,12 +48,11 @@ export default function App() {
     fetchStationList({
       country_code: country || undefined,
       admin1: admin1 || undefined,
-      admin2: admin2 || undefined,
     })
       .then((res) => {
         if (!cancelled) {
           setStations(res.results);
-          setExtent(res.extent);
+          if (!country) setExtent(res.extent);
         }
       })
       .catch((e: Error) => {
@@ -51,7 +64,7 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [country, admin1, admin2]);
+  }, [country, admin1]);
 
   const onSelectStation = useCallback((code: string) => {
     setSelectedCode(code);
@@ -71,27 +84,21 @@ export default function App() {
           <FilterSelect
             label="Country"
             value={country}
-            options={facets?.countries ?? []}
+            options={countryOptions}
             onChange={(v) => {
               setCountry(v);
               setAdmin1("");
-              setAdmin2("");
+              const selected = countryBounds.find((c) => c.value === v);
+              if (selected) setExtent(selected.bounds);
             }}
           />
           <FilterSelect
             label="Region (admin1)"
             value={admin1}
-            options={facets?.admin1 ?? []}
-            onChange={(v) => {
-              setAdmin1(v);
-              setAdmin2("");
-            }}
-          />
-          <FilterSelect
-            label="District (admin2)"
-            value={admin2}
-            options={facets?.admin2 ?? []}
-            onChange={setAdmin2}
+            options={admin1Options}
+            disabled={!country}
+            placeholder={country ? "All" : "Select country first"}
+            onChange={setAdmin1}
           />
         </div>
       </header>
@@ -185,7 +192,9 @@ export default function App() {
 function FilterSelect(props: {
   label: string;
   value: string;
-  options: string[];
+  options: SelectOption[];
+  disabled?: boolean;
+  placeholder?: string;
   onChange: (v: string) => void;
 }) {
   return (
@@ -194,12 +203,13 @@ function FilterSelect(props: {
       <select
         className="min-h-[44px] rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 text-sm text-slate-100"
         value={props.value}
+        disabled={props.disabled}
         onChange={(e) => props.onChange(e.target.value)}
       >
-        <option value="">All</option>
+        <option value="">{props.placeholder ?? "All"}</option>
         {props.options.map((o) => (
-          <option key={o} value={o}>
-            {o}
+          <option key={o.value} value={o.value}>
+            {o.label}
           </option>
         ))}
       </select>

@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from django.db import connection
+from stations.models import CountryBoundary
 
 
 @dataclass
@@ -111,6 +112,7 @@ class ObservationReader:
                 s.station_code,
                 s.name,
                 s.country_code,
+                s.country_name,
                 s.station_type,
                 s.is_active,
                 s.elevation_m,
@@ -122,7 +124,7 @@ class ObservationReader:
             FROM stations s
             LEFT JOIN observations o ON o.station_id = s.id
             WHERE s.station_code = %s
-            GROUP BY s.id, s.station_code, s.name, s.country_code,
+            GROUP BY s.id, s.station_code, s.name, s.country_code, s.country_name,
                      s.station_type, s.is_active, s.elevation_m,
                      s.geom
         """
@@ -196,6 +198,7 @@ class ObservationReader:
                 s.station_code,
                 s.name,
                 s.country_code,
+                s.country_name,
                 s.admin1,
                 s.admin2,
                 s.station_type,
@@ -209,7 +212,7 @@ class ObservationReader:
             WHERE s.is_active = TRUE
               AND s.geom IS NOT NULL
               {extra_sql}
-            GROUP BY s.id, s.station_code, s.name, s.country_code,
+            GROUP BY s.id, s.station_code, s.name, s.country_code, s.country_name,
                      s.admin1, s.admin2,
                      s.station_type, s.elevation_m, s.geom
             ORDER BY s.country_code, s.name
@@ -260,26 +263,40 @@ class ObservationReader:
                 "north": float(north),
             }
 
-    def station_facets(self) -> dict[str, Any]:
-        """Distinct country_code / admin1 / admin2 values for stations that have observations."""
+    def station_facets(self, *, country_code: str | None = None) -> dict[str, Any]:
+        """Distinct country/admin1 values for stations that have observations."""
         sql = """
-            SELECT DISTINCT s.country_code
+            SELECT
+                MIN(s.country_code) AS country_code,
+                TRIM(s.country_name) AS country_name
             FROM stations s
             JOIN observations o ON o.station_id = s.id
             WHERE s.is_active = TRUE
               AND s.geom IS NOT NULL
               AND s.country_code IS NOT NULL
               AND s.country_code <> ''
-            ORDER BY 1
+              AND s.country_name IS NOT NULL
+              AND TRIM(s.country_name) <> ''
+            GROUP BY TRIM(s.country_name)
+            ORDER BY TRIM(s.country_name)
         """
         with connection.cursor() as cur:
             cur.execute(sql)
-            countries = [r[0] for r in cur.fetchall() if r[0]]
+            countries = [
+                {"value": code, "label": name}
+                for code, name in cur.fetchall()
+                if code and name
+            ]
 
-        # Facets without cascading dependency for simplicity — UI passes country when narrowing
+        admin1_params: list[Any] = []
+        admin1_filter_sql = ""
+        if country_code and country_code.strip():
+            admin1_filter_sql = " AND s.country_code = %s"
+            admin1_params.append(country_code.strip().upper())
+
         with connection.cursor() as cur:
             cur.execute(
-                """
+                f"""
                 SELECT DISTINCT s.admin1
                 FROM stations s
                 JOIN observations o ON o.station_id = s.id
@@ -287,31 +304,42 @@ class ObservationReader:
                   AND s.geom IS NOT NULL
                   AND s.admin1 IS NOT NULL
                   AND TRIM(s.admin1) <> ''
+                  {admin1_filter_sql}
                 ORDER BY 1
-                """
+                """,
+                admin1_params,
             )
             regions = [r[0] for r in cur.fetchall() if r[0]]
-
-        with connection.cursor() as cur:
-            cur.execute(
-                """
-                SELECT DISTINCT s.admin2
-                FROM stations s
-                JOIN observations o ON o.station_id = s.id
-                WHERE s.is_active = TRUE
-                  AND s.geom IS NOT NULL
-                  AND s.admin2 IS NOT NULL
-                  AND TRIM(s.admin2) <> ''
-                ORDER BY 1
-                """
-            )
-            districts = [r[0] for r in cur.fetchall() if r[0]]
 
         return {
             "countries": countries,
             "admin1": regions,
-            "admin2": districts,
         }
+
+    def country_bounds_options(self) -> list[dict[str, Any]]:
+        countries = self.station_facets().get("countries", [])
+        if not countries:
+            return []
+
+        boundary_rows = CountryBoundary.objects.exclude(country_bounds__isnull=True)
+
+        def _norm(v: str) -> str:
+            return " ".join(v.strip().lower().split())
+
+        by_name = {_norm(row.country_name): row for row in boundary_rows if row.country_name}
+
+        options: list[dict[str, Any]] = []
+        for country in countries:
+            code = (country.get("value") or "").strip().upper()
+            label = (country.get("label") or "").strip()
+            if not code or not label:
+                continue
+            boundary = by_name.get(_norm(label))
+            if not boundary or not boundary.country_bounds:
+                continue
+            options.append({"value": code, "label": label, "bounds": boundary.country_bounds})
+
+        return options
 
     def time_series_by_station_code(
         self,
@@ -400,6 +428,7 @@ class ObservationReader:
                 s.station_code,
                 s.name AS station_name,
                 s.country_code,
+                s.country_name,
                 ST_Y(s.geom::geometry) AS latitude,
                 ST_X(s.geom::geometry) AS longitude,
                 o.sensor_id,

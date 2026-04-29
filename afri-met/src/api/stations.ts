@@ -1,6 +1,7 @@
 import axios from "axios";
 import { getApiBaseUrl } from "../config";
 import type {
+  CountryBoundsOption,
   StationDetailResponse,
   StationFacetsResponse,
   StationListResponse,
@@ -16,20 +17,25 @@ const client = axios.create({
 export async function fetchStationList(params: {
   country_code?: string;
   admin1?: string;
-  admin2?: string;
 }): Promise<StationListResponse> {
   const { data } = await client.get<StationListResponse>("/stations/", {
     params: {
       country_code: params.country_code || undefined,
       admin1: params.admin1 || undefined,
-      admin2: params.admin2 || undefined,
     },
   });
   return data;
 }
 
-export async function fetchFacets(): Promise<StationFacetsResponse> {
-  const { data } = await client.get<StationFacetsResponse>("/stations/facets/");
+export async function fetchFacets(country_code?: string): Promise<StationFacetsResponse> {
+  const { data } = await client.get<StationFacetsResponse>("/stations/facets/", {
+    params: { country_code: country_code || undefined },
+  });
+  return data;
+}
+
+export async function fetchCountryBounds(): Promise<CountryBoundsOption[]> {
+  const { data } = await client.get<CountryBoundsOption[]>("/stations/country-bounds/");
   return data;
 }
 
