@@ -65,7 +65,7 @@ export default function App() {
       <header className="flex flex-shrink-0 flex-wrap items-center gap-3 border-b border-slate-800 px-4 py-3">
         <div className="flex flex-col">
           <span className="text-lg font-semibold tracking-tight text-cyan-400">Afri-Met</span>
-          <span className="text-xs text-slate-400">Station observations explorer</span>
+          <span className="text-xs text-slate-400">WIS 2.0 Station observations explorer </span>
         </div>
         <div className="ml-auto flex items-center">
           <div className="rounded bg-white p-1.5 shadow-[0_4px_10px_rgba(0,0,0,0.18)]">

@@ -126,7 +126,7 @@ services:
       - ${LETSENCRYPT_VOLUME:-./nginx/letsencrypt}:/etc/letsencrypt
       - ./nginx/webroot:/var/www/certbot
     entrypoint: ""
-    command: certbot certonly --webroot --webroot-path=/var/www/certbot --email ${EMAIL} --agree-tos --no-eff-email -d ${DOMAIN} -d ${DOMAIN_MINIO_CONSOLE} -d ${DOMAIN_MINIO}
+    command: certbot certonly --webroot --webroot-path=/var/www/certbot --email ${EMAIL} --agree-tos --no-eff-email -d ${DOMAIN} -d ${DOMAIN_MINIO_CONSOLE} -d ${DOMAIN_MINIO} -d ${DOMAIN_AFRIMET:-afrimet.acmad.org}
   
   certbot-renew:
     image: certbot/certbot
