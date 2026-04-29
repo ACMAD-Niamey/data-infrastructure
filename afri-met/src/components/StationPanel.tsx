@@ -23,9 +23,10 @@ function formatDayLabel(iso: string) {
 type StationPanelProps = {
   stationCode: string | null;
   onClose: () => void;
+  observedStationCodes: string[];
 };
 
-export function StationPanel({ stationCode, onClose }: StationPanelProps) {
+export function StationPanel({ stationCode, onClose, observedStationCodes }: StationPanelProps) {
   const [detail, setDetail] = useState<StationDetailResponse | null>(null);
   const [stats, setStats] = useState<StationStatsResponse | null>(null);
   const [loading, setLoading] = useState(false);
@@ -48,6 +49,7 @@ export function StationPanel({ stationCode, onClose }: StationPanelProps) {
 
   const [start, setStart] = useState(defaultRange.start);
   const [end, setEnd] = useState(defaultRange.end);
+  const hasObservations = stationCode ? observedStationCodes.includes(stationCode) : false;
 
   useEffect(() => {
     if (!stationCode) {
@@ -86,7 +88,10 @@ export function StationPanel({ stationCode, onClose }: StationPanelProps) {
   }, [detail]);
 
   useEffect(() => {
-    if (!stationCode || !detail?.variables?.length) return;
+    if (!stationCode || !detail?.variables?.length || !hasObservations) {
+      setStats(null);
+      return;
+    }
 
     let cancelled = false;
     setLoading(true);
@@ -104,7 +109,7 @@ export function StationPanel({ stationCode, onClose }: StationPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [stationCode, detail, variable, agg, start, end]);
+  }, [stationCode, detail, variable, agg, start, end, hasObservations]);
 
   const chartRows = useMemo(() => {
     if (!stats?.data?.length) return [];
@@ -209,23 +214,29 @@ export function StationPanel({ stationCode, onClose }: StationPanelProps) {
       </div>
 
       <div className="h-56 w-full min-w-0 pb-[env(safe-area-inset-bottom,0px)]">
-        <ResponsiveContainer width="100%" height="100%">
-          <LineChart data={chartRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-            <XAxis dataKey="label" tick={{ fontSize: 11 }} minTickGap={8} />
-            <YAxis tick={{ fontSize: 11 }} />
-            <Tooltip />
-            <Line
-              type="monotone"
-              dataKey="value"
-              name={variable}
-              stroke="#0284c7"
-              strokeWidth={2}
-              dot={false}
-              connectNulls
-            />
-          </LineChart>
-        </ResponsiveContainer>
+        {!hasObservations ? (
+          <div className="flex h-full items-center justify-center rounded-md border border-slate-200 bg-slate-50 px-3 text-center text-sm text-slate-600">
+            No observations available for this station.
+          </div>
+        ) : (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartRows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <XAxis dataKey="label" tick={{ fontSize: 11 }} minTickGap={8} />
+              <YAxis tick={{ fontSize: 11 }} />
+              <Tooltip />
+              <Line
+                type="monotone"
+                dataKey="value"
+                name={variable}
+                stroke="#0284c7"
+                strokeWidth={2}
+                dot={false}
+                connectNulls
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        )}
       </div>
     </div>
   );

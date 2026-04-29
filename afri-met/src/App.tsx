@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchFacets, fetchStationList } from "./api/stations";
 import type { SpatialExtent, StationFacetsResponse, StationListItem } from "./api/types";
-import { StationMap } from "./components/StationMap";
+import { StationMap, type StationLegendMode } from "./components/StationMap";
 import { StationPanel } from "./components/StationPanel";
 
 export default function App() {
@@ -16,6 +16,10 @@ export default function App() {
   const [admin2, setAdmin2] = useState("");
 
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
+  const observedStationCodes = useMemo(() => stations.map((s) => s.station_code), [stations]);
+  const [showObserved, setShowObserved] = useState(true);
+  const [showNoObservation, setShowNoObservation] = useState(true);
+  const [legendMode, setLegendMode] = useState<StationLegendMode>("hide");
 
   useEffect(() => {
     fetchFacets()
@@ -107,7 +111,49 @@ export default function App() {
               </span>
             </div>
           )}
-          <StationMap stations={stations} extent={extent} onSelectStation={onSelectStation} />
+          <StationMap
+            extent={extent}
+            observedStationCodes={observedStationCodes}
+            showObserved={showObserved}
+            showNoObservation={showNoObservation}
+            legendMode={legendMode}
+            onSelectStation={onSelectStation}
+          />
+          <div className="absolute bottom-4 left-4 z-10 rounded-md border border-slate-700 bg-slate-950/85 p-2 text-xs text-slate-200">
+            <div className="mb-1 font-medium text-slate-300">Stations</div>
+            <div className="mb-2 flex gap-1">
+              <button
+                type="button"
+                onClick={() => setLegendMode("hide")}
+                className={`rounded px-2 py-1 ${legendMode === "hide" ? "bg-slate-700 text-white" : "bg-slate-900/70 text-slate-300"}`}
+              >
+                Hide
+              </button>
+              <button
+                type="button"
+                onClick={() => setLegendMode("dim")}
+                className={`rounded px-2 py-1 ${legendMode === "dim" ? "bg-slate-700 text-white" : "bg-slate-900/70 text-slate-300"}`}
+              >
+                Dim
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowObserved((v) => !v)}
+              className={`flex w-full items-center gap-2 rounded px-1 py-1 text-left ${showObserved ? "opacity-100" : "opacity-50"}`}
+            >
+              <span className="inline-block h-3 w-3 rounded-full border border-slate-900 bg-green-500" />
+              <span>Has observations</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowNoObservation((v) => !v)}
+              className={`mt-1 flex w-full items-center gap-2 rounded px-1 py-1 text-left ${showNoObservation ? "opacity-100" : "opacity-50"}`}
+            >
+              <span className="inline-block h-2 w-2 rounded-full border border-slate-900 bg-slate-500" />
+              <span>No observations</span>
+            </button>
+          </div>
         </div>
 
         {selectedCode && (
@@ -119,7 +165,11 @@ export default function App() {
               onClick={onClosePanel}
             />
             <aside className="fixed inset-x-0 bottom-0 z-50 max-h-[88vh] overflow-y-auto rounded-t-2xl border border-slate-800 bg-white p-4 text-slate-900 md:relative md:inset-auto md:z-0 md:flex md:h-full md:max-h-none md:w-[22rem] md:max-w-none md:rounded-none md:border-l md:border-t-0 md:p-4">
-              <StationPanel stationCode={selectedCode} onClose={onClosePanel} />
+              <StationPanel
+                stationCode={selectedCode}
+                onClose={onClosePanel}
+                observedStationCodes={observedStationCodes}
+              />
             </aside>
           </>
         )}

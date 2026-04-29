@@ -1,18 +1,21 @@
 /**
- * Public API root **including** the `/api` segment (no trailing slash).
+ * Shared host root used to build service paths.
  *
- * - **Production default:** `http://localhost/api` — typical nginx → Django prefix.
- * - **Dev (`vite`):** defaults to `/api` so requests stay same-origin and the Vite proxy can forward them.
- *
- * Override with `VITE_API_BASE_URL` in `.env` / `.env.local` / `.env.production`.
+ * `VITE_API_BASE_URL` should be host-only (example: `http://localhost`).
+ * For backward compatibility, a trailing `/api` in env is stripped.
  */
-export function getApiBaseUrl(): string {
+export function getHostBaseUrl(): string {
   const raw = import.meta.env.VITE_API_BASE_URL?.trim();
-  if (raw) {
-    return raw.replace(/\/$/, "");
-  }
-  if (import.meta.env.DEV) {
-    return "/api";
-  }
-  return "http://localhost/api";
+  if (!raw) return "http://localhost";
+  return raw.replace(/\/$/, "").replace(/\/api$/, "");
+}
+
+/** Django REST root. */
+export function getApiBaseUrl(): string {
+  return `${getHostBaseUrl()}/api`;
+}
+
+/** TiPG root proxied by nginx. */
+export function getTipgBaseUrl(): string {
+  return `${getHostBaseUrl()}/tipg`;
 }

@@ -1,41 +1,100 @@
-import type { FeatureCollection, Point } from "geojson";
 import BasemapsControl from "maplibre-gl-basemaps";
 import "maplibre-gl-basemaps/lib/basemaps.css";
-import maplibregl, { type GeoJSONSource } from "maplibre-gl";
+import maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
-import type { SpatialExtent, StationListItem } from "../api/types";
+import type { SpatialExtent } from "../api/types";
 import { hasMapboxToken, mapboxBasemaps } from "../map/basemaps";
+import { getTipgBaseUrl } from "../config";
 
 /** Fallback when `VITE_MAPBOX_KEY` is not set — vector style, no basemap picker. */
 const DEMO_STYLE_URL = "https://demotiles.maplibre.org/style.json";
+const STATIONS_SOURCE_ID = "stations";
+const STATIONS_LAYER_ID = "stations-circles";
+const STATIONS_SOURCE_LAYER = "default";
+const STATIONS_TILE_URL = `${getTipgBaseUrl()}/collections/public.stations/tiles/WebMercatorQuad/{z}/{x}/{y}`;
+const OBSERVED_COLOR = "#22c55e";
+const NO_OBS_COLOR = "#64748b";
+const OBSERVED_RADIUS = 6;
+const NO_OBS_RADIUS = 4;
+const DIM_OPACITY = 0.15;
+const HIDDEN_OPACITY = 0;
+const FULL_OPACITY = 1;
 
-function buildGeoJSON(stations: StationListItem[]): FeatureCollection<Point> {
-  return {
-    type: "FeatureCollection",
-    features: stations
-      .filter((s) => s.longitude != null && s.latitude != null)
-      .map((s) => ({
-        type: "Feature" as const,
-        geometry: {
-          type: "Point" as const,
-          coordinates: [s.longitude!, s.latitude!],
-        },
-        properties: {
-          station_code: s.station_code,
-          name: s.name ?? "",
-          country_code: s.country_code ?? "",
-        },
-      })),
-  };
+export type StationLegendMode = "hide" | "dim";
+
+function observedMembershipExpression(observedStationCodes: string[]) {
+  return [
+    "in",
+    ["get", "station_code"],
+    ["literal", observedStationCodes] as unknown as maplibregl.ExpressionInputType,
+  ] as unknown as maplibregl.ExpressionSpecification;
+}
+
+function applyStationLayerStyle(
+  map: maplibregl.Map,
+  observedStationCodes: string[],
+  showObserved: boolean,
+  showNoObservation: boolean,
+  mode: StationLegendMode,
+) {
+  if (!map.getLayer(STATIONS_LAYER_ID)) return;
+
+  const observedMembership = observedMembershipExpression(observedStationCodes);
+  const hiddenOpacity = mode === "hide" ? HIDDEN_OPACITY : DIM_OPACITY;
+
+  map.setPaintProperty(STATIONS_LAYER_ID, "circle-color", [
+    "case",
+    observedMembership,
+    OBSERVED_COLOR,
+    NO_OBS_COLOR,
+  ]);
+
+  map.setPaintProperty(STATIONS_LAYER_ID, "circle-radius", [
+    "case",
+    observedMembership,
+    OBSERVED_RADIUS,
+    NO_OBS_RADIUS,
+  ]);
+
+  map.setPaintProperty(STATIONS_LAYER_ID, "circle-opacity", [
+    "case",
+    observedMembership,
+    showObserved ? FULL_OPACITY : hiddenOpacity,
+    showNoObservation ? FULL_OPACITY : hiddenOpacity,
+  ]);
+
+  if (mode === "hide") {
+    if (showObserved && showNoObservation) {
+      map.setFilter(STATIONS_LAYER_ID, null);
+    } else if (showObserved) {
+      map.setFilter(STATIONS_LAYER_ID, observedMembership);
+    } else if (showNoObservation) {
+      map.setFilter(STATIONS_LAYER_ID, ["!", observedMembership] as maplibregl.FilterSpecification);
+    } else {
+      map.setFilter(STATIONS_LAYER_ID, ["==", ["get", "station_code"], "__none__"]);
+    }
+  } else {
+    map.setFilter(STATIONS_LAYER_ID, null);
+  }
 }
 
 type StationMapProps = {
-  stations: StationListItem[];
   extent: SpatialExtent | null;
+  observedStationCodes: string[];
+  showObserved: boolean;
+  showNoObservation: boolean;
+  legendMode: StationLegendMode;
   onSelectStation: (stationCode: string) => void;
 };
 
-export function StationMap({ stations, extent, onSelectStation }: StationMapProps) {
+export function StationMap({
+  extent,
+  observedStationCodes,
+  showObserved,
+  showNoObservation,
+  legendMode,
+  onSelectStation,
+}: StationMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
 
@@ -79,36 +138,33 @@ export function StationMap({ stations, extent, onSelectStation }: StationMapProp
 
     map.on("load", () => {
       map.resize();
-      if (map.getSource("stations")) return;
+      if (map.getSource(STATIONS_SOURCE_ID)) return;
 
-      map.addSource("stations", {
-        type: "geojson",
-        data: buildGeoJSON([]),
+      map.addSource(STATIONS_SOURCE_ID, {
+        type: "vector",
+        tiles: [STATIONS_TILE_URL],
       });
       map.addLayer({
-        id: "stations-circles",
+        id: STATIONS_LAYER_ID,
         type: "circle",
-        source: "stations",
-        paint: {
-          "circle-radius": 6,
-          "circle-color": "#22d3ee",
-          "circle-stroke-width": 1,
-          "circle-stroke-color": "#0f172a",
-        },
+        source: STATIONS_SOURCE_ID,
+        "source-layer": STATIONS_SOURCE_LAYER,
+        paint: { "circle-radius": OBSERVED_RADIUS, "circle-color": OBSERVED_COLOR, "circle-stroke-width": 1, "circle-stroke-color": "#0f172a" },
       });
+      applyStationLayerStyle(map, observedStationCodes, showObserved, showNoObservation, legendMode);
 
-      map.on("click", "stations-circles", onStationClick);
-      map.on("mouseenter", "stations-circles", () => {
+      map.on("click", STATIONS_LAYER_ID, onStationClick);
+      map.on("mouseenter", STATIONS_LAYER_ID, () => {
         map.getCanvas().style.cursor = "pointer";
       });
-      map.on("mouseleave", "stations-circles", () => {
+      map.on("mouseleave", STATIONS_LAYER_ID, () => {
         map.getCanvas().style.cursor = "";
       });
     });
 
     return () => {
       ro.disconnect();
-      map.off("click", "stations-circles", onStationClick);
+      map.off("click", STATIONS_LAYER_ID, onStationClick);
       map.remove();
       mapRef.current = null;
     };
@@ -117,15 +173,8 @@ export function StationMap({ stations, extent, onSelectStation }: StationMapProp
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-
-    const push = () => {
-      const src = map.getSource("stations") as GeoJSONSource | undefined;
-      if (src) src.setData(buildGeoJSON(stations));
-    };
-
-    if (map.isStyleLoaded()) push();
-    else map.once("load", push);
-  }, [stations]);
+    applyStationLayerStyle(map, observedStationCodes, showObserved, showNoObservation, legendMode);
+  }, [observedStationCodes, showObserved, showNoObservation, legendMode]);
 
   useEffect(() => {
     const map = mapRef.current;
