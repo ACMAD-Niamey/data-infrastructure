@@ -11,7 +11,7 @@ __pycache__
 venv/
 venv_geo
 .env
-celerybeat-schedule
+celerybeat-schedule*
 
 # Builds / dist / caches
 dist
