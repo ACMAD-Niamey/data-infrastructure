@@ -18,7 +18,7 @@ import {
   YAxis,
 } from "recharts";
 import { X } from "lucide-react";
-import { fetchStationStats } from "../api/stations";
+import { fetchStationDetail, fetchStationStats } from "../api/stations";
 import type { StationStatsResponse } from "../api/types";
 import { ChartRefreshingOverlay, ChartSkeleton } from "./ChartSkeleton";
 import { buildWindRoseRows, resolveWindVariables } from "./windRose";
@@ -57,7 +57,8 @@ export function StationPanel({ stationCode, onClose }: StationPanelProps) {
   const [isSeriesLoading, setIsSeriesLoading] = useState(false);
   const [hasLoadedSeries, setHasLoadedSeries] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const windVars = useMemo(() => resolveWindVariables(DEFAULT_VARIABLE_OPTIONS), []);
+  const [stationVariables, setStationVariables] = useState<string[]>(DEFAULT_VARIABLE_OPTIONS);
+  const windVars = useMemo(() => resolveWindVariables(stationVariables), [stationVariables]);
 
   const [variable, setVariable] = useState("temp");
   const [viewMode, setViewMode] = useState<ViewMode>("single");
@@ -76,6 +77,28 @@ export function StationPanel({ stationCode, onClose }: StationPanelProps) {
 
   const [start, setStart] = useState(defaultRange.start);
   const [end, setEnd] = useState(defaultRange.end);
+
+  useEffect(() => {
+    if (!stationCode) {
+      setStationVariables(DEFAULT_VARIABLE_OPTIONS);
+      return;
+    }
+    let cancelled = false;
+    fetchStationDetail(stationCode)
+      .then((detail) => {
+        if (!cancelled) {
+          const codes = detail.variables.map((v) => v.variable_code);
+          setStationVariables(codes.length > 0 ? codes : DEFAULT_VARIABLE_OPTIONS);
+          setVariable((prev) => (codes.includes(prev) ? prev : codes[0] ?? DEFAULT_VARIABLE_OPTIONS[0]));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setStationVariables(DEFAULT_VARIABLE_OPTIONS);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [stationCode]);
 
   useEffect(() => {
     if (!windVars.hasWindPair && viewMode === "wind") {
@@ -251,7 +274,7 @@ export function StationPanel({ stationCode, onClose }: StationPanelProps) {
             onChange={(e) => setVariable(e.target.value)}
             disabled={viewMode === "wind"}
           >
-            {DEFAULT_VARIABLE_OPTIONS.map((code) => (
+            {stationVariables.map((code) => (
               <option key={code} value={code}>
                 {code}
               </option>
