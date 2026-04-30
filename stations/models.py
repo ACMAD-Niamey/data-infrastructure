@@ -97,7 +97,6 @@ class Station(models.Model):
             models.Index(fields=["canonical_code"], name="stations_canonical_idx"),
             models.Index(fields=["station_type"], name="stations_type_idx"),
             models.Index(fields=["is_active"], name="stations_active_idx"),
-            models.Index(fields=["has_observations"], name="stations_has_obs_idx"),
         ]
 
     def __str__(self) -> str:
