@@ -81,7 +81,6 @@ function buildStationLayerTileUrl(hasObservations: boolean, countryCode: string 
 
 function addOrUpdateStationLayer(
   map: maplibregl.Map,
-  tileUrlCache: Map<string, string>,
   config: StationLayerConfig,
 ): void {
   const { sourceId, layerId, tileUrl, color, radius, active, dimmed } = config;
@@ -129,7 +128,6 @@ function addOrUpdateStationLayer(
 
 function applyStationLayers(
   map: maplibregl.Map,
-  tileUrlCache: Map<string, string>,
   countryCode: string | null,
   showObserved: boolean,
   showNoObservation: boolean,
@@ -137,7 +135,7 @@ function applyStationLayers(
 ): void {
   const dimmed = legendMode === "dim";
 
-  addOrUpdateStationLayer(map, tileUrlCache, {
+  addOrUpdateStationLayer(map, {
     sourceId: STATIONS_NO_OBS_SOURCE_ID,
     layerId: STATIONS_NO_OBS_LAYER_ID,
     tileUrl: buildStationLayerTileUrl(false, countryCode),
@@ -146,7 +144,7 @@ function applyStationLayers(
     active: showNoObservation,
     dimmed,
   });
-  addOrUpdateStationLayer(map, tileUrlCache, {
+  addOrUpdateStationLayer(map, {
     sourceId: STATIONS_OBS_SOURCE_ID,
     layerId: STATIONS_OBS_LAYER_ID,
     tileUrl: buildStationLayerTileUrl(true, countryCode),
@@ -201,7 +199,6 @@ export function StationMap({
 }: StationMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
-  const tileUrlCacheRef = useRef<Map<string, string>>(new Map());
   const onSelectStationRef = useRef(onSelectStation);
   onSelectStationRef.current = onSelectStation;
 
@@ -254,7 +251,7 @@ export function StationMap({
     ro.observe(el);
 
     map.on("load", () => {
-      applyStationLayers(map, tileUrlCacheRef.current, countryCode, showObserved, showNoObservation, legendMode);
+      applyStationLayers(map, countryCode, showObserved, showNoObservation, legendMode);
       zoomToExtent(map, extent);
       bindLayerInteractions(map, layerHandlersRef.current);
     });
@@ -264,7 +261,6 @@ export function StationMap({
       unbindLayerInteractions(map, layerHandlersRef.current);
       map.remove();
       mapRef.current = null;
-      tileUrlCacheRef.current.clear();
     };
   }, []);
 
@@ -273,7 +269,7 @@ export function StationMap({
     if (!map) return;
     const applyCountryAndZoom = () => {
       unbindLayerInteractions(map, layerHandlersRef.current);
-      applyStationLayers(map, tileUrlCacheRef.current, countryCode, showObserved, showNoObservation, legendMode);
+      applyStationLayers(map, countryCode, showObserved, showNoObservation, legendMode);
       zoomToExtent(map, extent);
       bindLayerInteractions(map, layerHandlersRef.current);
     };
@@ -288,7 +284,7 @@ export function StationMap({
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
     unbindLayerInteractions(map, layerHandlersRef.current);
-    applyStationLayers(map, tileUrlCacheRef.current, countryCode, showObserved, showNoObservation, legendMode);
+    applyStationLayers(map, countryCode, showObserved, showNoObservation, legendMode);
     bindLayerInteractions(map, layerHandlersRef.current);
   }, [showObserved, showNoObservation, legendMode]);
 
