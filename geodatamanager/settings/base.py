@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 from pathlib import Path
 import os
+from celery.schedules import crontab
 
 PROJECT_DIR = Path(__file__).resolve().parent.parent
 BASE_DIR = PROJECT_DIR.parent
@@ -208,11 +209,18 @@ MEDIA_URL = "/media/"
 WIS2_DOWNLOAD_DIR = BASE_DIR / "data" / "wis2_downloads"
 WIS2_KEEP_DOWNLOADED_FILES = True
 WIS2_MAX_PAYLOAD_PREVIEW_CHARS = 2000
+WIS2_DOWNLOAD_RETENTION_DAYS = int(os.getenv("WIS2_DOWNLOAD_RETENTION_DAYS", "7"))
 
 
 # Celery settings
 CELERY_BROKER_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
 CELERY_RESULT_BACKEND = CELERY_BROKER_URL
+CELERY_BEAT_SCHEDULE = {
+    "cleanup-wis2-downloads-daily": {
+        "task": "weather_station_ingestion.tasks.cleanup_wis2_downloads_task",
+        "schedule": crontab(hour=3, minute=0),
+    },
+}
 
 # Cache settings
 CACHES = {
