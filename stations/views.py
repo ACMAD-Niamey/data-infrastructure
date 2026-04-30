@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 
 from drf_spectacular.utils import extend_schema, OpenApiParameter, OpenApiExample
 from drf_spectacular.types import OpenApiTypes
+from django.core.cache import cache
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework import status
@@ -24,6 +25,9 @@ from observations.serializers import (
 log = logging.getLogger(__name__)
 
 _VALID_AGG = {"raw", "hourly", "daily", "monthly", "yearly"}
+_STATION_STATS_CACHE_TTL_SECONDS = 60 * 10
+_COUNTRY_BOUNDS_CACHE_TTL_SECONDS = 60 * 60
+_COUNTRY_BOUNDS_CACHE_KEY = "country_bounds:v1"
 
 
 def _default_end() -> str:
@@ -144,9 +148,15 @@ class CountryBoundsView(APIView):
         tags=["Stations"],
     )
     def get(self, request):
+        cached_payload = cache.get(_COUNTRY_BOUNDS_CACHE_KEY)
+        if cached_payload is not None:
+            return Response(cached_payload)
+
         reader = ObservationReader()
         data = reader.country_bounds_options()
-        return Response(CountryBoundsOptionSerializer(data, many=True).data)
+        payload = CountryBoundsOptionSerializer(data, many=True).data
+        cache.set(_COUNTRY_BOUNDS_CACHE_KEY, payload, _COUNTRY_BOUNDS_CACHE_TTL_SECONDS)
+        return Response(payload)
 
 
 class StationDetailView(APIView):
@@ -304,16 +314,21 @@ class StationStatsView(APIView):
         start = request.query_params.get("start", _default_start()).strip()
         end = request.query_params.get("end", _default_end()).strip()
 
+        cache_key = ":".join(
+            [
+                "station_stats",
+                station_code.strip(),
+                variable,
+                agg,
+                start,
+                end,
+            ]
+        )
+        cached_payload = cache.get(cache_key)
+        if cached_payload is not None:
+            return Response(cached_payload)
+
         reader = ObservationReader()
-
-        # Verify the station exists
-        info = reader.station_info(station_code)
-        if info is None:
-            return Response(
-                {"detail": f"Station '{station_code}' not found."},
-                status=status.HTTP_404_NOT_FOUND,
-            )
-
         data = reader.time_series_by_station_code(
             station_code=station_code,
             variable_code=variable,
@@ -322,7 +337,6 @@ class StationStatsView(APIView):
             agg=agg,
         )
 
-        # Serialise each bucket according to aggregation type
         if agg == "raw":
             bucket_serializer = TimeSeriesRawBucketSerializer(data, many=True)
         else:
@@ -330,7 +344,7 @@ class StationStatsView(APIView):
 
         payload = {
             "station_code": station_code,
-            "station_name": info.get("name"),
+            "station_name": station_code,
             "variable": variable,
             "aggregation": agg,
             "start": start,
@@ -339,4 +353,6 @@ class StationStatsView(APIView):
         }
 
         serializer = StationStatsResponseSerializer(payload)
-        return Response(serializer.data)
+        response_payload = serializer.data
+        cache.set(cache_key, response_payload, _STATION_STATS_CACHE_TTL_SECONDS)
+        return Response(response_payload)

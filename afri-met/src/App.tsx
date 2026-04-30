@@ -1,58 +1,38 @@
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
-import { fetchCountryBounds, fetchStationList } from "./api/stations";
-import type { CountryBoundsOption, SelectOption, SpatialExtent, StationListItem } from "./api/types";
-import { StationMap, type StationLegendMode } from "./components/StationMap";
+import { fetchCountryBounds } from "./api/stations";
+import type { CountryBoundsOption, SelectOption } from "./api/types";
+import { StationMap } from "./components/StationMap";
 import { StationPanel } from "./components/StationPanel";
 import acmadLogo from "./assets/acmadLogo.svg";
 
 export default function App() {
-  const [stations, setStations] = useState<StationListItem[]>([]);
-  const [extent, setExtent] = useState<SpatialExtent | null>(null);
   const [countryBounds, setCountryBounds] = useState<CountryBoundsOption[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [listError, setListError] = useState<string | null>(null);
+  const [loadingBounds, setLoadingBounds] = useState(true);
+  const [boundsError, setBoundsError] = useState<string | null>(null);
 
   const [country, setCountry] = useState("");
 
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
-  const observedStationCodes = useMemo(() => stations.map((s) => s.station_code), [stations]);
   const countryOptions = useMemo<SelectOption[]>(
     () => [...countryBounds].sort((a, b) => a.label.localeCompare(b.label)),
     [countryBounds],
   );
-  const [showObserved, setShowObserved] = useState(true);
-  const [showNoObservation, setShowNoObservation] = useState(true);
-  const [legendMode, setLegendMode] = useState<StationLegendMode>("hide");
+  const selectedCountryBounds = useMemo(
+    () => countryBounds.find((c) => c.value === country)?.bounds ?? null,
+    [countryBounds, country],
+  );
 
   useEffect(() => {
+    setLoadingBounds(true);
+    setBoundsError(null);
     fetchCountryBounds()
       .then(setCountryBounds)
-      .catch(() => setCountryBounds([]));
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setListError(null);
-    fetchStationList({
-      country_code: country || undefined,
-    })
-      .then((res) => {
-        if (!cancelled) {
-          setStations(res.results);
-          if (!country) setExtent(res.extent);
-        }
-      })
       .catch((e: Error) => {
-        if (!cancelled) setListError(e.message ?? "Failed to load stations");
+        setCountryBounds([]);
+        setBoundsError(e.message ?? "Failed to load country bounds");
       })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [country]);
+      .finally(() => setLoadingBounds(false));
+  }, []);
 
   const onSelectStation = useCallback((code: string) => {
     setSelectedCode(code);
@@ -82,67 +62,27 @@ export default function App() {
               options={countryOptions}
               onChange={(v) => {
                 setCountry(v);
-                const selected = countryBounds.find((c) => c.value === v);
-                if (selected) setExtent(selected.bounds);
               }}
             />
           </div>
-          {loading && (
+          {loadingBounds && (
             <div className="absolute left-4 top-24 z-10 rounded-md bg-slate-900/80 px-3 py-1 text-xs text-slate-300">
-              Loading stations…
+              Loading country bounds…
             </div>
           )}
-          {listError && (
+          {boundsError && (
             <div className="absolute left-4 top-32 z-10 max-w-md rounded-md bg-red-950/90 px-3 py-2 text-xs text-red-200">
-              {listError}
+              {boundsError}
               <span className="mt-1 block text-slate-400">
-                Ensure Django is running and Vite proxies /api (see README).
+                Ensure Django is running and Vite proxies /api.
               </span>
             </div>
           )}
           <StationMap
-            extent={extent}
-            observedStationCodes={observedStationCodes}
-            showObserved={showObserved}
-            showNoObservation={showNoObservation}
-            legendMode={legendMode}
+            extent={selectedCountryBounds}
+            countryCode={country || null}
             onSelectStation={onSelectStation}
           />
-          <div className="absolute bottom-4 left-4 z-10 rounded-md border border-slate-700 bg-slate-950/85 p-2 text-xs text-slate-200">
-            <div className="mb-1 font-medium text-slate-300">Stations</div>
-            <div className="mb-2 flex gap-1">
-              <button
-                type="button"
-                onClick={() => setLegendMode("hide")}
-                className={`rounded px-2 py-1 ${legendMode === "hide" ? "bg-slate-700 text-white" : "bg-slate-900/70 text-slate-300"}`}
-              >
-                Hide
-              </button>
-              <button
-                type="button"
-                onClick={() => setLegendMode("dim")}
-                className={`rounded px-2 py-1 ${legendMode === "dim" ? "bg-slate-700 text-white" : "bg-slate-900/70 text-slate-300"}`}
-              >
-                Dim
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={() => setShowObserved((v) => !v)}
-              className={`flex w-full items-center gap-2 rounded px-1 py-1 text-left ${showObserved ? "opacity-100" : "opacity-50"}`}
-            >
-              <span className="inline-block h-3 w-3 rounded-full border border-slate-900 bg-green-500" />
-              <span>Has observations</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setShowNoObservation((v) => !v)}
-              className={`mt-1 flex w-full items-center gap-2 rounded px-1 py-1 text-left ${showNoObservation ? "opacity-100" : "opacity-50"}`}
-            >
-              <span className="inline-block h-2 w-2 rounded-full border border-slate-900 bg-slate-500" />
-              <span>No observations</span>
-            </button>
-          </div>
         </div>
 
         {selectedCode && (
@@ -157,16 +97,13 @@ export default function App() {
               <StationPanel
                 stationCode={selectedCode}
                 onClose={onClosePanel}
-                observedStationCodes={observedStationCodes}
               />
             </aside>
           </>
         )}
       </div>
 
-      <footer className="flex-shrink-0 border-t border-slate-800 px-4 py-2 text-[11px] text-slate-500">
-        {stations.length} station{stations.length === 1 ? "" : "s"} in view · Tap a point for time series
-      </footer>
+      <footer className="flex-shrink-0 border-t border-slate-800 px-4 py-2 text-[11px] text-slate-500">TiPG map layer active · Tap a point for time series</footer>
     </div>
   );
 }
