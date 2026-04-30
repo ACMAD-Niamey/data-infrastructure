@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
+from django.core.cache import cache
 from django.test import TestCase
 from django.urls import reverse
 from rest_framework.test import APIClient
@@ -217,6 +218,7 @@ class StationDetailViewTests(TestCase):
 class StationStatsViewTests(TestCase):
     def setUp(self):
         self.client = APIClient()
+        cache.clear()
 
     def _url(self, code="60390"):
         return reverse("station-stats", kwargs={"station_code": code})

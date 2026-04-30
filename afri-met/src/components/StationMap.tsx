@@ -6,6 +6,12 @@ import type { SpatialExtent } from "../api/types";
 import { hasMapboxToken, mapboxBasemaps } from "../map/basemaps";
 import { getTipgBaseUrl } from "../config";
 
+type LayerHandlers = {
+  click: (e: maplibregl.MapLayerMouseEvent) => void;
+  mouseenter: () => void;
+  mouseleave: () => void;
+};
+
 /** Fallback when `VITE_MAPBOX_KEY` is not set — vector style, no basemap picker. */
 const DEMO_STYLE_URL = "https://demotiles.maplibre.org/style.json";
 const STATIONS_OBS_SOURCE_ID = "stations_obs_source";
@@ -73,24 +79,36 @@ function buildStationLayerTileUrl(hasObservations: boolean, countryCode: string 
   return `${BASE_STATIONS_TILE_URL}?filter=${encodeURIComponent(expr)}`;
 }
 
-function addOrUpdateStationLayer(map: maplibregl.Map, config: StationLayerConfig): void {
+function addOrUpdateStationLayer(
+  map: maplibregl.Map,
+  tileUrlCache: Map<string, string>,
+  config: StationLayerConfig,
+): void {
   const { sourceId, layerId, tileUrl, color, radius, active, dimmed } = config;
   const targetOpacity = active ? FULL_OPACITY : dimmed ? DIM_OPACITY : HIDDEN_OPACITY;
   const targetVisibility = active || dimmed ? "visible" : "none";
 
-  if (!active && !dimmed) {
+  const source = map.getSource(sourceId) as maplibregl.VectorTileSource | undefined;
+  const currentTileUrl = source?.tiles?.[0];
+
+  if (source && currentTileUrl === tileUrl) {
+    // Tile URL unchanged — update paint/layout properties to avoid tile refetch/flicker
+    if (map.getLayer(layerId)) {
+      map.setPaintProperty(layerId, "circle-opacity", targetOpacity);
+      map.setLayoutProperty(layerId, "visibility", targetVisibility);
+      return;
+    }
+    // Source present but layer is missing — add layer only (reuses existing source)
+  } else {
+    // Tile URL changed or source doesn't exist yet — recreate source (and layer below)
     if (map.getLayer(layerId)) map.removeLayer(layerId);
-    if (map.getSource(sourceId)) map.removeSource(sourceId);
-    return;
+    if (source) map.removeSource(sourceId);
+    map.addSource(sourceId, {
+      type: "vector",
+      tiles: [tileUrl],
+    });
   }
 
-  if (map.getLayer(layerId)) map.removeLayer(layerId);
-  if (map.getSource(sourceId)) map.removeSource(sourceId);
-
-  map.addSource(sourceId, {
-    type: "vector",
-    tiles: [tileUrl],
-  });
   map.addLayer({
     id: layerId,
     type: "circle",
@@ -111,6 +129,7 @@ function addOrUpdateStationLayer(map: maplibregl.Map, config: StationLayerConfig
 
 function applyStationLayers(
   map: maplibregl.Map,
+  tileUrlCache: Map<string, string>,
   countryCode: string | null,
   showObserved: boolean,
   showNoObservation: boolean,
@@ -118,7 +137,7 @@ function applyStationLayers(
 ): void {
   const dimmed = legendMode === "dim";
 
-  addOrUpdateStationLayer(map, {
+  addOrUpdateStationLayer(map, tileUrlCache, {
     sourceId: STATIONS_NO_OBS_SOURCE_ID,
     layerId: STATIONS_NO_OBS_LAYER_ID,
     tileUrl: buildStationLayerTileUrl(false, countryCode),
@@ -127,7 +146,7 @@ function applyStationLayers(
     active: showNoObservation,
     dimmed,
   });
-  addOrUpdateStationLayer(map, {
+  addOrUpdateStationLayer(map, tileUrlCache, {
     sourceId: STATIONS_OBS_SOURCE_ID,
     layerId: STATIONS_OBS_LAYER_ID,
     tileUrl: buildStationLayerTileUrl(true, countryCode),
@@ -140,29 +159,26 @@ function applyStationLayers(
 
 function bindLayerInteractions(
   map: maplibregl.Map,
-  onStationClick: (e: maplibregl.MapLayerMouseEvent) => void,
+  handlers: LayerHandlers,
 ): void {
   const layers = [STATIONS_OBS_LAYER_ID, STATIONS_NO_OBS_LAYER_ID];
   for (const layerId of layers) {
     if (!map.getLayer(layerId)) continue;
-    map.on("click", layerId, onStationClick);
-    map.on("mouseenter", layerId, () => {
-      map.getCanvas().style.cursor = "pointer";
-    });
-    map.on("mouseleave", layerId, () => {
-      map.getCanvas().style.cursor = "";
-    });
+    map.on("click", layerId, handlers.click);
+    map.on("mouseenter", layerId, handlers.mouseenter);
+    map.on("mouseleave", layerId, handlers.mouseleave);
   }
 }
 
 function unbindLayerInteractions(
   map: maplibregl.Map,
-  onStationClick: (e: maplibregl.MapLayerMouseEvent) => void,
+  handlers: LayerHandlers,
 ): void {
   const layers = [STATIONS_OBS_LAYER_ID, STATIONS_NO_OBS_LAYER_ID];
   for (const layerId of layers) {
-    if (!map.getLayer(layerId)) continue;
-    map.off("click", layerId, onStationClick);
+    map.off("click", layerId, handlers.click);
+    map.off("mouseenter", layerId, handlers.mouseenter);
+    map.off("mouseleave", layerId, handlers.mouseleave);
   }
 }
 
@@ -185,13 +201,24 @@ export function StationMap({
 }: StationMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const tileUrlCacheRef = useRef<Map<string, string>>(new Map());
   const onSelectStationRef = useRef(onSelectStation);
   onSelectStationRef.current = onSelectStation;
-  const onStationClickRef = useRef<(e: maplibregl.MapLayerMouseEvent) => void>(() => undefined);
-  onStationClickRef.current = (e: maplibregl.MapLayerMouseEvent) => {
-    const code = e.features?.[0]?.properties?.station_code as string | undefined;
-    if (code) onSelectStationRef.current(code);
-  };
+
+  const layerHandlersRef = useRef<LayerHandlers>({
+    click: (e: maplibregl.MapLayerMouseEvent) => {
+      const code = e.features?.[0]?.properties?.station_code as string | undefined;
+      if (code) onSelectStationRef.current(code);
+    },
+    mouseenter: () => {
+      const canvas = mapRef.current?.getCanvas();
+      if (canvas) canvas.style.cursor = "pointer";
+    },
+    mouseleave: () => {
+      const canvas = mapRef.current?.getCanvas();
+      if (canvas) canvas.style.cursor = "";
+    },
+  });
 
   useEffect(() => {
     const el = containerRef.current;
@@ -227,16 +254,17 @@ export function StationMap({
     ro.observe(el);
 
     map.on("load", () => {
-      applyStationLayers(map, countryCode, showObserved, showNoObservation, legendMode);
+      applyStationLayers(map, tileUrlCacheRef.current, countryCode, showObserved, showNoObservation, legendMode);
       zoomToExtent(map, extent);
-      bindLayerInteractions(map, onStationClickRef.current);
+      bindLayerInteractions(map, layerHandlersRef.current);
     });
 
     return () => {
       ro.disconnect();
-      unbindLayerInteractions(map, onStationClickRef.current);
+      unbindLayerInteractions(map, layerHandlersRef.current);
       map.remove();
       mapRef.current = null;
+      tileUrlCacheRef.current.clear();
     };
   }, []);
 
@@ -244,10 +272,10 @@ export function StationMap({
     const map = mapRef.current;
     if (!map) return;
     const applyCountryAndZoom = () => {
-      unbindLayerInteractions(map, onStationClickRef.current);
-      applyStationLayers(map, countryCode, showObserved, showNoObservation, legendMode);
+      unbindLayerInteractions(map, layerHandlersRef.current);
+      applyStationLayers(map, tileUrlCacheRef.current, countryCode, showObserved, showNoObservation, legendMode);
       zoomToExtent(map, extent);
-      bindLayerInteractions(map, onStationClickRef.current);
+      bindLayerInteractions(map, layerHandlersRef.current);
     };
     if (map.isStyleLoaded()) {
       applyCountryAndZoom();
@@ -259,9 +287,9 @@ export function StationMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !map.isStyleLoaded()) return;
-    unbindLayerInteractions(map, onStationClickRef.current);
-    applyStationLayers(map, countryCode, showObserved, showNoObservation, legendMode);
-    bindLayerInteractions(map, onStationClickRef.current);
+    unbindLayerInteractions(map, layerHandlersRef.current);
+    applyStationLayers(map, tileUrlCacheRef.current, countryCode, showObserved, showNoObservation, legendMode);
+    bindLayerInteractions(map, layerHandlersRef.current);
   }, [showObserved, showNoObservation, legendMode]);
 
   return <div ref={containerRef} className="h-full min-h-0 w-full min-w-0 flex-1" />;

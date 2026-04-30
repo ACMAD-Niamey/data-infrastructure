@@ -32,10 +32,11 @@ type ChartRefreshingOverlayProps = {
 };
 
 export function ChartRefreshingOverlay({ active }: ChartRefreshingOverlayProps) {
-  if (!active) return null;
   return (
     <div
-      className="pointer-events-none absolute right-3 top-3 z-10 inline-flex items-center gap-1.5 rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-medium text-slate-600 shadow-sm"
+      className={`pointer-events-none absolute right-3 top-3 z-10 inline-flex items-center gap-1.5 rounded-full bg-white/90 px-2.5 py-1 text-[11px] font-medium text-slate-600 shadow-sm transition-all duration-200 ${
+        active ? "translate-y-0 opacity-100" : "-translate-y-1 opacity-0"
+      }`}
       aria-live="polite"
     >
       <Loader2 className="h-3.5 w-3.5 animate-spin" />
