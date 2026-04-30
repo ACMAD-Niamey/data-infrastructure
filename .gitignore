@@ -14,3 +14,4 @@ nginx/letsencrypt/
 .DS_Store
 *node_modules
 stations_export.ndjson
+celerybeat-schedule
