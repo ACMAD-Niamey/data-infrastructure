@@ -78,14 +78,21 @@ function addOrUpdateStationLayer(map: maplibregl.Map, config: StationLayerConfig
   const targetOpacity = active ? FULL_OPACITY : dimmed ? DIM_OPACITY : HIDDEN_OPACITY;
   const targetVisibility = active || dimmed ? "visible" : "none";
 
-  if (!active && !dimmed) {
-    if (map.getLayer(layerId)) map.removeLayer(layerId);
-    if (map.getSource(sourceId)) map.removeSource(sourceId);
+  const source = map.getSource(sourceId) as maplibregl.VectorTileSource | undefined;
+  const currentTileUrl = source?.tiles?.[0];
+
+  if (source && currentTileUrl === tileUrl) {
+    // Tile URL unchanged — only update paint/layout properties to avoid tile refetch/flicker
+    if (map.getLayer(layerId)) {
+      map.setPaintProperty(layerId, "circle-opacity", targetOpacity);
+      map.setLayoutProperty(layerId, "visibility", targetVisibility);
+    }
     return;
   }
 
+  // Tile URL changed or source doesn't exist yet — recreate source and layer
   if (map.getLayer(layerId)) map.removeLayer(layerId);
-  if (map.getSource(sourceId)) map.removeSource(sourceId);
+  if (source) map.removeSource(sourceId);
 
   map.addSource(sourceId, {
     type: "vector",
