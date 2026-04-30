@@ -218,10 +218,12 @@ export function StationMap({
       if (code) onSelectStationRef.current(code);
     },
     mouseenter: () => {
-      mapRef.current?.getCanvas() && (mapRef.current.getCanvas().style.cursor = "pointer");
+      const canvas = mapRef.current?.getCanvas();
+      if (canvas) canvas.style.cursor = "pointer";
     },
     mouseleave: () => {
-      mapRef.current?.getCanvas() && (mapRef.current.getCanvas().style.cursor = "");
+      const canvas = mapRef.current?.getCanvas();
+      if (canvas) canvas.style.cursor = "";
     },
   });
 

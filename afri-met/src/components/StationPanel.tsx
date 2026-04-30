@@ -158,7 +158,7 @@ export function StationPanel({ stationCode, onClose }: StationPanelProps) {
     if (availableVariables.length > 0 && !availableVariables.includes(variable)) {
       setVariable(availableVariables[0]);
     }
-  }, [availableVariables]);
+  }, [availableVariables, variable]);
 
   useEffect(() => {
     if (!windVars.hasWindPair && viewMode === "wind") {
