@@ -8,13 +8,19 @@ import { getTipgBaseUrl } from "../config";
 
 /** Fallback when `VITE_MAPBOX_KEY` is not set — vector style, no basemap picker. */
 const DEMO_STYLE_URL = "https://demotiles.maplibre.org/style.json";
-const STATIONS_SOURCE_ID = "stations";
-const STATIONS_LAYER_ID = "stations-circles";
+const STATIONS_OBS_SOURCE_ID = "stations_obs_source";
+const STATIONS_NO_OBS_SOURCE_ID = "stations_no_obs_source";
+const STATIONS_OBS_LAYER_ID = "stations-obs";
+const STATIONS_NO_OBS_LAYER_ID = "stations-no-obs";
 const STATIONS_SOURCE_LAYER = "default";
 const BASE_STATIONS_TILE_URL = `${getTipgBaseUrl()}/collections/public.stations/tiles/WebMercatorQuad/{z}/{x}/{y}`;
-const STATION_COLOR = "#22c55e";
-const STATION_RADIUS = 6;
+const OBSERVED_COLOR = "#22c55e";
+const NO_OBS_COLOR = "#64748b";
+const OBSERVED_RADIUS = 6;
+const NO_OBS_RADIUS = 4;
 const FULL_OPACITY = 1;
+const HIDDEN_OPACITY = 0;
+const DIM_OPACITY = 0.15;
 const DEFAULT_AFRICA_EXTENT: SpatialExtent = {
   west: -25,
   south: -40,
@@ -22,6 +28,16 @@ const DEFAULT_AFRICA_EXTENT: SpatialExtent = {
   north: 40,
 };
 const FIT_PADDING = { top: 48, bottom: 48, left: 48, right: 48 };
+export type StationLegendMode = "hide" | "dim";
+type StationLayerConfig = {
+  sourceId: string;
+  layerId: string;
+  tileUrl: string;
+  color: string;
+  radius: number;
+  active: boolean;
+  dimmed: boolean;
+};
 
 function fitMapToExtent(map: maplibregl.Map, extent: SpatialExtent): void {
   const west = Number(extent.west);
@@ -50,47 +66,132 @@ function escapeTipgLiteral(value: string): string {
   return value.replaceAll("'", "''");
 }
 
-function buildStationsTileUrl(countryCode: string | null): string {
-  if (!countryCode) return BASE_STATIONS_TILE_URL;
-  const expr = `canonical_code='${escapeTipgLiteral(countryCode)}'`;
+function buildStationLayerTileUrl(hasObservations: boolean, countryCode: string | null): string {
+  const parts = [`has_observations=${hasObservations ? "true" : "false"}`];
+  if (countryCode) parts.push(`canonical_code='${escapeTipgLiteral(countryCode)}'`);
+  const expr = parts.join(" AND ");
   return `${BASE_STATIONS_TILE_URL}?filter=${encodeURIComponent(expr)}`;
 }
 
-function addOrReplaceStationsLayer(map: maplibregl.Map, countryCode: string | null): void {
-  if (map.getLayer(STATIONS_LAYER_ID)) {
-    map.removeLayer(STATIONS_LAYER_ID);
+function addOrUpdateStationLayer(map: maplibregl.Map, config: StationLayerConfig): void {
+  const { sourceId, layerId, tileUrl, color, radius, active, dimmed } = config;
+  const targetOpacity = active ? FULL_OPACITY : dimmed ? DIM_OPACITY : HIDDEN_OPACITY;
+  const targetVisibility = active || dimmed ? "visible" : "none";
+
+  if (!active && !dimmed) {
+    if (map.getLayer(layerId)) map.removeLayer(layerId);
+    if (map.getSource(sourceId)) map.removeSource(sourceId);
+    return;
   }
-  if (map.getSource(STATIONS_SOURCE_ID)) {
-    map.removeSource(STATIONS_SOURCE_ID);
-  }
-  map.addSource(STATIONS_SOURCE_ID, {
+
+  if (map.getLayer(layerId)) map.removeLayer(layerId);
+  if (map.getSource(sourceId)) map.removeSource(sourceId);
+
+  map.addSource(sourceId, {
     type: "vector",
-    tiles: [buildStationsTileUrl(countryCode)],
+    tiles: [tileUrl],
   });
   map.addLayer({
-    id: STATIONS_LAYER_ID,
+    id: layerId,
     type: "circle",
-    source: STATIONS_SOURCE_ID,
+    source: sourceId,
     "source-layer": STATIONS_SOURCE_LAYER,
-    paint: { "circle-radius": STATION_RADIUS, "circle-color": STATION_COLOR, "circle-opacity": FULL_OPACITY, "circle-stroke-width": 1, "circle-stroke-color": "#0f172a" },
+    paint: {
+      "circle-radius": radius,
+      "circle-color": color,
+      "circle-opacity": targetOpacity,
+      "circle-stroke-width": 1,
+      "circle-stroke-color": "#0f172a",
+    },
+    layout: {
+      visibility: targetVisibility,
+    },
   });
+}
+
+function applyStationLayers(
+  map: maplibregl.Map,
+  countryCode: string | null,
+  showObserved: boolean,
+  showNoObservation: boolean,
+  legendMode: StationLegendMode,
+): void {
+  const dimmed = legendMode === "dim";
+
+  addOrUpdateStationLayer(map, {
+    sourceId: STATIONS_NO_OBS_SOURCE_ID,
+    layerId: STATIONS_NO_OBS_LAYER_ID,
+    tileUrl: buildStationLayerTileUrl(false, countryCode),
+    color: NO_OBS_COLOR,
+    radius: NO_OBS_RADIUS,
+    active: showNoObservation,
+    dimmed,
+  });
+  addOrUpdateStationLayer(map, {
+    sourceId: STATIONS_OBS_SOURCE_ID,
+    layerId: STATIONS_OBS_LAYER_ID,
+    tileUrl: buildStationLayerTileUrl(true, countryCode),
+    color: OBSERVED_COLOR,
+    radius: OBSERVED_RADIUS,
+    active: showObserved,
+    dimmed,
+  });
+}
+
+function bindLayerInteractions(
+  map: maplibregl.Map,
+  onStationClick: (e: maplibregl.MapLayerMouseEvent) => void,
+): void {
+  const layers = [STATIONS_OBS_LAYER_ID, STATIONS_NO_OBS_LAYER_ID];
+  for (const layerId of layers) {
+    if (!map.getLayer(layerId)) continue;
+    map.on("click", layerId, onStationClick);
+    map.on("mouseenter", layerId, () => {
+      map.getCanvas().style.cursor = "pointer";
+    });
+    map.on("mouseleave", layerId, () => {
+      map.getCanvas().style.cursor = "";
+    });
+  }
+}
+
+function unbindLayerInteractions(
+  map: maplibregl.Map,
+  onStationClick: (e: maplibregl.MapLayerMouseEvent) => void,
+): void {
+  const layers = [STATIONS_OBS_LAYER_ID, STATIONS_NO_OBS_LAYER_ID];
+  for (const layerId of layers) {
+    if (!map.getLayer(layerId)) continue;
+    map.off("click", layerId, onStationClick);
+  }
 }
 
 type StationMapProps = {
   extent: SpatialExtent | null;
   countryCode: string | null;
+  showObserved: boolean;
+  showNoObservation: boolean;
+  legendMode: StationLegendMode;
   onSelectStation: (stationCode: string) => void;
 };
 
 export function StationMap({
   extent,
   countryCode,
+  showObserved,
+  showNoObservation,
+  legendMode,
   onSelectStation,
 }: StationMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const onSelectStationRef = useRef(onSelectStation);
   onSelectStationRef.current = onSelectStation;
+  const onStationClickRef = useRef<(e: maplibregl.MapLayerMouseEvent) => void>(() => undefined);
+  onStationClickRef.current = (e: maplibregl.MapLayerMouseEvent) => {
+    const code = e.features?.[0]?.properties?.station_code as string | undefined;
+    if (code) onSelectStationRef.current(code);
+  };
 
   useEffect(() => {
     const el = containerRef.current;
@@ -125,27 +226,15 @@ export function StationMap({
     const ro = new ResizeObserver(resize);
     ro.observe(el);
 
-    const onStationClick = (e: maplibregl.MapLayerMouseEvent) => {
-      const code = e.features?.[0]?.properties?.station_code as string | undefined;
-      if (code) onSelectStationRef.current(code);
-    };
-
     map.on("load", () => {
-      addOrReplaceStationsLayer(map, countryCode);
+      applyStationLayers(map, countryCode, showObserved, showNoObservation, legendMode);
       zoomToExtent(map, extent);
-
-      map.on("click", STATIONS_LAYER_ID, onStationClick);
-      map.on("mouseenter", STATIONS_LAYER_ID, () => {
-        map.getCanvas().style.cursor = "pointer";
-      });
-      map.on("mouseleave", STATIONS_LAYER_ID, () => {
-        map.getCanvas().style.cursor = "";
-      });
+      bindLayerInteractions(map, onStationClickRef.current);
     });
 
     return () => {
       ro.disconnect();
-      map.off("click", STATIONS_LAYER_ID, onStationClick);
+      unbindLayerInteractions(map, onStationClickRef.current);
       map.remove();
       mapRef.current = null;
     };
@@ -154,16 +243,26 @@ export function StationMap({
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    const applyLayerAndZoom = () => {
-      addOrReplaceStationsLayer(map, countryCode);
+    const applyCountryAndZoom = () => {
+      unbindLayerInteractions(map, onStationClickRef.current);
+      applyStationLayers(map, countryCode, showObserved, showNoObservation, legendMode);
       zoomToExtent(map, extent);
+      bindLayerInteractions(map, onStationClickRef.current);
     };
     if (map.isStyleLoaded()) {
-      applyLayerAndZoom();
+      applyCountryAndZoom();
     } else {
-      map.once("load", applyLayerAndZoom);
+      map.once("load", applyCountryAndZoom);
     }
   }, [countryCode, extent]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+    unbindLayerInteractions(map, onStationClickRef.current);
+    applyStationLayers(map, countryCode, showObserved, showNoObservation, legendMode);
+    bindLayerInteractions(map, onStationClickRef.current);
+  }, [showObserved, showNoObservation, legendMode]);
 
   return <div ref={containerRef} className="h-full min-h-0 w-full min-w-0 flex-1" />;
 }

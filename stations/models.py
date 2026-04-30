@@ -77,6 +77,11 @@ class Station(models.Model):
     )
     install_date = models.DateField(blank=True, null=True)
     is_active = models.BooleanField(default=True, db_index=True)
+    has_observations = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="True when at least one observation exists for this station.",
+    )
     description = models.TextField(blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
@@ -92,6 +97,7 @@ class Station(models.Model):
             models.Index(fields=["canonical_code"], name="stations_canonical_idx"),
             models.Index(fields=["station_type"], name="stations_type_idx"),
             models.Index(fields=["is_active"], name="stations_active_idx"),
+            models.Index(fields=["has_observations"], name="stations_has_obs_idx"),
         ]
 
     def __str__(self) -> str:
