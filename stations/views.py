@@ -314,6 +314,14 @@ class StationStatsView(APIView):
         start = request.query_params.get("start", _default_start()).strip()
         end = request.query_params.get("end", _default_end()).strip()
 
+        reader = ObservationReader()
+        info = reader.station_info(station_code)
+        if info is None:
+            return Response(
+                {"detail": f"Station '{station_code}' not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
         cache_key = ":".join(
             [
                 "station_stats",
@@ -328,7 +336,6 @@ class StationStatsView(APIView):
         if cached_payload is not None:
             return Response(cached_payload)
 
-        reader = ObservationReader()
         data = reader.time_series_by_station_code(
             station_code=station_code,
             variable_code=variable,
@@ -344,7 +351,7 @@ class StationStatsView(APIView):
 
         payload = {
             "station_code": station_code,
-            "station_name": station_code,
+            "station_name": info.get("name"),
             "variable": variable,
             "aggregation": agg,
             "start": start,
@@ -354,5 +361,6 @@ class StationStatsView(APIView):
 
         serializer = StationStatsResponseSerializer(payload)
         response_payload = serializer.data
-        cache.set(cache_key, response_payload, _STATION_STATS_CACHE_TTL_SECONDS)
+        if response_payload.get("data"):
+            cache.set(cache_key, response_payload, _STATION_STATS_CACHE_TTL_SECONDS)
         return Response(response_payload)
