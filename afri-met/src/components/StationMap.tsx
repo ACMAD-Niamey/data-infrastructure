@@ -88,50 +88,43 @@ function addOrUpdateStationLayer(
   const targetOpacity = active ? FULL_OPACITY : dimmed ? DIM_OPACITY : HIDDEN_OPACITY;
   const targetVisibility = active || dimmed ? "visible" : "none";
 
-  if (!active && !dimmed) {
-    if (map.getLayer(layerId)) map.removeLayer(layerId);
-    if (map.getSource(sourceId)) map.removeSource(sourceId);
-    tileUrlCache.delete(sourceId);
-    return;
-  }
+  const source = map.getSource(sourceId) as maplibregl.VectorTileSource | undefined;
+  const currentTileUrl = source?.tiles?.[0];
 
-  const sourceExists = Boolean(map.getSource(sourceId));
-  const urlChanged = tileUrlCache.get(sourceId) !== tileUrl;
-
-  if (sourceExists && urlChanged) {
-    // Tile URL changed — must recreate source and layer.
-    if (map.getLayer(layerId)) map.removeLayer(layerId);
-    if (map.getSource(sourceId)) map.removeSource(sourceId);
-    tileUrlCache.delete(sourceId);
-  }
-
-  if (!map.getSource(sourceId)) {
-    map.addSource(sourceId, { type: "vector", tiles: [tileUrl] });
-    tileUrlCache.set(sourceId, tileUrl);
-  }
-
-  if (!map.getLayer(layerId)) {
-    map.addLayer({
-      id: layerId,
-      type: "circle",
-      source: sourceId,
-      "source-layer": STATIONS_SOURCE_LAYER,
-      paint: {
-        "circle-radius": radius,
-        "circle-color": color,
-        "circle-opacity": targetOpacity,
-        "circle-stroke-width": 1,
-        "circle-stroke-color": "#0f172a",
-      },
-      layout: {
-        visibility: targetVisibility,
-      },
-    });
+  if (source && currentTileUrl === tileUrl) {
+    // Tile URL unchanged — update paint/layout properties to avoid tile refetch/flicker
+    if (map.getLayer(layerId)) {
+      map.setPaintProperty(layerId, "circle-opacity", targetOpacity);
+      map.setLayoutProperty(layerId, "visibility", targetVisibility);
+      return;
+    }
+    // Source present but layer is missing — add layer only (reuses existing source)
   } else {
-    // Layer already exists and tile URL is unchanged — update properties in place.
-    map.setPaintProperty(layerId, "circle-opacity", targetOpacity);
-    map.setLayoutProperty(layerId, "visibility", targetVisibility);
+    // Tile URL changed or source doesn't exist yet — recreate source (and layer below)
+    if (map.getLayer(layerId)) map.removeLayer(layerId);
+    if (source) map.removeSource(sourceId);
+    map.addSource(sourceId, {
+      type: "vector",
+      tiles: [tileUrl],
+    });
   }
+
+  map.addLayer({
+    id: layerId,
+    type: "circle",
+    source: sourceId,
+    "source-layer": STATIONS_SOURCE_LAYER,
+    paint: {
+      "circle-radius": radius,
+      "circle-color": color,
+      "circle-opacity": targetOpacity,
+      "circle-stroke-width": 1,
+      "circle-stroke-color": "#0f172a",
+    },
+    layout: {
+      visibility: targetVisibility,
+    },
+  });
 }
 
 function applyStationLayers(
