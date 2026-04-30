@@ -6,81 +6,185 @@ import type { SpatialExtent } from "../api/types";
 import { hasMapboxToken, mapboxBasemaps } from "../map/basemaps";
 import { getTipgBaseUrl } from "../config";
 
+type LayerHandlers = {
+  click: (e: maplibregl.MapLayerMouseEvent) => void;
+  mouseenter: () => void;
+  mouseleave: () => void;
+};
+
 /** Fallback when `VITE_MAPBOX_KEY` is not set — vector style, no basemap picker. */
 const DEMO_STYLE_URL = "https://demotiles.maplibre.org/style.json";
-const STATIONS_SOURCE_ID = "stations";
-const STATIONS_LAYER_ID = "stations-circles";
+const STATIONS_OBS_SOURCE_ID = "stations_obs_source";
+const STATIONS_NO_OBS_SOURCE_ID = "stations_no_obs_source";
+const STATIONS_OBS_LAYER_ID = "stations-obs";
+const STATIONS_NO_OBS_LAYER_ID = "stations-no-obs";
 const STATIONS_SOURCE_LAYER = "default";
-const STATIONS_TILE_URL = `${getTipgBaseUrl()}/collections/public.stations/tiles/WebMercatorQuad/{z}/{x}/{y}`;
+const BASE_STATIONS_TILE_URL = `${getTipgBaseUrl()}/collections/public.stations/tiles/WebMercatorQuad/{z}/{x}/{y}`;
 const OBSERVED_COLOR = "#22c55e";
 const NO_OBS_COLOR = "#64748b";
 const OBSERVED_RADIUS = 6;
 const NO_OBS_RADIUS = 4;
-const DIM_OPACITY = 0.15;
-const HIDDEN_OPACITY = 0;
 const FULL_OPACITY = 1;
-
+const HIDDEN_OPACITY = 0;
+const DIM_OPACITY = 0.15;
+const DEFAULT_AFRICA_EXTENT: SpatialExtent = {
+  west: -25,
+  south: -40,
+  east: 60,
+  north: 40,
+};
+const FIT_PADDING = { top: 48, bottom: 48, left: 48, right: 48 };
 export type StationLegendMode = "hide" | "dim";
+type StationLayerConfig = {
+  sourceId: string;
+  layerId: string;
+  tileUrl: string;
+  color: string;
+  radius: number;
+  active: boolean;
+  dimmed: boolean;
+};
 
-function observedMembershipExpression(observedStationCodes: string[]) {
-  return [
-    "in",
-    ["get", "station_code"],
-    ["literal", observedStationCodes] as unknown as maplibregl.ExpressionInputType,
-  ] as unknown as maplibregl.ExpressionSpecification;
+function fitMapToExtent(map: maplibregl.Map, extent: SpatialExtent): void {
+  const west = Number(extent.west);
+  const south = Number(extent.south);
+  const east = Number(extent.east);
+  const north = Number(extent.north);
+  if (![west, south, east, north].every(Number.isFinite)) return;
+  if (west === east || south === north) return;
+  map.fitBounds(
+    [
+      [west, south],
+      [east, north],
+    ],
+    { padding: FIT_PADDING, maxZoom: 10, duration: 800 },
+  );
 }
 
-function applyStationLayerStyle(
+function zoomToExtent(map: maplibregl.Map, extent: SpatialExtent | null): void {
+  const nextExtent = extent ?? DEFAULT_AFRICA_EXTENT;
+  map.stop();
+  map.resize();
+  fitMapToExtent(map, nextExtent);
+}
+
+function escapeTipgLiteral(value: string): string {
+  return value.replaceAll("'", "''");
+}
+
+function buildStationLayerTileUrl(hasObservations: boolean, countryCode: string | null): string {
+  const parts = [`has_observations=${hasObservations ? "true" : "false"}`];
+  if (countryCode) parts.push(`canonical_code='${escapeTipgLiteral(countryCode)}'`);
+  const expr = parts.join(" AND ");
+  return `${BASE_STATIONS_TILE_URL}?filter=${encodeURIComponent(expr)}`;
+}
+
+function addOrUpdateStationLayer(
   map: maplibregl.Map,
-  observedStationCodes: string[],
+  tileUrlCache: Map<string, string>,
+  config: StationLayerConfig,
+): void {
+  const { sourceId, layerId, tileUrl, color, radius, active, dimmed } = config;
+  const targetOpacity = active ? FULL_OPACITY : dimmed ? DIM_OPACITY : HIDDEN_OPACITY;
+  const targetVisibility = active || dimmed ? "visible" : "none";
+
+  const source = map.getSource(sourceId) as maplibregl.VectorTileSource | undefined;
+  const currentTileUrl = source?.tiles?.[0];
+
+  if (source && currentTileUrl === tileUrl) {
+    // Tile URL unchanged — update paint/layout properties to avoid tile refetch/flicker
+    if (map.getLayer(layerId)) {
+      map.setPaintProperty(layerId, "circle-opacity", targetOpacity);
+      map.setLayoutProperty(layerId, "visibility", targetVisibility);
+      return;
+    }
+    // Source present but layer is missing — add layer only (reuses existing source)
+  } else {
+    // Tile URL changed or source doesn't exist yet — recreate source (and layer below)
+    if (map.getLayer(layerId)) map.removeLayer(layerId);
+    if (source) map.removeSource(sourceId);
+    map.addSource(sourceId, {
+      type: "vector",
+      tiles: [tileUrl],
+    });
+  }
+
+  map.addLayer({
+    id: layerId,
+    type: "circle",
+    source: sourceId,
+    "source-layer": STATIONS_SOURCE_LAYER,
+    paint: {
+      "circle-radius": radius,
+      "circle-color": color,
+      "circle-opacity": targetOpacity,
+      "circle-stroke-width": 1,
+      "circle-stroke-color": "#0f172a",
+    },
+    layout: {
+      visibility: targetVisibility,
+    },
+  });
+}
+
+function applyStationLayers(
+  map: maplibregl.Map,
+  tileUrlCache: Map<string, string>,
+  countryCode: string | null,
   showObserved: boolean,
   showNoObservation: boolean,
-  mode: StationLegendMode,
-) {
-  if (!map.getLayer(STATIONS_LAYER_ID)) return;
+  legendMode: StationLegendMode,
+): void {
+  const dimmed = legendMode === "dim";
 
-  const observedMembership = observedMembershipExpression(observedStationCodes);
-  const hiddenOpacity = mode === "hide" ? HIDDEN_OPACITY : DIM_OPACITY;
+  addOrUpdateStationLayer(map, tileUrlCache, {
+    sourceId: STATIONS_NO_OBS_SOURCE_ID,
+    layerId: STATIONS_NO_OBS_LAYER_ID,
+    tileUrl: buildStationLayerTileUrl(false, countryCode),
+    color: NO_OBS_COLOR,
+    radius: NO_OBS_RADIUS,
+    active: showNoObservation,
+    dimmed,
+  });
+  addOrUpdateStationLayer(map, tileUrlCache, {
+    sourceId: STATIONS_OBS_SOURCE_ID,
+    layerId: STATIONS_OBS_LAYER_ID,
+    tileUrl: buildStationLayerTileUrl(true, countryCode),
+    color: OBSERVED_COLOR,
+    radius: OBSERVED_RADIUS,
+    active: showObserved,
+    dimmed,
+  });
+}
 
-  map.setPaintProperty(STATIONS_LAYER_ID, "circle-color", [
-    "case",
-    observedMembership,
-    OBSERVED_COLOR,
-    NO_OBS_COLOR,
-  ]);
+function bindLayerInteractions(
+  map: maplibregl.Map,
+  handlers: LayerHandlers,
+): void {
+  const layers = [STATIONS_OBS_LAYER_ID, STATIONS_NO_OBS_LAYER_ID];
+  for (const layerId of layers) {
+    if (!map.getLayer(layerId)) continue;
+    map.on("click", layerId, handlers.click);
+    map.on("mouseenter", layerId, handlers.mouseenter);
+    map.on("mouseleave", layerId, handlers.mouseleave);
+  }
+}
 
-  map.setPaintProperty(STATIONS_LAYER_ID, "circle-radius", [
-    "case",
-    observedMembership,
-    OBSERVED_RADIUS,
-    NO_OBS_RADIUS,
-  ]);
-
-  map.setPaintProperty(STATIONS_LAYER_ID, "circle-opacity", [
-    "case",
-    observedMembership,
-    showObserved ? FULL_OPACITY : hiddenOpacity,
-    showNoObservation ? FULL_OPACITY : hiddenOpacity,
-  ]);
-
-  if (mode === "hide") {
-    if (showObserved && showNoObservation) {
-      map.setFilter(STATIONS_LAYER_ID, null);
-    } else if (showObserved) {
-      map.setFilter(STATIONS_LAYER_ID, observedMembership);
-    } else if (showNoObservation) {
-      map.setFilter(STATIONS_LAYER_ID, ["!", observedMembership] as maplibregl.FilterSpecification);
-    } else {
-      map.setFilter(STATIONS_LAYER_ID, ["==", ["get", "station_code"], "__none__"]);
-    }
-  } else {
-    map.setFilter(STATIONS_LAYER_ID, null);
+function unbindLayerInteractions(
+  map: maplibregl.Map,
+  handlers: LayerHandlers,
+): void {
+  const layers = [STATIONS_OBS_LAYER_ID, STATIONS_NO_OBS_LAYER_ID];
+  for (const layerId of layers) {
+    map.off("click", layerId, handlers.click);
+    map.off("mouseenter", layerId, handlers.mouseenter);
+    map.off("mouseleave", layerId, handlers.mouseleave);
   }
 }
 
 type StationMapProps = {
   extent: SpatialExtent | null;
-  observedStationCodes: string[];
+  countryCode: string | null;
   showObserved: boolean;
   showNoObservation: boolean;
   legendMode: StationLegendMode;
@@ -89,7 +193,7 @@ type StationMapProps = {
 
 export function StationMap({
   extent,
-  observedStationCodes,
+  countryCode,
   showObserved,
   showNoObservation,
   legendMode,
@@ -97,6 +201,24 @@ export function StationMap({
 }: StationMapProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const tileUrlCacheRef = useRef<Map<string, string>>(new Map());
+  const onSelectStationRef = useRef(onSelectStation);
+  onSelectStationRef.current = onSelectStation;
+
+  const layerHandlersRef = useRef<LayerHandlers>({
+    click: (e: maplibregl.MapLayerMouseEvent) => {
+      const code = e.features?.[0]?.properties?.station_code as string | undefined;
+      if (code) onSelectStationRef.current(code);
+    },
+    mouseenter: () => {
+      const canvas = mapRef.current?.getCanvas();
+      if (canvas) canvas.style.cursor = "pointer";
+    },
+    mouseleave: () => {
+      const canvas = mapRef.current?.getCanvas();
+      if (canvas) canvas.style.cursor = "";
+    },
+  });
 
   useEffect(() => {
     const el = containerRef.current;
@@ -131,73 +253,44 @@ export function StationMap({
     const ro = new ResizeObserver(resize);
     ro.observe(el);
 
-    const onStationClick = (e: maplibregl.MapLayerMouseEvent) => {
-      const code = e.features?.[0]?.properties?.station_code as string | undefined;
-      if (code) onSelectStation(code);
-    };
-
     map.on("load", () => {
-      map.resize();
-      if (map.getSource(STATIONS_SOURCE_ID)) return;
-
-      map.addSource(STATIONS_SOURCE_ID, {
-        type: "vector",
-        tiles: [STATIONS_TILE_URL],
-      });
-      map.addLayer({
-        id: STATIONS_LAYER_ID,
-        type: "circle",
-        source: STATIONS_SOURCE_ID,
-        "source-layer": STATIONS_SOURCE_LAYER,
-        paint: { "circle-radius": OBSERVED_RADIUS, "circle-color": OBSERVED_COLOR, "circle-stroke-width": 1, "circle-stroke-color": "#0f172a" },
-      });
-      applyStationLayerStyle(map, observedStationCodes, showObserved, showNoObservation, legendMode);
-
-      map.on("click", STATIONS_LAYER_ID, onStationClick);
-      map.on("mouseenter", STATIONS_LAYER_ID, () => {
-        map.getCanvas().style.cursor = "pointer";
-      });
-      map.on("mouseleave", STATIONS_LAYER_ID, () => {
-        map.getCanvas().style.cursor = "";
-      });
+      applyStationLayers(map, tileUrlCacheRef.current, countryCode, showObserved, showNoObservation, legendMode);
+      zoomToExtent(map, extent);
+      bindLayerInteractions(map, layerHandlersRef.current);
     });
 
     return () => {
       ro.disconnect();
-      map.off("click", STATIONS_LAYER_ID, onStationClick);
+      unbindLayerInteractions(map, layerHandlersRef.current);
       map.remove();
       mapRef.current = null;
+      tileUrlCacheRef.current.clear();
     };
-  }, [onSelectStation]);
+  }, []);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    applyStationLayerStyle(map, observedStationCodes, showObserved, showNoObservation, legendMode);
-  }, [observedStationCodes, showObserved, showNoObservation, legendMode]);
+    const applyCountryAndZoom = () => {
+      unbindLayerInteractions(map, layerHandlersRef.current);
+      applyStationLayers(map, tileUrlCacheRef.current, countryCode, showObserved, showNoObservation, legendMode);
+      zoomToExtent(map, extent);
+      bindLayerInteractions(map, layerHandlersRef.current);
+    };
+    if (map.isStyleLoaded()) {
+      applyCountryAndZoom();
+    } else {
+      map.once("load", applyCountryAndZoom);
+    }
+  }, [countryCode, extent]);
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!map || !extent) return;
-
-    const run = () => {
-      map.resize();
-      try {
-        map.fitBounds(
-          [
-            [extent.west, extent.south],
-            [extent.east, extent.north],
-          ],
-          { padding: { top: 48, bottom: 48, left: 48, right: 48 }, maxZoom: 10, duration: 800 },
-        );
-      } catch {
-        /* invalid bounds */
-      }
-    };
-
-    if (map.isStyleLoaded()) run();
-    else map.once("load", run);
-  }, [extent]);
+    if (!map || !map.isStyleLoaded()) return;
+    unbindLayerInteractions(map, layerHandlersRef.current);
+    applyStationLayers(map, tileUrlCacheRef.current, countryCode, showObserved, showNoObservation, legendMode);
+    bindLayerInteractions(map, layerHandlersRef.current);
+  }, [showObserved, showNoObservation, legendMode]);
 
   return <div ref={containerRef} className="h-full min-h-0 w-full min-w-0 flex-1" />;
 }
