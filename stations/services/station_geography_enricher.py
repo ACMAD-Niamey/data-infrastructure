@@ -16,6 +16,10 @@ from stations.models import CountryBoundary, Station
 
 log = logging.getLogger(__name__)
 
+_ISO3_NAME_FALLBACKS: dict[str, str] = {
+    "KEN": "Kenya",
+}
+
 
 @dataclass
 class StationGeographyUpdate:
@@ -63,10 +67,15 @@ class StationGeographyEnricher:
     def _iso3_to_country_name(iso3: str | None) -> str | None:
         if not iso3:
             return None
-        if pycountry is None:
+        cleaned = iso3.strip().upper()
+        if not cleaned:
             return None
-        country = pycountry.countries.get(alpha_3=iso3.upper())
-        return country.name if country else None
+        if pycountry is None:
+            return _ISO3_NAME_FALLBACKS.get(cleaned)
+        country = pycountry.countries.get(alpha_3=cleaned)
+        if country:
+            return country.name
+        return _ISO3_NAME_FALLBACKS.get(cleaned)
 
     @staticmethod
     def _to_iso3(country_code: str | None) -> str | None:
