@@ -52,7 +52,7 @@ jobs:
 
     env:
       PYTHONUNBUFFERED: 1
-      POSTGRES_USER: postgres     
+      POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: test_db
       POSTGRES_HOST: localhost
@@ -79,19 +79,18 @@ jobs:
       MINIO_ENDPOINT: minio:9000
       MINIO_VOLUME: ./minio_data
       MINIO_BUCKET: geodata
+      TIPG_DEBUG: True
+      LETSENCRYPT_VOLUME: ./letsencrypt
+      DOMAIN_MINIO_CONSOLE: console-minio.acmad.org
+      DOMAIN_MINIO: minio.acmad.org
+      DOMAIN: e-safari.acmad.org
+      PORTAL_RASTERS_VOLUME: ./data
 
       PG_STAC_POSTGRES_DB: pgstac
       PG_STAC_POSTGRES_USER: pgstac
       PG_STAC_POSTGRES_PASSWORD: pgstacpass
       PG_STAC_POSTGRES_HOST: pgstac
       PG_STAC_POSTGRES_PORT: 5432
-      PORTAL_RASTERS_VOLUME: ./data
-      TIPG_DEBUG: True
-      DOMAIN_MINIO_CONSOLE: console-minio.acmad.org
-      DOMAIN_MINIO: minio.acmad.org
-      DOMAIN: e-safari.acmad.org
-      
-
     steps:
     - uses: actions/checkout@v3
 
@@ -128,8 +127,29 @@ jobs:
     needs: frontend-build
     env:
       EMAIL: cloud@acmad.org
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: test_db
+      PG_STAC_POSTGRES_DB: pgstac
+      PG_STAC_POSTGRES_USER: pgstac
+      PG_STAC_POSTGRES_PASSWORD: pgstacpass
+      PG_STAC_POSTGRES_PORT: 5432
+      STATIC_VOLUME: ./staticfiles
+      MEDIA_VOLUME: ./media
+      PGDATA_VOLUME: ./geomgr_pgdata
+      PORTAL_RASTERS_VOLUME: ./data
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_VOLUME: ./minio_data
+      NGINX_CONFIG: default.conf
+      DOMAIN_MINIO_CONSOLE: console-minio.acmad.org
+      DOMAIN_MINIO: minio.acmad.org
+      DOMAIN: e-safari.acmad.org
     steps:
     - uses: actions/checkout@v3
+
+    - name: Validate compose interpolation
+      run: docker compose config >/dev/null
 
     - name: Docker compose smoke build (nginx)
       run: docker compose build nginx
