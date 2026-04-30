@@ -99,7 +99,6 @@ export function StationPanel({ stationCode, onClose }: StationPanelProps) {
   const [stats, setStats] = useState<StationStatsResponse | null>(null);
   const [windSpeedStats, setWindSpeedStats] = useState<StationStatsResponse | null>(null);
   const [windDirectionStats, setWindDirectionStats] = useState<StationStatsResponse | null>(null);
-  const [stationDetail, setStationDetail] = useState<StationDetailResponse | null>(null);
   const [isSeriesLoading, setIsSeriesLoading] = useState(false);
   const [hasLoadedSeries, setHasLoadedSeries] = useState(false);
   const [error, setError] = useState<string | null>(null);
