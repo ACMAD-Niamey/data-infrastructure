@@ -18,8 +18,8 @@ import {
   YAxis,
 } from "recharts";
 import { X } from "lucide-react";
-import { fetchStationStats } from "../api/stations";
-import type { StationStatsResponse } from "../api/types";
+import { fetchStationDetail, fetchStationStats } from "../api/stations";
+import type { StationDetailResponse, StationStatsResponse } from "../api/types";
 import { ChartRefreshingOverlay, ChartSkeleton } from "./ChartSkeleton";
 import { buildWindRoseRows, resolveWindVariables } from "./windRose";
 function formatAxisLabel(iso: string) {
@@ -99,10 +99,22 @@ export function StationPanel({ stationCode, onClose }: StationPanelProps) {
   const [stats, setStats] = useState<StationStatsResponse | null>(null);
   const [windSpeedStats, setWindSpeedStats] = useState<StationStatsResponse | null>(null);
   const [windDirectionStats, setWindDirectionStats] = useState<StationStatsResponse | null>(null);
+  const [stationDetail, setStationDetail] = useState<StationDetailResponse | null>(null);
   const [isSeriesLoading, setIsSeriesLoading] = useState(false);
   const [hasLoadedSeries, setHasLoadedSeries] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const windVars = useMemo(() => resolveWindVariables(DEFAULT_VARIABLE_OPTIONS), []);
+
+  // Derive available variable codes from station detail; fall back to DEFAULT_VARIABLE_OPTIONS
+  // while the detail is loading so the dropdown is not empty.
+  const availableVariables = useMemo(
+    () =>
+      stationDetail
+        ? stationDetail.variables.map((v) => v.variable_code)
+        : DEFAULT_VARIABLE_OPTIONS,
+    [stationDetail],
+  );
+
+  const windVars = useMemo(() => resolveWindVariables(availableVariables), [availableVariables]);
 
   const [variable, setVariable] = useState("temp");
   const [viewMode, setViewMode] = useState<ViewMode>("single");
@@ -121,6 +133,32 @@ export function StationPanel({ stationCode, onClose }: StationPanelProps) {
 
   const [start, setStart] = useState(defaultRange.start);
   const [end, setEnd] = useState(defaultRange.end);
+
+  useEffect(() => {
+    if (!stationCode) {
+      setStationDetail(null);
+      return;
+    }
+    let cancelled = false;
+    fetchStationDetail(stationCode)
+      .then((detail) => {
+        if (!cancelled) setStationDetail(detail);
+      })
+      .catch(() => {
+        // Non-fatal: windVars will fall back to DEFAULT_VARIABLE_OPTIONS.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [stationCode]);
+
+  // When available variables change (new station selected), reset variable selection
+  // to the first available code if the current selection is no longer valid.
+  useEffect(() => {
+    if (availableVariables.length > 0 && !availableVariables.includes(variable)) {
+      setVariable(availableVariables[0]);
+    }
+  }, [availableVariables]);
 
   useEffect(() => {
     if (!windVars.hasWindPair && viewMode === "wind") {
@@ -296,7 +334,7 @@ export function StationPanel({ stationCode, onClose }: StationPanelProps) {
             onChange={(e) => setVariable(e.target.value)}
             disabled={viewMode === "wind"}
           >
-            {DEFAULT_VARIABLE_OPTIONS.map((code) => (
+            {availableVariables.map((code) => (
               <option key={code} value={code}>
                 {code}
               </option>
