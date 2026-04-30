@@ -77,6 +77,11 @@ class Station(models.Model):
     )
     install_date = models.DateField(blank=True, null=True)
     is_active = models.BooleanField(default=True, db_index=True)
+    has_observations = models.BooleanField(
+        default=False,
+        db_index=True,
+        help_text="True when at least one observation exists for this station.",
+    )
     description = models.TextField(blank=True, null=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
