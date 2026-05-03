@@ -365,7 +365,7 @@ class StationStatsViewTests(TestCase):
 
 def _minimal_country_geom() -> MultiPolygon:
     ring = ((0.0, 0.0), (0.0, 1.0), (1.0, 1.0), (1.0, 0.0), (0.0, 0.0))
-    return MultiPolygon(Polygon(ring))
+    return MultiPolygon(Polygon(ring, srid=4326), srid=4326)
 
 
 class CountryBoundsOptionsTests(TestCase):
