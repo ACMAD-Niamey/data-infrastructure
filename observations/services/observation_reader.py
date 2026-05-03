@@ -317,29 +317,29 @@ class ObservationReader:
         }
 
     def country_bounds_options(self) -> list[dict[str, Any]]:
-        countries = self.station_facets().get("countries", [])
-        if not countries:
-            return []
+        """
+        Countries with map zoom bounds from ``country_boundaries`` only.
 
-        boundary_rows = CountryBoundary.objects.exclude(country_bounds__isnull=True).exclude(country_code__isnull=True)
-
-        def _norm(v: str) -> str:
-            return " ".join(v.strip().lower().split())
-
-        by_code = {row.country_code.strip().upper(): row for row in boundary_rows if row.country_code}
-        by_name = {_norm(row.country_name): row for row in boundary_rows if row.country_name}
-
+        Does not query stations or observations; rows without ``country_bounds``
+        or usable ``country_code`` are omitted.
+        """
+        qs = (
+            CountryBoundary.objects.filter(country_bounds__isnull=False)
+            .exclude(country_code__isnull=True)
+            .exclude(country_code="")
+            .values("country_code", "country_name", "country_bounds")
+            .order_by("country_name")
+        )
         options: list[dict[str, Any]] = []
-        for country in countries:
-            code = (country.get("value") or "").strip().upper()
-            label = (country.get("label") or "").strip()
-            if not code or not label:
+        for row in qs:
+            code_raw = row.get("country_code") or ""
+            label_raw = row.get("country_name") or ""
+            bounds = row.get("country_bounds")
+            code = code_raw.strip().upper()
+            label = label_raw.strip()
+            if not code or not label or not bounds:
                 continue
-            boundary = by_code.get(code) or by_name.get(_norm(label))
-            if not boundary or not boundary.country_bounds:
-                continue
-            options.append({"value": code, "label": label, "bounds": boundary.country_bounds})
-
+            options.append({"value": code, "label": label, "bounds": bounds})
         return options
 
     def time_series_by_station_code(

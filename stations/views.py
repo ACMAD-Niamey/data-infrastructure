@@ -27,7 +27,7 @@ log = logging.getLogger(__name__)
 _VALID_AGG = {"raw", "hourly", "daily", "monthly", "yearly"}
 _STATION_STATS_CACHE_TTL_SECONDS = 60 * 10
 _COUNTRY_BOUNDS_CACHE_TTL_SECONDS = 60 * 60
-_COUNTRY_BOUNDS_CACHE_KEY = "country_bounds:v1"
+_COUNTRY_BOUNDS_CACHE_KEY = "country_bounds:v2"
 
 
 def _default_end() -> str:
@@ -138,12 +138,16 @@ class CountryBoundsView(APIView):
     """
     GET /api/stations/country-bounds/
 
-    Returns country options with precomputed bounds for fast map zoom.
+    Returns country options from configured ``CountryBoundary`` rows with
+    precomputed bounds for map zoom (not filtered by stations or observations).
     """
 
     @extend_schema(
         summary="Country bounds options",
-        description="Countries with label/value and bounds payload for instant country zoom in the UI.",
+        description=(
+            "All country boundaries that have a non-empty country code and stored "
+            "bounds JSON—sorted by country name—for instant country zoom in the UI."
+        ),
         responses={200: CountryBoundsOptionSerializer(many=True)},
         tags=["Stations"],
     )
