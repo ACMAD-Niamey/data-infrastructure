@@ -54,6 +54,7 @@ services:
       - .:/app
       - ${STATIC_VOLUME}:/home/app/web/static
       - ${MEDIA_VOLUME}:/app/media
+      - ${WIS2_DOWNLOAD_MOUNT_VOLUME:-/mnt/blockstorage/wis2_downloads}:/app/blockstorage/wis2_downloads
     depends_on:
       - db
       - redis
@@ -68,6 +69,7 @@ services:
     command: python manage.py run_wis2_consumer
     volumes:
       - .:/app
+      - ${WIS2_DOWNLOAD_MOUNT_VOLUME:-/mnt/blockstorage/wis2_downloads}:/app/blockstorage/wis2_downloads
     depends_on:
       - db
       - redis
