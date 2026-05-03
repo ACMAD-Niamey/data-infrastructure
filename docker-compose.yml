@@ -61,6 +61,22 @@ services:
       - minio
     networks:
       - data_infra_network
+  
+  celery-beat:
+    container_name: geodatamanager_celery_beat
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app
+    env_file:
+      - .env
+    restart: "unless-stopped"
+    depends_on:
+      - redis
+    networks:
+      - data_infra_network
+    command: celery -A geodatamanager beat -l info
 
   wis2_consumer:
     build: .

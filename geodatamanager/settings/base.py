@@ -178,7 +178,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = "en-us"
 
-TIME_ZONE = "UTC"
+TIME_ZONE = "Africa/Nairobi"
 
 USE_I18N = True
 
@@ -209,7 +209,7 @@ MEDIA_URL = "/media/"
 WIS2_DOWNLOAD_DIR = BASE_DIR / "data" / "wis2_downloads"
 WIS2_KEEP_DOWNLOADED_FILES = True
 WIS2_MAX_PAYLOAD_PREVIEW_CHARS = 2000
-WIS2_DOWNLOAD_RETENTION_DAYS = int(os.getenv("WIS2_DOWNLOAD_RETENTION_DAYS", "7"))
+WIS2_DOWNLOAD_RETENTION_DAYS = int(os.getenv("WIS2_DOWNLOAD_RETENTION_DAYS", "1"))
 
 
 # Celery settings
@@ -218,7 +218,7 @@ CELERY_RESULT_BACKEND = CELERY_BROKER_URL
 CELERY_BEAT_SCHEDULE = {
     "cleanup-wis2-downloads-daily": {
         "task": "weather_station_ingestion.tasks.cleanup_wis2_downloads_task",
-        "schedule": crontab(hour=3, minute=0),
+        "schedule": crontab(hour=int(os.getenv("CELERY_BEAT_CLEANUP_WIS2_DOWNLOADS_SCHEDULE_HOUR", "21")), minute=int(os.getenv("CELERY_BEAT_CLEANUP_WIS2_DOWNLOADS_SCHEDULE_MINUTE", "20"))),
     },
 }
 
