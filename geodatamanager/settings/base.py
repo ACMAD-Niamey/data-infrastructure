@@ -206,7 +206,10 @@ STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 MEDIA_ROOT = BASE_DIR / "media"
 MEDIA_URL = "/media/"
 
-WIS2_DOWNLOAD_DIR = BASE_DIR / "data" / "wis2_downloads"
+WIS2_DOWNLOAD_DIR = Path(
+    os.getenv("WIS2_DOWNLOAD_DIR", str(BASE_DIR / "data" / "wis2_downloads"))
+)
+
 WIS2_KEEP_DOWNLOADED_FILES = True
 WIS2_MAX_PAYLOAD_PREVIEW_CHARS = 2000
 WIS2_DOWNLOAD_RETENTION_DAYS = int(os.getenv("WIS2_DOWNLOAD_RETENTION_DAYS", "1"))
