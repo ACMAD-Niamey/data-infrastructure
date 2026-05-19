@@ -6,10 +6,12 @@ from unittest.mock import MagicMock, patch
 from django.test import TestCase
 from rest_framework.test import APIClient
 
+from django import forms
 from django.core.exceptions import ValidationError
 from django.forms import ModelForm
+from django.utils.datastructures import MultiValueDict
 
-from catalog.models import LayerColorStop
+from catalog.models import Layer, LayerColorStop
 from catalog.style.band_defaults import (
     DEFAULT_RGB_BAND_VISUALIZATION_PARAMS,
     ensure_band_tile_params,
@@ -408,6 +410,50 @@ class LegendMapWidgetHelperTests(unittest.TestCase):
         self.assertIn("Low", html)
         self.assertIn("#d73027", html)
         self.assertIn("data-hex-color-widget", html)
+        self.assertIn("data-legend-map-template", html)
+
+    def test_value_from_datadict_returns_json_string(self):
+        widget = LegendMapWidget()
+        data = MultiValueDict({"legend": ['{"Low":"#ff0000"}']})
+        result = widget.value_from_datadict(data, {}, "legend")
+        self.assertIsInstance(result, str)
+        self.assertEqual(json.loads(result), {"Low": "#ff0000"})
+
+    def test_value_from_datadict_empty_returns_empty_object_string(self):
+        widget = LegendMapWidget()
+        data = MultiValueDict({"legend": [""]})
+        result = widget.value_from_datadict(data, {}, "legend")
+        self.assertEqual(result, "{}")
+
+
+class LegendMapWidgetJSONFieldTests(unittest.TestCase):
+    def test_bound_field_value_after_invalid_submit(self):
+        class TestForm(forms.Form):
+            legend = forms.JSONField(widget=LegendMapWidget())
+            title = forms.CharField(required=True)
+
+        form = TestForm(data={"legend": '{"Low":"#ff0000"}', "title": ""})
+        self.assertFalse(form.is_valid())
+        # prepare_value serializes for the widget; must not raise TypeError from bound_data
+        displayed = form["legend"].value()
+        self.assertIsInstance(displayed, str)
+        self.assertEqual(json.loads(displayed), {"Low": "#ff0000"})
+
+    def test_valid_submit_parses_legend(self):
+        class TestForm(forms.Form):
+            legend = forms.JSONField(widget=LegendMapWidget())
+
+        form = TestForm(data={"legend": '{"A":"#aabbcc"}'})
+        self.assertTrue(form.is_valid())
+        self.assertEqual(form.cleaned_data["legend"], {"A": "#aabbcc"})
+
+
+class LayerLegendCleanTests(unittest.TestCase):
+    def test_clean_coerces_none_json_fields_to_empty_dict(self):
+        layer = Layer(title="Test", layer_type="raster", legend=None, tile_params=None)
+        layer.clean()
+        self.assertEqual(layer.legend, {})
+        self.assertEqual(layer.tile_params, {})
 
 
 # ---------------------------------------------------------------------------

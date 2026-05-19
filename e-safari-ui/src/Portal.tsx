@@ -182,51 +182,59 @@ const Portal = ({ language }: PortalProps) => {
       return;
     }
 
-    const previousRasterId = loadedRasterIdRef.current;
-    if (previousRasterId) {
-      remove_image_layer(map, previousRasterId);
-      loadedRasterIdRef.current = null;
-    }
+    const applyRasterLayer = () => {
+      const previousRasterId = loadedRasterIdRef.current;
+      if (previousRasterId) {
+        remove_image_layer(map, previousRasterId);
+        loadedRasterIdRef.current = null;
+      }
 
-    if (!activeLayer || activeLayer.type !== 'raster') {
-      useLegendStore.getState().clearLegends();
-      return;
-    }
-
-    const cadence = activeLayer.dataset.cadence;
-    const selection = layerSelections[activeLayer.id] || {};
-    const vizDate = buildVisualizationDate(cadence, selection);
-    if (!vizDate) {
-      return;
-    }
-
-    const rasterLayerId = `raster-${activeLayer.id}`;
-
-    fetchDatasetVisualization({
-      datasetId: activeLayer.dataset.id,
-      cadence,
-      date: vizDate,
-    })
-      .then((payload) => {
-        if (loadedRasterIdRef.current && loadedRasterIdRef.current !== rasterLayerId) {
-          remove_image_layer(map, loadedRasterIdRef.current);
-        }
-        if (!payload.tileUrl) {
-          return;
-        }
-        add_image_layer(map, payload.tileUrl, rasterLayerId, true, payload.bounds, true);
-        loadedRasterIdRef.current = rasterLayerId;
-
+      if (!activeLayer || activeLayer.type !== 'raster') {
         useLegendStore.getState().clearLegends();
-        const legendMap = activeLayer.legend;
-        if (legendMap && Object.keys(legendMap).length > 0) {
-          const legendNode = renderLegend(legendMap, activeLayer.title);
-          addLegendOnce(legendNode, activeLayer.title);
-        }
+        return;
+      }
+
+      const cadence = activeLayer.dataset.cadence;
+      const selection = layerSelections[activeLayer.id] || {};
+      const vizDate = buildVisualizationDate(cadence, selection);
+      if (!vizDate) {
+        return;
+      }
+
+      const rasterLayerId = `raster-${activeLayer.id}`;
+
+      fetchDatasetVisualization({
+        datasetId: activeLayer.dataset.id,
+        cadence,
+        date: vizDate,
       })
-      .catch(() => {
-        remove_image_layer(map, rasterLayerId);
-      });
+        .then((payload) => {
+          if (loadedRasterIdRef.current && loadedRasterIdRef.current !== rasterLayerId) {
+            remove_image_layer(map, loadedRasterIdRef.current);
+          }
+          if (!payload.tileUrl) {
+            return;
+          }
+          add_image_layer(map, payload.tileUrl, rasterLayerId, true, payload.bounds, true);
+          loadedRasterIdRef.current = rasterLayerId;
+
+          useLegendStore.getState().clearLegends();
+          const legendMap = activeLayer.legend;
+          if (legendMap && Object.keys(legendMap).length > 0) {
+            const legendNode = renderLegend(legendMap, activeLayer.title);
+            addLegendOnce(legendNode, activeLayer.title);
+          }
+        })
+        .catch(() => {
+          remove_image_layer(map, rasterLayerId);
+        });
+    };
+
+    if (map.isStyleLoaded()) {
+      applyRasterLayer();
+    } else {
+      map.once('load', applyRasterLayer);
+    }
   }, [activeLayer, layerSelections, mapRef]);
 
   return (
@@ -265,7 +273,7 @@ const Portal = ({ language }: PortalProps) => {
           />
 
           <Button
-            className="lg:hidden absolute bottom-4 right-4 z-[1000] shadow-lg"
+            className="lg:hidden absolute bottom-4 left-4 z-[1000] shadow-lg"
             size="lg"
             onClick={() => setShowMobilePanel(true)}
           >
