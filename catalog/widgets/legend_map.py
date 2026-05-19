@@ -95,16 +95,19 @@ class LegendMapWidget(forms.Widget):
         return "{}"
 
     def value_from_datadict(self, data, files, name):
+        """Return a JSON string — required by forms.JSONField.bound_data()."""
         raw = data.get(name, "{}")
         if not raw:
-            return {}
+            return "{}"
+        if isinstance(raw, dict):
+            return json.dumps(raw, separators=(",", ":"))
         try:
             parsed = json.loads(raw)
         except (TypeError, json.JSONDecodeError):
-            return {}
+            return "{}"
         if not isinstance(parsed, dict):
-            return {}
-        return parsed
+            return "{}"
+        return json.dumps(parsed, separators=(",", ":"))
 
     def get_context(self, name, value, attrs):
         context = super().get_context(name, value, attrs)

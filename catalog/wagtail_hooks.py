@@ -17,12 +17,15 @@ def hex_color_admin_css():
 
 
 @hooks.register("insert_global_admin_js")
-def hex_color_admin_js():
-    scripts = format_html(
-        '<script src="{}"></script>',
-        static("catalog/js/hex_color_widget.js"),
-    ) + format_html(
-        '<script src="{}"></script>',
-        static("catalog/js/legend_map_widget.js"),
+def catalog_admin_js():
+    return mark_safe(
+        format_html('<script src="{}"></script>', static("catalog/js/hex_color_widget.js"))
+        + format_html('<script src="{}"></script>', static("catalog/js/legend_map_widget.js"))
     )
-    return mark_safe(scripts)
+
+
+@hooks.register("insert_editor_js")
+def catalog_editor_js():
+    return mark_safe(
+        format_html('<script src="{}"></script>', static("catalog/js/legend_map_widget.js"))
+    )
