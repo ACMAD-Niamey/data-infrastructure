@@ -3,7 +3,6 @@ import os
 from collections.abc import Mapping
 import requests
 
-from catalog.models import Layer
 from catalog.style.normalize import split_tile_params
 from catalog.style.titiler_export import (
     build_colormap_for_titiler,

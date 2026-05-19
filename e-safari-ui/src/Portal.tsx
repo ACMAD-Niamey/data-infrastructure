@@ -43,6 +43,9 @@ const Portal = ({ language }: PortalProps) => {
   const [layerSelectionOptions, setLayerSelectionOptions] = useState<
     Record<string, Partial<Record<SelectorKey, LayerSelectOption[]>>>
   >({});
+  const [availabilityCache, setAvailabilityCache] = useState<
+    Record<string, { available: string[]; max: string }>
+  >({});
   const loadedRasterIdRef = useRef<string | null>(null);
 
   const {
@@ -86,6 +89,7 @@ const Portal = ({ language }: PortalProps) => {
     });
   };
 
+  // Effect 1: Fetch availability when dataset/cadence changes
   useEffect(() => {
     if (!activeLayer || activeLayer.type !== 'raster') {
       return;
@@ -93,29 +97,22 @@ const Portal = ({ language }: PortalProps) => {
 
     const cadence = activeLayer.dataset.cadence;
     const datasetId = activeLayer.dataset.id;
+    const cacheKey = `${datasetId}-${cadence}`;
+
+    // Skip if already cached
+    if (availabilityCache[cacheKey]) {
+      return;
+    }
+
     fetchDatasetAvailability({ datasetId, cadence })
       .then((availability) => {
         const available = availability.options.map((option) => option.value);
-
-        const nextOptions: Partial<Record<SelectorKey, LayerSelectOption[]>> = {};
-        activeLayer.selectors.forEach((selector) => {
-          const fromApi = optionsFromAvailability(
-            available,
-            selector.key,
-            layerSelections[activeLayer.id] || {},
-            language,
-          );
-          nextOptions[selector.key] =
-            fromApi.length > 0
-              ? fromApi
-              : getFallbackSelectorOptions(selector.key, language);
-        });
-
-        setLayerSelectionOptions((previous) => ({
+        setAvailabilityCache((previous) => ({
           ...previous,
-          [activeLayer.id]: nextOptions,
+          [cacheKey]: { available, max: availability.max },
         }));
 
+        // Set default selection if none exists
         const defaultSelection = defaultSelectionFromAvailability(
           cadence,
           available,
@@ -134,16 +131,50 @@ const Portal = ({ language }: PortalProps) => {
         });
       })
       .catch(() => {
-        const fallback: Partial<Record<SelectorKey, LayerSelectOption[]>> = {};
-        activeLayer.selectors.forEach((selector) => {
-          fallback[selector.key] = getFallbackSelectorOptions(selector.key, language);
-        });
-        setLayerSelectionOptions((previous) => ({
+        // On error, set empty cache to allow retry
+        setAvailabilityCache((previous) => ({
           ...previous,
-          [activeLayer.id]: fallback,
+          [cacheKey]: { available: [], max: '' },
         }));
       });
-  }, [activeLayer?.id, activeLayer?.dataset.id, activeLayer?.dataset.cadence, language, setLayerSelections]);
+  }, [activeLayer?.id, activeLayer?.dataset.id, activeLayer?.dataset.cadence, setLayerSelections]);
+
+  // Effect 2: Recompute options whenever active layer selection changes
+  useEffect(() => {
+    if (!activeLayer || activeLayer.type !== 'raster') {
+      return;
+    }
+
+    const cadence = activeLayer.dataset.cadence;
+    const datasetId = activeLayer.dataset.id;
+    const cacheKey = `${datasetId}-${cadence}`;
+    const cached = availabilityCache[cacheKey];
+
+    if (!cached) {
+      return;
+    }
+
+    const currentSelection = layerSelections[activeLayer.id] || {};
+    const nextOptions: Partial<Record<SelectorKey, LayerSelectOption[]>> = {};
+
+    activeLayer.selectors.forEach((selector) => {
+      const fromApi = optionsFromAvailability(
+        cached.available,
+        selector.key,
+        currentSelection,
+        language,
+      );
+      nextOptions[selector.key] =
+        fromApi.length > 0
+          ? fromApi
+          : getFallbackSelectorOptions(selector.key, language);
+    });
+
+    setLayerSelectionOptions((previous) => ({
+      ...previous,
+      [activeLayer.id]: nextOptions,
+    }));
+  }, [activeLayer?.id, activeLayer?.dataset.id, activeLayer?.dataset.cadence, activeLayer?.selectors, layerSelections, availabilityCache, language]);
 
   useEffect(() => {
     const map = mapRef?.current;
