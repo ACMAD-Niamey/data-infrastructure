@@ -1,9 +1,9 @@
-import { DataLayer, LayerSelectOption, LayerSelectionValue, SelectorKey } from "../components/layers/layerRegistry";
+import type { LayerSelectOption, LayerSelectionValue, SelectorKey } from "../types/catalogLayer";
 import { catalogBaseUrl, layersApiBaseUrl } from "../config/api";
 import axios from "axios";
 
 type FetchSelectorOptionsParams = {
-  layerId: DataLayer;
+  layerId: string;
   field: SelectorKey;
   selection?: LayerSelectionValue;
 };
@@ -129,11 +129,11 @@ const toBoundsObject = (bounds?: [number, number, number, number]): BoundsObject
   return { minx, miny, maxx, maxy };
 };
 
-export const fetchSatelliteAvailability = async ({
-  datasetId = "drone-image",
+export const fetchDatasetAvailability = async ({
+  datasetId,
   cadence = "monthly",
 }: {
-  datasetId?: string;
+  datasetId: string;
   cadence?: string;
 }): Promise<SatelliteAvailabilityResult> => {
   const response = await catalogClient.get<SatelliteAvailabilityResponse>(
@@ -155,12 +155,12 @@ export const fetchSatelliteAvailability = async ({
   };
 };
 
-export const fetchSatelliteVisualization = async ({
-  datasetId = "drone-image",
+export const fetchDatasetVisualization = async ({
+  datasetId,
   cadence = "monthly",
   date,
 }: {
-  datasetId?: string;
+  datasetId: string;
   cadence?: string;
   date: string;
 }): Promise<SatelliteVisualizationResult> => {
@@ -177,3 +177,9 @@ export const fetchSatelliteVisualization = async ({
     bounds: toBoundsObject(payload.titiler_info?.bounds),
   };
 };
+
+/** @deprecated Use fetchDatasetAvailability */
+export const fetchSatelliteAvailability = fetchDatasetAvailability;
+
+/** @deprecated Use fetchDatasetVisualization */
+export const fetchSatelliteVisualization = fetchDatasetVisualization;

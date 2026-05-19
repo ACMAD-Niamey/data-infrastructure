@@ -28,6 +28,7 @@ from catalog.style.titiler_export import (
     build_colormap_for_titiler,
     compose_titiler_tilejson_params,
 )
+from catalog.ui_layers import dataset_description_payload
 
 
 # ---------------------------------------------------------------------------
@@ -47,7 +48,7 @@ def _make_pgstac_cursor(dates, min_d=None, max_d=None):
     return mock_cursor
 
 
-def _make_layer(layer_id="spi-layer", dataset_id="spi"):
+def _make_dataset(dataset_id="spi", project_slug="e-safari", with_style=False):
     mock_dataset = MagicMock()
     mock_dataset.dataset_id = dataset_id
     mock_dataset.title = dataset_id.upper()
@@ -55,22 +56,65 @@ def _make_layer(layer_id="spi-layer", dataset_id="spi"):
     mock_dataset.dataset_type = "raster"
     mock_dataset.stac_collection_id = dataset_id
     mock_dataset.is_published_for_ui = True
-    mock_dataset.get_parent.return_value = MagicMock(slug="acmad")
+    mock_dataset.description = None
+    mock_dataset.color_class = "text-blue-600"
+    mock_dataset.get_parent.return_value = MagicMock(slug=project_slug)
+    mock_dataset.last_published_at = None
 
-    mock_lyr = MagicMock()
-    mock_lyr.layer_id = layer_id
-    mock_lyr.title = "Test Layer"
-    mock_lyr.layer_type = "raster"
-    mock_lyr.dataset = mock_dataset
-    mock_lyr.tile_template = "/tiles/{z}/{x}/{y}"
-    mock_lyr.tile_params = {}
-    mock_lyr.default_visible = True
-    mock_lyr.opacity = 0.85
-    mock_lyr.minzoom = 0
-    mock_lyr.maxzoom = 12
-    mock_lyr.legend = {}
-    mock_lyr.updated_at.isoformat.return_value = "2026-04-28T00:00:00"
-    return mock_lyr
+    mock_icon_image = MagicMock()
+    mock_icon_image.file.url = "/media/icons/test.png"
+
+    mock_icon = MagicMock()
+    mock_icon.slug = "test-icon"
+    mock_icon.image = mock_icon_image
+    mock_icon.image_id = 1
+
+    mock_dataset.icon = mock_icon
+    mock_dataset.icon_id = 1
+
+    if with_style:
+        mock_style = MagicMock()
+        mock_style.layer_type = "raster"
+        mock_style.tile_template = "/tiles/{z}/{x}/{y}"
+        mock_style.tile_params = {}
+        mock_style.default_visible = True
+        mock_style.opacity = 0.85
+        mock_style.minzoom = 0
+        mock_style.maxzoom = 12
+        mock_style.legend = {"low": "#0000ff", "high": "#ff0000"}
+        mock_style.updated_at.isoformat.return_value = "2026-04-28T00:00:00"
+        mock_dataset.style_config = mock_style
+    else:
+        mock_dataset.style_config = None
+
+    return mock_dataset
+
+
+# ---------------------------------------------------------------------------
+# dataset_description_payload
+# ---------------------------------------------------------------------------
+
+
+class DatasetDescriptionPayloadTests(unittest.TestCase):
+    def test_empty_description(self):
+        dataset = MagicMock()
+        dataset.description = None
+        self.assertEqual(dataset_description_payload(dataset), {"html": "", "plain": ""})
+
+    def test_plain_string_description(self):
+        dataset = MagicMock()
+        dataset.description = "<p>Remote sensing overview</p>"
+        payload = dataset_description_payload(dataset)
+        self.assertIn("Remote sensing", payload["plain"])
+        self.assertIn("Remote sensing", payload["html"])
+
+    def test_richtext_object_description(self):
+        dataset = MagicMock()
+        rich = MagicMock()
+        rich.source = "<p>From RichText source</p>"
+        dataset.description = rich
+        payload = dataset_description_payload(dataset)
+        self.assertEqual(payload["plain"], "From RichText source")
 
 
 # ---------------------------------------------------------------------------
@@ -82,39 +126,81 @@ class UILayersViewTests(TestCase):
     def setUp(self):
         self.client = APIClient()
 
-    @patch("catalog.api.Layer")
-    def test_returns_200_with_published_layers(self, mock_layer_cls):
-        mock_layer_cls.objects.select_related.return_value.filter.return_value.order_by.return_value = [
-            _make_layer()
-        ]
+    def test_requires_project_query_param(self):
         response = self.client.get("/api/catalog/ui/layers")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("project", response.data["detail"])
+
+    @patch("catalog.api.ProjectPage")
+    @patch("catalog.api.datasets_for_project")
+    def test_returns_200_with_published_layers(self, mock_datasets_for_project, mock_project_page):
+        mock_project_page.objects.live.return_value.filter.return_value.exists.return_value = True
+        mock_datasets_for_project.return_value = [_make_dataset()]
+        response = self.client.get("/api/catalog/ui/layers?project=e-safari")
         self.assertEqual(response.status_code, 200)
         self.assertIn("layers", response.data)
+        self.assertEqual(response.data["project"], "e-safari")
         self.assertEqual(len(response.data["layers"]), 1)
 
-    @patch("catalog.api.Layer")
-    def test_returns_200_with_empty_layer_list(self, mock_layer_cls):
-        mock_layer_cls.objects.select_related.return_value.filter.return_value.order_by.return_value = []
-        response = self.client.get("/api/catalog/ui/layers")
+    @patch("catalog.api.ProjectPage")
+    @patch("catalog.api.datasets_for_project")
+    def test_returns_200_with_empty_layer_list(self, mock_datasets_for_project, mock_project_page):
+        mock_project_page.objects.live.return_value.filter.return_value.exists.return_value = True
+        mock_datasets_for_project.return_value = []
+        response = self.client.get("/api/catalog/ui/layers?project=e-safari")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["layers"], [])
 
-    @patch("catalog.api.Layer")
-    def test_response_contains_version_and_layers_keys(self, mock_layer_cls):
-        mock_layer_cls.objects.select_related.return_value.filter.return_value.order_by.return_value = []
-        response = self.client.get("/api/catalog/ui/layers")
+    @patch("catalog.api.ProjectPage")
+    @patch("catalog.api.datasets_for_project")
+    def test_response_contains_version_and_layers_keys(self, mock_datasets_for_project, mock_project_page):
+        mock_project_page.objects.live.return_value.filter.return_value.exists.return_value = True
+        mock_datasets_for_project.return_value = []
+        response = self.client.get("/api/catalog/ui/layers?project=e-safari")
         self.assertIn("version", response.data)
+        self.assertIn("project", response.data)
         self.assertIn("layers", response.data)
 
-    @patch("catalog.api.Layer")
-    def test_layer_item_contains_expected_fields(self, mock_layer_cls):
-        mock_layer_cls.objects.select_related.return_value.filter.return_value.order_by.return_value = [
-            _make_layer("ndvi-layer", "ndvi")
-        ]
-        response = self.client.get("/api/catalog/ui/layers")
+    @patch("catalog.api.ProjectPage")
+    @patch("catalog.api.datasets_for_project")
+    def test_layer_item_uses_dataset_id_and_includes_icon(self, mock_datasets_for_project, mock_project_page):
+        mock_project_page.objects.live.return_value.filter.return_value.exists.return_value = True
+        mock_datasets_for_project.return_value = [_make_dataset("ndvi")]
+        response = self.client.get("/api/catalog/ui/layers?project=e-safari")
         layer = response.data["layers"][0]
-        for field in ("id", "title", "type", "dataset", "tile", "ui", "legend"):
+        self.assertEqual(layer["id"], "ndvi")
+        self.assertEqual(layer["dataset"]["id"], "ndvi")
+        for field in (
+            "id",
+            "title",
+            "type",
+            "description",
+            "icon",
+            "dataset",
+            "selection",
+            "tile",
+            "ui",
+            "legend",
+        ):
             self.assertIn(field, layer)
+        self.assertIn("url", layer["icon"])
+        self.assertIn("plain", layer["description"])
+
+    @patch("catalog.api.ProjectPage")
+    @patch("catalog.api.datasets_for_project")
+    def test_style_config_merges_legend(self, mock_datasets_for_project, mock_project_page):
+        mock_project_page.objects.live.return_value.filter.return_value.exists.return_value = True
+        mock_datasets_for_project.return_value = [_make_dataset("spi", with_style=True)]
+        response = self.client.get("/api/catalog/ui/layers?project=e-safari")
+        layer = response.data["layers"][0]
+        self.assertEqual(layer["legend"], {"low": "#0000ff", "high": "#ff0000"})
+        self.assertEqual(layer["tile"]["template"], "/tiles/{z}/{x}/{y}")
+
+    @patch("catalog.api.ProjectPage")
+    def test_unknown_project_returns_404(self, mock_project_page):
+        mock_project_page.objects.live.return_value.filter.return_value.exists.return_value = False
+        response = self.client.get("/api/catalog/ui/layers?project=missing")
+        self.assertEqual(response.status_code, 404)
 
 
 # ---------------------------------------------------------------------------

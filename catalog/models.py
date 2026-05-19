@@ -7,8 +7,11 @@ from wagtail.admin.panels import FieldPanel, InlinePanel, MultiFieldPanel
 
 from catalog.widgets import HexColorWidget, LegendMapWidget
 from wagtail.fields import RichTextField
+from wagtail.images import get_image_model
 from wagtail.models import Orderable, Page
 from wagtail.snippets.models import register_snippet
+
+Image = get_image_model()
 
 
 class ProjectPage(Page):
@@ -60,8 +63,30 @@ class DatasetPage(Page):
     # controls what shows up in the UI config API
     is_published_for_ui = models.BooleanField(default=False)
 
+    icon = models.ForeignKey(
+        "catalog.LayerIcon",
+        on_delete=models.PROTECT,
+        related_name="datasets",
+        null=True,
+        blank=True,
+        help_text="Toolbar icon for this dataset in the e-safari UI.",
+    )
+    sort_order = models.PositiveIntegerField(
+        default=0,
+        help_text="Lower values appear first in the UI layer list.",
+    )
+    color_class = models.CharField(
+        max_length=80,
+        default="text-blue-600",
+        blank=True,
+        help_text="Tailwind text color class for icon accent (e.g. text-green-600).",
+    )
+
     content_panels = Page.content_panels + [
         FieldPanel("description"),
+        FieldPanel("icon"),
+        FieldPanel("sort_order"),
+        FieldPanel("color_class"),
         FieldPanel("dataset_id"),
         FieldPanel("dataset_type"),
         FieldPanel("cadence"),
@@ -78,6 +103,33 @@ STYLE_SCHEME_CHOICES = [
     ("linear", "Linear"),
     ("band", "Band"),
 ]
+
+
+@register_snippet
+class LayerIcon(models.Model):
+    """Reusable toolbar icon for catalog layers (upload SVG/PNG in Wagtail)."""
+
+    title = models.CharField(max_length=120)
+    slug = models.SlugField(max_length=80, unique=True)
+    image = models.ForeignKey(
+        Image,
+        on_delete=models.PROTECT,
+        related_name="+",
+    )
+
+    panels = [
+        FieldPanel("title"),
+        FieldPanel("slug"),
+        FieldPanel("image"),
+    ]
+
+    class Meta:
+        ordering = ["title"]
+        verbose_name = "Layer icon"
+        verbose_name_plural = "Layer icons"
+
+    def __str__(self):
+        return self.title
 
 
 class LayerColorStop(Orderable):
@@ -101,23 +153,40 @@ class LayerColorStop(Orderable):
 
 @register_snippet
 class Layer(ClusterableModel):
+    """Optional raster styling config (1:1 with a DatasetPage). Listing uses the dataset."""
+
+    class Meta:
+        ordering = ["title"]
+        verbose_name = "Layer style"
+        verbose_name_plural = "Layer styles"
+
     LAYER_TYPES = [
         ("raster", "Raster"),
         ("vector", "Vector"),
     ]
 
     title = models.CharField(max_length=120)
-    layer_id = models.SlugField(max_length=120, unique=True)
+    layer_id = models.SlugField(
+        max_length=120,
+        unique=True,
+        blank=True,
+        help_text="Defaults to dataset_id. Use a distinct id when multiple styles share one dataset.",
+    )
 
-    dataset = models.ForeignKey(
+    dataset = models.OneToOneField(
         "catalog.DatasetPage",
         on_delete=models.CASCADE,
-        related_name="layer_configs",
+        related_name="style_config",
     )
 
     layer_type = models.CharField(max_length=10, choices=LAYER_TYPES)
 
-    tile_template = models.CharField(max_length=300)
+    description = RichTextField(
+        blank=True,
+        help_text="Optional layer-specific info text when multiple styles reference the same dataset.",
+    )
+
+    tile_template = models.CharField(max_length=300, blank=True, default="")
     tile_params = models.JSONField(default=dict, blank=True)
 
     style_scheme = models.CharField(
@@ -164,9 +233,10 @@ class Layer(ClusterableModel):
     updated_at = models.DateTimeField(auto_now=True)
 
     panels = [
+        FieldPanel("dataset"),
         FieldPanel("title"),
         FieldPanel("layer_id"),
-        FieldPanel("dataset"),
+        FieldPanel("description"),
         FieldPanel("layer_type"),
         FieldPanel("tile_template"),
         MultiFieldPanel(
@@ -192,10 +262,17 @@ class Layer(ClusterableModel):
     ]
 
     def __str__(self):
+        if self.dataset_id:
+            return f"{self.title} ({self.dataset})"
         return self.title
 
     def clean(self):
         super().clean()
+        if self.dataset_id:
+            if not self.layer_id:
+                self.layer_id = self.dataset.dataset_id
+            elif self.layer_id != self.dataset.dataset_id:
+                pass  # allow distinct layer_id for future multi-style datasets
         from catalog.style.normalize import normalize_tile_params
         from catalog.style.parse_qml import parse_qml_raster_pseudocolor
         from catalog.style.parse_sld import parse_sld_raster_colormap
@@ -284,6 +361,8 @@ class Layer(ClusterableModel):
                 self.style_import.delete(save=False)
 
     def save(self, *args, **kwargs):
+        if self.dataset_id and not self.layer_id:
+            self.layer_id = self.dataset.dataset_id
         pending = getattr(self, "_pending_style_import", None)
         if pending:
             self._skip_tile_sync = True

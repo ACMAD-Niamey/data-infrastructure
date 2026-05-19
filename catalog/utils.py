@@ -110,15 +110,23 @@ class DatasetVisualization:
         Returns:
             dict or None: Tile params JSON for visualization.
         """
-        dataset_info = (
-            Layer.objects.filter(dataset__dataset_id=self.dataset_id)
-            .values("tile_params", "legend")
-            .first()
-        )
+        from catalog.models import DatasetPage
 
-        self.legend_dict = dataset_info["legend"] if dataset_info else None
+        try:
+            dataset_page = DatasetPage.objects.select_related("style_config").get(
+                dataset_id=self.dataset_id
+            )
+        except DatasetPage.DoesNotExist:
+            self.legend_dict = None
+            return None
 
-        return dataset_info["tile_params"] if dataset_info else None
+        style = getattr(dataset_page, "style_config", None)
+        if not style:
+            self.legend_dict = None
+            return None
+
+        self.legend_dict = style.legend or None
+        return style.tile_params or None
 
     def get_s3_url(self):
         """for now just get the first item in the stack"""

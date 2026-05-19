@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Map from './components/map';
 import { DataPanel } from './components/DataPanel';
 import { LayerControls } from './components/LayerControls';
@@ -8,14 +8,26 @@ import { Menu } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Language } from './types';
 import RightBar from './components/RightBar';
-import { DataLayer, layerRegistry, LayerSelectionValue, LayerSelectOption, SelectorKey } from './components/layers/layerRegistry';
 import { add_image_layer, remove_image_layer } from './components/Maputils.js';
 import { useMap } from './components/MapContext.jsx';
-import { fetchSelectorOptions, fetchSatelliteAvailability, fetchSatelliteVisualization, getFallbackSelectorOptions } from './services/layersApi';
+import { useCatalogLayers } from './hooks/useCatalogLayers';
+import { buildVisualizationDate } from './lib/cadenceSelectors';
+import {
+  defaultSelectionFromAvailability,
+  optionsFromAvailability,
+} from './lib/availabilitySelectors';
+import {
+  fetchDatasetAvailability,
+  fetchDatasetVisualization,
+  getFallbackSelectorOptions,
+} from './services/layersApi';
+import type { LayerSelectOption, LayerSelectionValue, SelectorKey } from './types/catalogLayer';
+import { addLegendOnce, renderLegend } from './components/LegendUtils';
+import { useLegendStore } from './components/stores/useLegendStore';
 
 export interface SelectedFeature {
   type: string;
-  data: any;
+  data: unknown;
   id: string;
 }
 
@@ -23,247 +35,204 @@ type PortalProps = {
   language: Language;
 };
 
-const Portal = ({language}: PortalProps) => {
-    const [activeLayer, setActiveLayer] = useState<DataLayer>('heat');
+const Portal = ({ language }: PortalProps) => {
   const [rightBarTab, setRightBarTab] = useState<'Legend' | 'Analysis'>('Legend');
-    // const [language, setLanguage] = useState<Language>('en');
-    const [showMobilePanel, setShowMobilePanel] = useState(false);
-    const [selectedFeature, setSelectedFeature] = useState<SelectedFeature | null>(null);
-    const [selectedYear, setSelectedYear] = useState('2024');
-    const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
-    const [layerSelections, setLayerSelections] = useState<Record<DataLayer, LayerSelectionValue>>(
-      () =>
-        layerRegistry.reduce((accumulator, layer) => {
-          accumulator[layer.id] = {};
-          return accumulator;
-        }, {} as Record<DataLayer, LayerSelectionValue>)
-    );
-    const [layerSelectionOptions, setLayerSelectionOptions] = useState<
-      Record<DataLayer, Partial<Record<SelectorKey, LayerSelectOption[]>>>
-    >(() => layerRegistry.reduce((accumulator, layer) => {
-      accumulator[layer.id] = {};
-      return accumulator;
-    }, {} as Record<DataLayer, Partial<Record<SelectorKey, LayerSelectOption[]>>>));
+  const [showMobilePanel, setShowMobilePanel] = useState(false);
+  const [selectedFeature, setSelectedFeature] = useState<SelectedFeature | null>(null);
+  const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
+  const [layerSelectionOptions, setLayerSelectionOptions] = useState<
+    Record<string, Partial<Record<SelectorKey, LayerSelectOption[]>>>
+  >({});
+  const loadedRasterIdRef = useRef<string | null>(null);
 
-    const { mapRef } = useMap() ?? { mapRef: { current: null } };
-    const satelliteLayerId = 'satellite-drone-image';
+  const {
+    layers,
+    loading,
+    error,
+    activeLayerId,
+    activeLayer,
+    setActiveLayerId,
+    layerSelections,
+    setLayerSelections,
+  } = useCatalogLayers(language);
 
-    const handleLocationSelect = (location: { name: string; coords: [number, number] }) => {
-        setMapCenter(location.coords);
+  const { mapRef } = useMap() ?? { mapRef: { current: null } };
+
+  const handleLocationSelect = (location: { name: string; coords: [number, number] }) => {
+    setMapCenter(location.coords);
+  };
+
+  const handleSelectionChange = (layerId: string, field: SelectorKey, value?: string) => {
+    const layerConfig = layers.find((item) => item.id === layerId);
+    const selectors = layerConfig?.selectors || [];
+
+    setLayerSelections((previous) => {
+      const currentLayerSelection = previous[layerId] || {};
+      const nextLayerSelection: LayerSelectionValue = {
+        ...currentLayerSelection,
+        [field]: value,
       };
 
-    const handleSelectionChange = (layer: DataLayer, field: SelectorKey, value?: string) => {
-      const layerConfig = layerRegistry.find((item) => item.id === layer);
-      const selectors = layerConfig?.selection?.selectors || [];
-
-      setLayerSelections((previous) => {
-        const currentLayerSelection = previous[layer] || {};
-        const nextLayerSelection: LayerSelectionValue = {
-          ...currentLayerSelection,
-          [field]: value,
-        };
-
-        selectors.forEach((selector) => {
-          if (selector.dependsOn?.includes(field)) {
-            delete nextLayerSelection[selector.key];
-          }
-        });
-
-        return {
-          ...previous,
-          [layer]: nextLayerSelection,
-        };
-      });
-
-      if (layer === 'modeled' && field === 'year' && value) {
-        setSelectedYear(value);
-      }
-    };
-
-    useEffect(() => {
-      const activeConfig = layerRegistry.find((item) => item.id === activeLayer);
-      const selectors = activeConfig?.selection?.selectors || [];
-      const activeSelection = layerSelections[activeLayer] || {};
-
       selectors.forEach((selector) => {
-        if (activeLayer === 'satellite' && selector.key === 'date') {
-          return;
+        if (selector.dependsOn?.includes(field)) {
+          delete nextLayerSelection[selector.key];
         }
-
-        const dependenciesSatisfied = (selector.dependsOn || []).every((dependency) => Boolean(activeSelection[dependency]));
-        if (!dependenciesSatisfied) {
-          setLayerSelectionOptions((previous) => ({
-            ...previous,
-            [activeLayer]: {
-              ...previous[activeLayer],
-              [selector.key]: [],
-            },
-          }));
-          return;
-        }
-
-        fetchSelectorOptions({
-          layerId: activeLayer,
-          field: selector.key,
-          selection: activeSelection,
-        })
-          .then((options) => {
-            setLayerSelectionOptions((previous) => ({
-              ...previous,
-              [activeLayer]: {
-                ...previous[activeLayer],
-                [selector.key]: options.length ? options : getFallbackSelectorOptions(selector.key, language),
-              },
-            }));
-          })
-          .catch(() => {
-            setLayerSelectionOptions((previous) => ({
-              ...previous,
-              [activeLayer]: {
-                ...previous[activeLayer],
-                [selector.key]: getFallbackSelectorOptions(selector.key, language),
-              },
-            }));
-          });
       });
-    }, [activeLayer, layerSelections, language]);
 
-    useEffect(() => {
-      if (activeLayer !== 'satellite') {
-        return;
-      }
+      return {
+        ...previous,
+        [layerId]: nextLayerSelection,
+      };
+    });
+  };
 
-      fetchSatelliteAvailability({
-        cadence: 'monthly',
-      })
-        .then((availability) => {
-          const optionsWithMax = availability.max && !availability.options.some((option) => option.value === availability.max)
-            ? [{ value: availability.max, label: availability.max }, ...availability.options]
-            : availability.options;
+  useEffect(() => {
+    if (!activeLayer || activeLayer.type !== 'raster') {
+      return;
+    }
 
-          const merged = optionsWithMax.reduce((accumulator, option) => {
-            if (!accumulator.some((item) => item.value === option.value)) {
-              accumulator.push(option);
-            }
-            return accumulator;
-          }, [] as LayerSelectOption[]);
+    const cadence = activeLayer.dataset.cadence;
+    const datasetId = activeLayer.dataset.id;
+    fetchDatasetAvailability({ datasetId, cadence })
+      .then((availability) => {
+        const available = availability.options.map((option) => option.value);
 
-          setLayerSelectionOptions((previous) => ({
-            ...previous,
-            satellite: {
-              ...previous.satellite,
-              date: merged,
-            },
-          }));
-
-          const maxDate = availability.max;
-          if (!maxDate) {
-            return;
-          }
-
-          setLayerSelections((previous) => {
-            const currentDate = previous.satellite?.date;
-            const stillAvailable = availability.options.some((item) => item.value === currentDate) || currentDate === maxDate;
-
-            if (currentDate && stillAvailable) {
-              return previous;
-            }
-
-            return {
-              ...previous,
-              satellite: {
-                ...previous.satellite,
-                date: maxDate,
-              },
-            };
-          });
-        })
-        .catch(() => {
-          setLayerSelectionOptions((previous) => ({
-            ...previous,
-            satellite: {
-              ...previous.satellite,
-              date: getFallbackSelectorOptions('date', language),
-            },
-          }));
+        const nextOptions: Partial<Record<SelectorKey, LayerSelectOption[]>> = {};
+        activeLayer.selectors.forEach((selector) => {
+          const fromApi = optionsFromAvailability(
+            available,
+            selector.key,
+            layerSelections[activeLayer.id] || {},
+            language,
+          );
+          nextOptions[selector.key] =
+            fromApi.length > 0
+              ? fromApi
+              : getFallbackSelectorOptions(selector.key, language);
         });
-    }, [activeLayer, language]);
 
-    useEffect(() => {
-      const map = mapRef?.current;
-      if (!map) {
-        return;
-      }
+        setLayerSelectionOptions((previous) => ({
+          ...previous,
+          [activeLayer.id]: nextOptions,
+        }));
 
-      if (activeLayer !== 'satellite') {
-        remove_image_layer(map, satelliteLayerId);
-        return;
-      }
+        const defaultSelection = defaultSelectionFromAvailability(
+          cadence,
+          available,
+          availability.max,
+        );
 
-      const selectedDate = layerSelections.satellite?.date;
-      if (!selectedDate) {
-        remove_image_layer(map, satelliteLayerId);
-        return;
-      }
-
-      fetchSatelliteVisualization({
-        cadence: 'monthly',
-        date: selectedDate,
-      })
-        .then((payload) => {
-          remove_image_layer(map, satelliteLayerId);
-          if (!payload.tileUrl) {
-            return;
+        setLayerSelections((previous) => {
+          const current = previous[activeLayer.id] || {};
+          if (buildVisualizationDate(cadence, current)) {
+            return previous;
           }
-
-          add_image_layer(map, payload.tileUrl, satelliteLayerId, true, payload.bounds, true);
-        })
-        .catch(() => {
-          remove_image_layer(map, satelliteLayerId);
+          return {
+            ...previous,
+            [activeLayer.id]: { ...current, ...defaultSelection },
+          };
         });
-    }, [activeLayer, layerSelections.satellite?.date, mapRef]);
+      })
+      .catch(() => {
+        const fallback: Partial<Record<SelectorKey, LayerSelectOption[]>> = {};
+        activeLayer.selectors.forEach((selector) => {
+          fallback[selector.key] = getFallbackSelectorOptions(selector.key, language);
+        });
+        setLayerSelectionOptions((previous) => ({
+          ...previous,
+          [activeLayer.id]: fallback,
+        }));
+      });
+  }, [activeLayer?.id, activeLayer?.dataset.id, activeLayer?.dataset.cadence, language, setLayerSelections]);
+
+  useEffect(() => {
+    const map = mapRef?.current;
+    if (!map) {
+      return;
+    }
+
+    const previousRasterId = loadedRasterIdRef.current;
+    if (previousRasterId) {
+      remove_image_layer(map, previousRasterId);
+      loadedRasterIdRef.current = null;
+    }
+
+    if (!activeLayer || activeLayer.type !== 'raster') {
+      useLegendStore.getState().clearLegends();
+      return;
+    }
+
+    const cadence = activeLayer.dataset.cadence;
+    const selection = layerSelections[activeLayer.id] || {};
+    const vizDate = buildVisualizationDate(cadence, selection);
+    if (!vizDate) {
+      return;
+    }
+
+    const rasterLayerId = `raster-${activeLayer.id}`;
+
+    fetchDatasetVisualization({
+      datasetId: activeLayer.dataset.id,
+      cadence,
+      date: vizDate,
+    })
+      .then((payload) => {
+        if (loadedRasterIdRef.current && loadedRasterIdRef.current !== rasterLayerId) {
+          remove_image_layer(map, loadedRasterIdRef.current);
+        }
+        if (!payload.tileUrl) {
+          return;
+        }
+        add_image_layer(map, payload.tileUrl, rasterLayerId, true, payload.bounds, true);
+        loadedRasterIdRef.current = rasterLayerId;
+
+        useLegendStore.getState().clearLegends();
+        const legendMap = activeLayer.legend;
+        if (legendMap && Object.keys(legendMap).length > 0) {
+          const legendNode = renderLegend(legendMap, activeLayer.title);
+          addLegendOnce(legendNode, activeLayer.title);
+        }
+      })
+      .catch(() => {
+        remove_image_layer(map, rasterLayerId);
+      });
+  }, [activeLayer, layerSelections, mapRef]);
 
   return (
     <div className="h-full min-h-0 overflow-hidden flex flex-col bg-gray-50">
-      
       <div className="flex-1 flex overflow-hidden relative">
-        {/* Desktop Sidebar */}
         <div className="hidden lg:flex lg:w-96 flex-col border-r bg-white overflow-hidden">
           <div className="p-4 border-b flex-shrink-0">
-            <SearchBar 
-              language={language} 
-              onLocationSelect={handleLocationSelect}
-            />
+            <SearchBar language={language} onLocationSelect={handleLocationSelect} />
           </div>
           <div className="flex-1 overflow-y-auto">
-            <LayerControls 
-              activeLayer={activeLayer} 
-              onLayerChange={(layer) => {
-                setActiveLayer(layer);
-                setRightBarTab('Analysis');
+            <LayerControls
+              layers={layers}
+              activeLayerId={activeLayerId}
+              onLayerChange={(layerId) => {
+                setActiveLayerId(layerId);
+                setRightBarTab('Legend');
               }}
               language={language}
               selectionValues={layerSelections}
               selectionOptions={layerSelectionOptions}
               onSelectionChange={handleSelectionChange}
+              loading={loading}
+              error={error}
             />
           </div>
         </div>
 
-        {/* Map Container */}
         <div className="flex-1 min-h-0 relative">
           <Map />
           <RightBar
             activeLayer={activeLayer}
             language={language}
             selectedFeature={selectedFeature}
-            selectedYear={selectedYear}
-            onYearChange={setSelectedYear}
             activeTab={rightBarTab}
             onTabChange={setRightBarTab}
           />
-          
-          {/* Mobile Controls Button */}
+
           <Button
             className="lg:hidden absolute bottom-4 right-4 z-[1000] shadow-lg"
             size="lg"
@@ -274,23 +243,26 @@ const Portal = ({language}: PortalProps) => {
           </Button>
         </div>
 
-        {/* Mobile Drawer */}
         <MobileDrawer
           isOpen={showMobilePanel}
           onClose={() => setShowMobilePanel(false)}
-          activeLayer={activeLayer}
-          onLayerChange={(layer) => {
-            setActiveLayer(layer);
-            setRightBarTab('Analysis');
+          layers={layers}
+          activeLayerId={activeLayerId}
+          onLayerChange={(layerId) => {
+            setActiveLayerId(layerId);
+            setRightBarTab('Legend');
           }}
           language={language}
           selectionValues={layerSelections}
           selectionOptions={layerSelectionOptions}
           onSelectionChange={handleSelectionChange}
+          loading={loading}
+          error={error}
+          activeLayer={activeLayer}
         />
       </div>
     </div>
-  )
-}
+  );
+};
 
-export default Portal
+export default Portal;

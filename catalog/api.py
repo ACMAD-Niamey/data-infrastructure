@@ -1,58 +1,58 @@
-from rest_framework.views import APIView
+from rest_framework import status
 from rest_framework.response import Response
-from drf_spectacular.utils import extend_schema
+from rest_framework.views import APIView
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 
-from .models import Layer
-from .serializers import UILayersResponseSerializer, LayerSerializer
+from catalog.models import ProjectPage
+from catalog.serializers import UILayersResponseSerializer
+from catalog.ui_layers import dataset_to_api_dict, datasets_for_project
 
 
 class UILayersView(APIView):
     """
     Read-only config endpoint consumed by React/MapLibre.
-    Returns only layers whose dataset is published for UI.
+    Returns published layers for a Wagtail project (page slug).
     """
-    
+
     @extend_schema(
         responses={200: UILayersResponseSerializer},
+        parameters=[
+            OpenApiParameter(
+                name="project",
+                type=str,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description="Wagtail project page slug (e.g. e-safari)",
+            )
+        ],
         tags=["catalog"],
-        summary="Get UI layer configurations",
-        description="Returns all published layers with their dataset metadata, tile configurations, and visualization parameters.",
+        summary="Get UI layer configurations for a project",
+        description=(
+            "Returns published datasets under the given project (is_published_for_ui, "
+            "with icon). Optional 1:1 Layer style snippet supplies legend and tile params."
+        ),
     )
     def get(self, request):
-        layers = (
-            Layer.objects
-            .select_related("dataset")
-            .filter(dataset__is_published_for_ui=True)
-            .order_by("title")
-        )
+        project_slug = (request.query_params.get("project") or "").strip()
+        if not project_slug:
+            return Response(
+                {"detail": "Query parameter 'project' is required (e.g. ?project=e-safari)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
-        out = []
-        for lyr in layers:
-            ds = lyr.dataset
-            out.append({
-                "id": lyr.layer_id,
-                "title": lyr.title,
-                "type": lyr.layer_type,
-                "project": ds.get_parent().slug if ds.get_parent() else None,
-                "dataset": {
-                    "id": ds.dataset_id,
-                    "title": ds.title,
-                    "cadence": ds.cadence,
-                    "dataset_type": ds.dataset_type,
-                    "stac_collection": ds.stac_collection_id or ds.dataset_id,
-                },
-                "tile": {
-                    "template": lyr.tile_template,
-                    "params": lyr.tile_params or {},
-                },
-                "ui": {
-                    "default_visible": lyr.default_visible,
-                    "opacity": lyr.opacity,
-                    "minzoom": lyr.minzoom,
-                    "maxzoom": lyr.maxzoom,
-                },
-                "legend": lyr.legend or {},
-                "updated_at": lyr.updated_at.isoformat(),
-            })
+        if not ProjectPage.objects.live().filter(slug=project_slug).exists():
+            return Response(
+                {"detail": f"Unknown or unpublished project '{project_slug}'."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
-        return Response({"version": "1.0", "layers": out})
+        try:
+            dataset_qs = datasets_for_project(project_slug)
+        except ProjectPage.DoesNotExist:
+            return Response(
+                {"detail": f"Unknown or unpublished project '{project_slug}'."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+
+        out = [dataset_to_api_dict(ds, request) for ds in dataset_qs]
+        return Response({"version": "1.0", "project": project_slug, "layers": out})
