@@ -1,0 +1,48 @@
+.hex-color-widget {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  max-width: 100%;
+}
+
+.hex-color-swatch {
+  flex-shrink: 0;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  border: 1px solid var(--w-color-border-field-default, #d1d5db);
+  border-radius: 4px;
+  cursor: pointer;
+  background-clip: padding-box;
+}
+
+.hex-color-swatch:hover {
+  border-color: var(--w-color-border-field-hover, #9ca3af);
+}
+
+.hex-color-picker {
+  position: absolute;
+  width: 0;
+  height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.hex-color-text {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.875rem;
+  width: 7.5em;
+  max-width: 100%;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--w-color-border-field-default, #d1d5db);
+  border-radius: 4px;
+}
+
+.hex-color-text:focus {
+  outline: 2px solid var(--w-color-focus, #2563eb);
+  outline-offset: 1px;
+}
+
+.hex-color-text.hex-color-text--invalid {
+  border-color: var(--w-color-critical-200, #dc2626);
+}
