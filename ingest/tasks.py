@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import botocore
 from typing import Optional
 
+from .cog import ensure_raster_is_cog, is_tiff_key
 from .models import IngestionRun
 
 
@@ -267,6 +268,10 @@ def process_ingestion_run(run_id: int):
                 raise
 
         client.head_object(Bucket=bucket, Key=key)
+
+        if is_tiff_key(key):
+            cog_result = ensure_raster_is_cog(client, bucket, key)
+            log.info("COG step for run %s: %s", run_id, cog_result)
 
         if not isinstance(payload.get("stac_item"), dict):
             if not payload.get("bbox") or not payload.get("geometry"):

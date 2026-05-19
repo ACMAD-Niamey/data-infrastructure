@@ -109,6 +109,16 @@ class IngestionSubmitViewTests(TestCase):
 
 
 class ProcessIngestionRunTaskTests(TestCase):
+    def setUp(self):
+        self.cog_patcher = patch(
+            "ingest.tasks.ensure_raster_is_cog",
+            return_value={"optimized": False, "skipped": "already_cog"},
+        )
+        self.mock_ensure_cog = self.cog_patcher.start()
+
+    def tearDown(self):
+        self.cog_patcher.stop()
+
     def _make_run(self, payload=None):
         return IngestionRun.objects.create(
             dataset_id="spi",
@@ -224,6 +234,77 @@ class ProcessIngestionRunTaskTests(TestCase):
         run.refresh_from_db()
         self.assertEqual(run.status, "failed")
         self.assertIn("STAC API unreachable", run.error_message)
+
+    @patch("ingest.tasks.post_item")
+    @patch("ingest.tasks.ensure_collection")
+    @patch("ingest.tasks.s3_client")
+    def test_cog_conversion_called_for_tif(self, mock_s3, mock_ensure, mock_post):
+        mock_s3.return_value = MagicMock()
+
+        run = self._make_run()
+        from ingest.tasks import process_ingestion_run
+        process_ingestion_run.apply(args=(run.id,))
+
+        self.mock_ensure_cog.assert_called_once()
+        call_args = self.mock_ensure_cog.call_args[0]
+        self.assertEqual(call_args[1], "geodata")
+        self.assertEqual(call_args[2], "spi/2026/04/file.tif")
+
+    @patch("ingest.tasks.post_item")
+    @patch("ingest.tasks.ensure_collection")
+    @patch("ingest.tasks.s3_client")
+    def test_cog_skipped_for_non_tiff(self, mock_s3, mock_ensure, mock_post):
+        mock_s3.return_value = MagicMock()
+        payload = {
+            **DAILY_PAYLOAD,
+            "asset": {"href": "s3://geodata/spi/2026/04/file.nc"},
+        }
+        run = self._make_run(payload=payload)
+        from ingest.tasks import process_ingestion_run
+        process_ingestion_run.apply(args=(run.id,))
+
+        self.mock_ensure_cog.assert_not_called()
+
+    @patch("ingest.tasks.post_item")
+    @patch("ingest.tasks.ensure_collection")
+    @patch("ingest.tasks.s3_client")
+    def test_cog_failure_sets_run_failed(self, mock_s3, mock_ensure, mock_post):
+        mock_s3.return_value = MagicMock()
+        self.mock_ensure_cog.side_effect = RuntimeError("COG conversion failed")
+
+        run = self._make_run()
+        from ingest.tasks import process_ingestion_run
+        process_ingestion_run.apply(args=(run.id,))
+
+        run.refresh_from_db()
+        self.assertEqual(run.status, "failed")
+        self.assertIn("COG conversion failed", run.error_message)
+
+
+class CogModuleTests(TestCase):
+    def test_is_tiff_key(self):
+        from ingest.cog import is_tiff_key
+
+        self.assertTrue(is_tiff_key("path/file.tif"))
+        self.assertTrue(is_tiff_key("path/file.TIFF"))
+        self.assertFalse(is_tiff_key("path/file.nc"))
+
+    @patch("ingest.cog.is_valid_cog", return_value=True)
+    def test_ensure_raster_is_cog_skips_when_already_valid(self, _mock_valid):
+        from ingest.cog import ensure_raster_is_cog
+
+        client = MagicMock()
+        result = ensure_raster_is_cog(client, "geodata", "spi/file.tif")
+        self.assertEqual(result["skipped"], "already_cog")
+        client.upload_file.assert_not_called()
+
+    def test_ensure_raster_is_cog_skips_non_tiff(self):
+        from ingest.cog import ensure_raster_is_cog
+
+        client = MagicMock()
+        result = ensure_raster_is_cog(client, "geodata", "spi/file.nc")
+        self.assertEqual(result["skipped"], "not_tiff")
+        client.download_file.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

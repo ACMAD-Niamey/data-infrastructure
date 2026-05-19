@@ -159,7 +159,9 @@ class DatasetVisualization:
                 extra_params=extra_params,
             )
 
-            log.info("Requesting TiTiler URL: %s with params keys %s", base, list(params.keys()))
+            param_keys = [k for k, _ in params]
+            log.info("Requesting TiTiler URL: %s with params keys %s", base, param_keys)
+            log.info(f"Params: {params}")
             tiled_output = requests.get(base, params=params, timeout=30)
             if tiled_output.status_code == 200:
                 log.info("TiTiler request successful")

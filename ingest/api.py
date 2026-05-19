@@ -75,9 +75,10 @@ class IngestDatasetItemView(APIView):
         1. Upload file to MinIO (via /api/uploads/ or manually)
         2. Call this endpoint with the S3 path and metadata
         3. System validates file exists in MinIO
-        4. If `bbox` and `geometry` are missing (and `stac_item` is not provided), they are auto-extracted from the raster
-        5. Creates STAC collection if needed
-        6. Posts STAC item to pgSTAC catalog
+        4. GeoTIFF assets are converted to COG in place (same S3 key) when needed; already-valid COGs are skipped
+        5. If `bbox` and `geometry` are missing (and `stac_item` is not provided), they are auto-extracted from the raster
+        6. Creates STAC collection if needed
+        7. Posts STAC item to pgSTAC catalog
         
         **Cadence-specific requirements:**
         - `daily` or `monthly`: Requires `datetime` field

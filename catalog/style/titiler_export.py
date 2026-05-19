@@ -9,6 +9,18 @@ from catalog.style.normalize import normalize_tile_params, split_tile_params
 
 ColormapResult = Union[str, dict[str, Any]]
 
+TitilerQueryParams = list[tuple[str, str]]
+
+
+def parse_query_fragment(fragment: str) -> TitilerQueryParams:
+    """Parse a query string fragment, preserving duplicate keys (e.g. multiple ``bidx``)."""
+    s = (fragment or "").strip()
+    if s.startswith("&"):
+        s = s[1:]
+    if not s:
+        return []
+    return urllib.parse.parse_qsl(s, keep_blank_values=True)
+
 
 def compose_titiler_tilejson_params(
     http_url: str | None,
@@ -16,24 +28,36 @@ def compose_titiler_tilejson_params(
     color_map_json: str = "",
     band_visualization_params: str | None = None,
     extra_params: dict[str, str] | None = None,
-) -> dict[str, str]:
-    """Build query params for TiTiler ``/cog/.../tilejson.json`` (uses ``colormap``, not ``color_map``)."""
-    params: dict[str, str] = {
-        "url": http_url or "",
-        "tile_format": "png",
-        "tileMatrixSetId": tile_matrix_id,
-    }
+) -> TitilerQueryParams:
+    """
+    Build query params for TiTiler ``/cog/.../tilejson.json``.
+
+    Returns a list of pairs so duplicate keys (``bidx=1&bidx=2&bidx=3``) are preserved
+    for ``requests.get(..., params=...)``.
+    """
+    params: TitilerQueryParams = [
+        ("url", http_url or ""),
+        ("tile_format", "png"),
+        ("tileMatrixSetId", tile_matrix_id),
+    ]
     if color_map_json:
-        params["colormap"] = color_map_json
+        params.append(("colormap", color_map_json))
     if extra_params:
-        params.update(extra_params)
+        for key, value in extra_params.items():
+            if band_visualization_params and key == "bidx":
+                continue
+            params.append((key, value))
     if band_visualization_params:
-        fragment = band_visualization_params.strip()
-        if fragment.startswith("&"):
-            fragment = fragment[1:]
-        for key, value in urllib.parse.parse_qsl(fragment, keep_blank_values=True):
-            params[key] = value
+        params.extend(parse_query_fragment(band_visualization_params))
     return params
+
+
+def _discrete_colormap_key(value: Any) -> int | float:
+    """TiTiler parses discrete colormap keys with int(); use ints for whole numbers."""
+    fv = float(value)
+    if fv.is_integer():
+        return int(fv)
+    return fv
 
 
 def hex_to_rgb(hex_color: str) -> list[int]:
@@ -51,7 +75,7 @@ def build_discrete_colormap_json(style: dict[str, Any]) -> str:
     color_map: dict[float | int, list[int]] = {}
     if values is not None:
         for i, v in enumerate(values):
-            color_map[float(v)] = hex_to_rgb(palette[i])
+            color_map[_discrete_colormap_key(v)] = hex_to_rgb(palette[i])
     else:
         max_value = int(style.get("max", 0))
         for i in range(max_value):

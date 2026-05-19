@@ -124,7 +124,10 @@ class Layer(ClusterableModel):
         max_length=20,
         choices=STYLE_SCHEME_CHOICES,
         default="discrete",
-        help_text="How color stops map to the raster (TiTiler colormap).",
+        help_text=(
+            "Discrete/linear: color stops become a TiTiler colormap. "
+            "Band: RGB compositing (default bidx=1,2,3) via band_visualization_params in tile_params."
+        ),
     )
     style_min = models.FloatField(
         null=True,
@@ -197,13 +200,18 @@ class Layer(ClusterableModel):
         from catalog.style.parse_qml import parse_qml_raster_pseudocolor
         from catalog.style.parse_sld import parse_sld_raster_colormap
 
+        if self.style_scheme == "band" and not self.use_advanced_tile_params:
+            from catalog.style.band_defaults import ensure_band_tile_params
+
+            self.tile_params = ensure_band_tile_params(self.tile_params)
+
         if self.style_scheme == "band":
             tp = self.tile_params or {}
             if not tp.get("band_visualization_params"):
                 raise ValidationError(
                     {
                         "tile_params": "Band scheme requires band_visualization_params inside tile_params "
-                        "(raw TiTiler query fragment, e.g. rescale=0,100&bidx=1)."
+                        "(raw TiTiler query fragment, e.g. bidx=1&bidx=2&bidx=3 or rescale=0,255&bidx=1)."
                     }
                 )
 
@@ -279,6 +287,14 @@ class Layer(ClusterableModel):
         pending = getattr(self, "_pending_style_import", None)
         if pending:
             self._skip_tile_sync = True
+        if (
+            self.style_scheme == "band"
+            and not self.use_advanced_tile_params
+            and not pending
+        ):
+            from catalog.style.band_defaults import ensure_band_tile_params
+
+            self.tile_params = ensure_band_tile_params(self.tile_params)
         try:
             super().save(*args, **kwargs)
             if pending:

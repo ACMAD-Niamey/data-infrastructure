@@ -1,4 +1,5 @@
 import { DataLayer, LayerSelectOption, LayerSelectionValue, SelectorKey } from "../components/layers/layerRegistry";
+import { catalogBaseUrl, layersApiBaseUrl } from "../config/api";
 import axios from "axios";
 
 type FetchSelectorOptionsParams = {
@@ -47,9 +48,6 @@ export type SatelliteVisualizationResult = {
   bounds: BoundsObject | null;
 };
 
-const viteEnv = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env) || {};
-const apiBaseUrl = viteEnv.VITE_LAYERS_API_BASE_URL || "";
-const catalogBaseUrl = viteEnv.VITE_CATALOG_API_BASE_URL || "https://e-safari.acmad.org";
 
 const catalogClient = axios.create({
   baseURL: catalogBaseUrl,
@@ -95,7 +93,7 @@ export const fetchSelectorOptions = async ({
   field,
   selection,
 }: FetchSelectorOptionsParams): Promise<LayerSelectOption[]> => {
-  if (!apiBaseUrl) {
+  if (!layersApiBaseUrl) {
     return [];
   }
 
@@ -107,7 +105,7 @@ export const fetchSelectorOptions = async ({
     query.set(key, value);
   });
 
-  const endpoint = `${apiBaseUrl.replace(/\/$/, "")}/layers/${layerId}/options?${query.toString()}`;
+  const endpoint = `${layersApiBaseUrl}/layers/${layerId}/options?${query.toString()}`;
   const response = await fetch(endpoint);
 
   if (!response.ok) {

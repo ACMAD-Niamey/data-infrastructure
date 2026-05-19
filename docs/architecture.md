@@ -106,6 +106,7 @@ Raster **Layer** snippets expose **Color stops** under *Raster styling*:
 - Click the **swatch** to open the browser color picker, or type a **`#RRGGBB`** code directly (QGIS-style dual control).
 - Import **QML** (QGIS singleband pseudocolor) or **SLD** (GeoServer ColorMap) to populate stops; edit colors manually afterward.
 - Saved stops sync into `tile_params` for TiTiler unless *advanced tile params* is enabled.
+- **Band** scheme auto-fills `tile_params` with `{"scheme": "band", "band_visualization_params": "bidx=1&bidx=2&bidx=3"}` (RGB) when empty; edit the fragment for other band combos or add `rescale` in extras.
 
 The **Legend** field uses the same picker pattern as rows of **label → color** (e.g. `{"Low": "#d73027", "High": "#1a9850"}`), which matches how **e-safari-ui** renders legends (`renderLegend`). Structured legends (continuous ramps with `type` / `breaks` / `colors` arrays) still edit via the collapsed **Advanced JSON** section.
 

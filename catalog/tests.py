@@ -10,6 +10,10 @@ from django.core.exceptions import ValidationError
 from django.forms import ModelForm
 
 from catalog.models import LayerColorStop
+from catalog.style.band_defaults import (
+    DEFAULT_RGB_BAND_VISUALIZATION_PARAMS,
+    ensure_band_tile_params,
+)
 from catalog.style.normalize import normalize_tile_params
 from catalog.widgets import HexColorWidget, LegendMapWidget
 from catalog.widgets.hex_color import hex_for_color_input
@@ -321,6 +325,44 @@ class LegendMapWidgetHelperTests(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Band scheme defaults
+# ---------------------------------------------------------------------------
+
+
+class EnsureBandTileParamsTests(unittest.TestCase):
+    def test_empty_gets_rgb_default(self):
+        out = ensure_band_tile_params({})
+        self.assertEqual(out["scheme"], "band")
+        self.assertEqual(
+            out["band_visualization_params"], DEFAULT_RGB_BAND_VISUALIZATION_PARAMS
+        )
+
+    def test_preserves_extras_drops_colormap_keys(self):
+        out = ensure_band_tile_params(
+            {
+                "scheme": "discrete",
+                "values": [1, 2],
+                "palette": ["#ff0000", "#00ff00"],
+                "rescale": "0,255",
+            }
+        )
+        self.assertEqual(out["scheme"], "band")
+        self.assertEqual(
+            out["band_visualization_params"], DEFAULT_RGB_BAND_VISUALIZATION_PARAMS
+        )
+        self.assertEqual(out["rescale"], "0,255")
+        self.assertNotIn("palette", out)
+        self.assertNotIn("values", out)
+
+    def test_keeps_custom_band_visualization_params(self):
+        custom = "bidx=4&bidx=3&bidx=2"
+        out = ensure_band_tile_params(
+            {"scheme": "band", "band_visualization_params": custom}
+        )
+        self.assertEqual(out["band_visualization_params"], custom)
+
+
+# ---------------------------------------------------------------------------
 # Raster style (pure helpers; no DB)
 # ---------------------------------------------------------------------------
 
@@ -368,8 +410,22 @@ class BuildColormapForTitilerTests(unittest.TestCase):
         self.assertIsInstance(s, str)
         data = json.loads(s)
         self.assertEqual(len(data), 5)
-        self.assertEqual(data["1.0"], [124, 61, 4])
-        self.assertEqual(data["5.0"], [0, 100, 20])
+        self.assertEqual(data["1"], [124, 61, 4])
+        self.assertEqual(data["5"], [0, 100, 20])
+
+    def test_discrete_normalized_float_values_use_int_keys(self):
+        s = build_colormap_for_titiler(
+            normalize_tile_params(
+                {
+                    "scheme": "discrete",
+                    "values": [10, 20],
+                    "palette": ["#ff0000", "#00ff00"],
+                }
+            )
+        )
+        data = json.loads(s)
+        self.assertIn("10", data)
+        self.assertNotIn("10.0", data)
 
     def test_extras_only_returns_empty_colormap(self):
         s = build_colormap_for_titiler({"rescale": "0,100", "bidx": 1})
@@ -440,8 +496,28 @@ class TitilerComposeTests(unittest.TestCase):
         params = compose_titiler_tilejson_params(
             "http://minio/bucket/cog.tif",
             "WorldCRS84Quad",
-            color_map_json='{"1.0": [255,0,0]}',
+            color_map_json='{"1": [255,0,0]}',
             extra_params={},
         )
-        self.assertIn("colormap", params)
-        self.assertEqual(params["colormap"], '{"1.0": [255,0,0]}')
+        self.assertIn(("colormap", '{"1": [255,0,0]}'), params)
+
+    def test_compose_preserves_multiple_bidx_for_rgb(self):
+        params = compose_titiler_tilejson_params(
+            "http://minio/bucket/cog.tif",
+            "WorldCRS84Quad",
+            band_visualization_params="bidx=1&bidx=2&bidx=3",
+            extra_params={"tilesize": "512"},
+        )
+        bidx_vals = [v for k, v in params if k == "bidx"]
+        self.assertEqual(bidx_vals, ["1", "2", "3"])
+        self.assertIn(("tilesize", "512"), params)
+
+    def test_compose_skips_extra_bidx_when_band_fragment_set(self):
+        params = compose_titiler_tilejson_params(
+            "http://minio/bucket/cog.tif",
+            "WorldCRS84Quad",
+            band_visualization_params="bidx=1&bidx=2&bidx=3",
+            extra_params={"bidx": "9", "tilesize": "512"},
+        )
+        bidx_vals = [v for k, v in params if k == "bidx"]
+        self.assertEqual(bidx_vals, ["1", "2", "3"])
