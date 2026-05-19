@@ -15,3 +15,5 @@ nginx/letsencrypt/
 *node_modules
 stations_export.ndjson
 celerybeat-schedule
+!catalog/static/
+!catalog/static/**
