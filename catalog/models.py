@@ -268,6 +268,10 @@ class Layer(ClusterableModel):
 
     def clean(self):
         super().clean()
+        if self.legend is None:
+            self.legend = {}
+        if self.tile_params is None:
+            self.tile_params = {}
         if self.dataset_id:
             if not self.layer_id:
                 self.layer_id = self.dataset.dataset_id
