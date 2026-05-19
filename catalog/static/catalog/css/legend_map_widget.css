@@ -1,0 +1,54 @@
+.legend-map-widget {
+  max-width: 36rem;
+}
+
+.legend-map-widget .help {
+  margin: 0 0 0.75rem;
+  font-size: 0.875rem;
+  color: var(--w-color-text-meta, #6b7280);
+}
+
+.legend-map-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.legend-map-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.legend-map-name {
+  flex: 1 1 8rem;
+  min-width: 6rem;
+  max-width: 14rem;
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--w-color-border-field-default, #d1d5db);
+  border-radius: 4px;
+}
+
+.legend-map-remove {
+  flex-shrink: 0;
+}
+
+.legend-map-advanced {
+  margin-top: 1rem;
+}
+
+.legend-map-json-raw {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8125rem;
+  padding: 0.5rem;
+  border: 1px solid var(--w-color-border-field-default, #d1d5db);
+  border-radius: 4px;
+  box-sizing: border-box;
+}
+
+.legend-map-json-raw.legend-map-json-raw--invalid {
+  border-color: var(--w-color-critical-200, #dc2626);
+}
