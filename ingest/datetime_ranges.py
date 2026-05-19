@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 def _parse_iso(value: str) -> datetime:
@@ -37,15 +37,15 @@ def interval_from_payload(cadence: str, payload: dict) -> tuple[str, str]:
         end_dt = payload.get("end_datetime")
         if not start_dt or not end_dt:
             raise ValueError("start_datetime and end_datetime are required")
-        start = _parse_iso(str(start_dt)).strftime("%Y-%m-%dT%H:%M:%SZ")
-        end = _parse_iso(str(end_dt)).strftime("%Y-%m-%dT%H:%M:%SZ")
+        start = _parse_iso(str(start_dt)).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        end = _parse_iso(str(end_dt)).astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         return start, end
 
     dt_raw = payload.get("datetime")
     if not dt_raw:
         raise ValueError("datetime is required")
 
-    dt = _parse_iso(str(dt_raw))
+    dt = _parse_iso(str(dt_raw)).astimezone(timezone.utc)
     year, month, day = dt.year, dt.month, dt.day
 
     if cadence == "daily":
