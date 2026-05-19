@@ -292,7 +292,7 @@ TIPG_DEBUG=false
 The project uses Django ORM with the following main models:
 
 - **Catalog**: Layer management and metadata (Wagtail **Layer** snippets: color stops and **legend** use swatch + `#RRGGBB` editors; label→color legend maps match e-safari-ui; QML/SLD import still supported)
-- **Ingest**: Data ingestion jobs and tracking
+- **Ingest**: STAC raster ingest/delete jobs and tracking ([ingest & delete API](docs/ingest-delete.md))
 - **Uploads**: File upload handling
 - **VectorIngest**: Vector-specific processing
 
