@@ -1,0 +1,25 @@
+<div class="legend-map-row" data-legend-map-row>
+  <input
+    type="text"
+    class="legend-map-name"
+    value="{{ name }}"
+    placeholder="Label"
+    autocomplete="off"
+  >
+  <div class="hex-color-widget" data-hex-color-widget>
+    <button type="button" class="hex-color-swatch" aria-label="Pick color" style="background-color: {{ picker_value }}"></button>
+    <input type="color" class="hex-color-picker" value="{{ picker_value }}" tabindex="-1" aria-hidden="true">
+    <input
+      type="text"
+      class="hex-color-text"
+      value="{{ color }}"
+      maxlength="7"
+      placeholder="#RRGGBB"
+      autocomplete="off"
+      spellcheck="false"
+    >
+  </div>
+  <button type="button" class="legend-map-remove button button-small button-secondary" aria-label="Remove legend entry">
+    Remove
+  </button>
+</div>

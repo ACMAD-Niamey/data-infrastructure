@@ -99,6 +99,16 @@ Shared UI components and patterns for ACMAD web products; may be deployed or lin
 3. **Caching**: Expensive read endpoints (e.g. time-series statistics) use short TTL caching where implemented.
 4. **Single source of truth**: PostgreSQL/PostGIS; APIs and TiPG project views of the same data, not duplicate “live” datasets.
 
+## Wagtail layer styling (admin)
+
+Raster **Layer** snippets expose **Color stops** under *Raster styling*:
+
+- Click the **swatch** to open the browser color picker, or type a **`#RRGGBB`** code directly (QGIS-style dual control).
+- Import **QML** (QGIS singleband pseudocolor) or **SLD** (GeoServer ColorMap) to populate stops; edit colors manually afterward.
+- Saved stops sync into `tile_params` for TiTiler unless *advanced tile params* is enabled.
+
+The **Legend** field uses the same picker pattern as rows of **label → color** (e.g. `{"Low": "#d73027", "High": "#1a9850"}`), which matches how **e-safari-ui** renders legends (`renderLegend`). Structured legends (continuous ramps with `type` / `breaks` / `colors` arrays) still edit via the collapsed **Advanced JSON** section.
+
 ## Related files
 
 - `docker-compose.yml` — service topology

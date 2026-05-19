@@ -25,10 +25,15 @@ GeoDataManager is built on the Django framework and provides a RESTful API for m
 - **Web Server**: Gunicorn + Nginx
 - **Containerization**: Docker & Docker Compose
 
+## Documentation
+
+- **[Architecture and roadmap](docs/README.md)** — current system diagram (Docker, Django, TiPG, frontends) and future multi-hazard / MCP / LLM plans.
+
 ## Project Structure
 
 ```
 geomgr/
+├── docs/                    # Architecture & roadmap (see docs/README.md)
 ├── catalog/                 # Catalog app for layer management
 ├── ingest/                  # Vector data ingestion app
 ├── uploads/                 # File uploads handling
@@ -286,7 +291,7 @@ TIPG_DEBUG=false
 
 The project uses Django ORM with the following main models:
 
-- **Catalog**: Layer management and metadata
+- **Catalog**: Layer management and metadata (Wagtail **Layer** snippets: color stops and **legend** use swatch + `#RRGGBB` editors; label→color legend maps match e-safari-ui; QML/SLD import still supported)
 - **Ingest**: Data ingestion jobs and tracking
 - **Uploads**: File upload handling
 - **VectorIngest**: Vector-specific processing
