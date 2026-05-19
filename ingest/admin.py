@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import APIKey, IngestionRun
+from .models import APIKey, DeletionRun, IngestionRun
 
 
 @admin.register(APIKey)
@@ -13,4 +13,11 @@ class APIKeyAdmin(admin.ModelAdmin):
 class IngestionRunAdmin(admin.ModelAdmin):
     list_display = ("dataset_id", "cadence", "status", "created_at")
     list_filter = ("status", "cadence")
+    search_fields = ("dataset_id",)
+
+
+@admin.register(DeletionRun)
+class DeletionRunAdmin(admin.ModelAdmin):
+    list_display = ("dataset_id", "cadence", "status", "delete_object", "created_at")
+    list_filter = ("status", "cadence", "delete_object")
     search_fields = ("dataset_id",)
