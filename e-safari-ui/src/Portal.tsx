@@ -137,7 +137,7 @@ const Portal = ({ language }: PortalProps) => {
           [cacheKey]: { available: [], max: '' },
         }));
       });
-  }, [activeLayer?.id, activeLayer?.dataset.id, activeLayer?.dataset.cadence, availabilityCache, setLayerSelections]);
+  }, [activeLayer?.id, activeLayer?.dataset.id, activeLayer?.dataset.cadence, setLayerSelections]);
 
   // Effect 2: Recompute options whenever active layer selection changes
   useEffect(() => {
@@ -174,7 +174,7 @@ const Portal = ({ language }: PortalProps) => {
       ...previous,
       [activeLayer.id]: nextOptions,
     }));
-  }, [activeLayer, layerSelections, availabilityCache, language]);
+  }, [activeLayer?.id, activeLayer?.dataset.id, activeLayer?.dataset.cadence, activeLayer?.selectors, layerSelections, availabilityCache, language]);
 
   useEffect(() => {
     const map = mapRef?.current;
