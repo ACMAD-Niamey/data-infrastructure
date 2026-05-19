@@ -1,15 +1,21 @@
 import os
 import tempfile
 import logging
-import boto3
-from celery import shared_task
-from botocore.client import Config
 import requests
-from datetime import datetime, timezone
 import botocore
+from celery import shared_task
 from typing import Optional
 
-from .models import IngestionRun
+from .cog import ensure_raster_is_cog, is_tiff_key
+from .models import DeletionRun, IngestionRun
+from .stac_ops import (
+    data_asset_href,
+    delete_minio_object,
+    delete_stac_item,
+    get_stac_item,
+    stac_base,
+)
+from .storage import s3_client, set_bucket_public
 
 
 log = logging.getLogger(__name__)
@@ -17,50 +23,6 @@ log = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
 
-
-def s3_client():
-    endpoint = os.getenv("MINIO_ENDPOINT", "http://minio:9000")
-    if not endpoint.startswith(("http://", "https://")):
-        endpoint = f"http://{endpoint}"
-    return boto3.client(
-        "s3",
-        endpoint_url=endpoint,
-        aws_access_key_id=os.getenv("MINIO_ROOT_USER", ""),
-        aws_secret_access_key=os.getenv("MINIO_ROOT_PASSWORD", ""),
-        config=Config(signature_version="s3v4"),
-        region_name="us-east-1",
-    )
-
-def set_bucket_public(client, bucket: str):
-    """
-    Set bucket policy to allow public read access (download only).
-    This allows files to be accessed via HTTP without authentication.
-    """
-    import json
-    
-    policy = {
-        "Version": "2012-10-17",
-        "Statement": [
-            {
-                "Effect": "Allow",
-                "Principal": {"AWS": "*"},
-                "Action": ["s3:GetObject"],
-                "Resource": [f"arn:aws:s3:::{bucket}/*"]
-            }
-        ]
-    }
-    
-    try:
-        client.put_bucket_policy(Bucket=bucket, Policy=json.dumps(policy))
-    except Exception as e:
-        # Log but don't fail if policy setting fails
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.warning(f"Failed to set public policy on bucket {bucket}: {e}")
-
-def stac_base():
-    # use nginx path if you added /stac/ routing, otherwise http://stac_api:8080
-    return os.getenv("STAC_API_URL", "http://stac_api:8080").rstrip("/")
 
 def ensure_collection(collection_id: str, title: Optional[str] = None):
     base = stac_base()
@@ -268,6 +230,10 @@ def process_ingestion_run(run_id: int):
 
         client.head_object(Bucket=bucket, Key=key)
 
+        if is_tiff_key(key):
+            cog_result = ensure_raster_is_cog(client, bucket, key)
+            log.info("COG step for run %s: %s", run_id, cog_result)
+
         if not isinstance(payload.get("stac_item"), dict):
             if not payload.get("bbox") or not payload.get("geometry"):
                 bbox, geometry = extract_bbox_geometry_from_s3_object(client, bucket, key)
@@ -289,6 +255,41 @@ def process_ingestion_run(run_id: int):
         run.status = "completed"
         run.save(update_fields=["status", "updated_at"])
         return {"ok": True, "bucket": bucket, "key": key}
+
+    except Exception as e:
+        run.status = "failed"
+        run.error_message = str(e)
+        run.save(update_fields=["status", "error_message", "updated_at"])
+        return {"ok": False, "error": str(e)}
+
+
+@shared_task
+def process_deletion_run(run_id: int):
+    run = DeletionRun.objects.get(id=run_id)
+    run.status = "processing"
+    run.save(update_fields=["status", "updated_at"])
+
+    try:
+        payload = run.payload or {}
+        item_id = payload.get("item_id")
+        if not item_id:
+            raise ValueError("Deletion payload must include item_id")
+
+        collection_id = run.dataset_id
+        item = get_stac_item(collection_id, item_id)
+
+        if run.delete_object:
+            href = data_asset_href(item)
+            if href:
+                delete_minio_object(href)
+            else:
+                log.warning("No assets.data.href on item %s; skipping MinIO delete", item_id)
+
+        delete_stac_item(collection_id, item_id)
+
+        run.status = "completed"
+        run.save(update_fields=["status", "updated_at"])
+        return {"ok": True, "item_id": item_id, "delete_object": run.delete_object}
 
     except Exception as e:
         run.status = "failed"

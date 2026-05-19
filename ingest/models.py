@@ -44,3 +44,29 @@ class IngestionRun(models.Model):
 
     def __str__(self):
         return f"{self.dataset_id} - {self.status} - {self.created_at:%Y-%m-%d %H:%M}"
+
+
+class DeletionRun(models.Model):
+    STATUS = [
+        ("accepted", "Accepted"),
+        ("processing", "Processing"),
+        ("failed", "Failed"),
+        ("completed", "Completed"),
+    ]
+
+    dataset_id = models.CharField(max_length=80, db_index=True)
+    cadence = models.CharField(max_length=10)
+    status = models.CharField(max_length=20, choices=STATUS, default="accepted")
+
+    payload = models.JSONField(default=dict, blank=True)
+    delete_object = models.BooleanField(
+        default=False,
+        help_text="When true, also delete the MinIO object referenced by the STAC asset.",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    error_message = models.TextField(blank=True)
+
+    def __str__(self):
+        return f"delete:{self.dataset_id} - {self.status} - {self.created_at:%Y-%m-%d %H:%M}"

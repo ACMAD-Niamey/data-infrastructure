@@ -1,0 +1,37 @@
+{% with id=widget.attrs.id %}
+<div
+  class="legend-map-widget"
+  data-legend-map-widget
+  data-advanced-mode="{% if widget.advanced_mode %}1{% else %}0{% endif %}"
+>
+  <input
+    type="hidden"
+    name="{{ widget.name }}"
+    {% if id %}id="{{ id }}"{% endif %}
+    class="legend-map-json-hidden"
+    value="{{ widget.json_value|escape }}"
+  >
+
+  <div class="legend-map-simple" {% if widget.advanced_mode %}hidden{% endif %}>
+    <p class="help">Map labels to colors (used by the map legend). Example: <code>Low</code> → <code>#d73027</code>.</p>
+    <div class="legend-map-rows" data-legend-map-rows>
+      {% for entry in widget.entries %}
+        {% include "catalog/widgets/legend_map_row.html" with name=entry.name color=entry.color picker_value=entry.picker_value %}
+      {% endfor %}
+    </div>
+    <button type="button" class="legend-map-add button button-small button-secondary">
+      Add entry
+    </button>
+  </div>
+
+  <details class="legend-map-advanced" {% if widget.advanced_mode %}open{% endif %}>
+    <summary>Advanced JSON</summary>
+    <p class="help">Structured legends (continuous ramps, breaks, etc.) must be edited as JSON.</p>
+    <textarea class="legend-map-json-raw" rows="8" spellcheck="false">{{ widget.advanced_json }}</textarea>
+  </details>
+
+  <template id="legend-map-row-template">
+    {% include "catalog/widgets/legend_map_row.html" with name="" color="#000000" picker_value="#000000" %}
+  </template>
+</div>
+{% endwith %}

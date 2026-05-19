@@ -1,32 +1,57 @@
+import { useState } from 'react';
 import Select from 'react-select';
+import { Info } from 'lucide-react';
 import { Language } from '../types';
 import { Card } from './ui/card';
-import { DataLayer, layerRegistry, LayerSelectOption, LayerSelectionValue, SelectorConfig, SelectorKey } from './layers/layerRegistry';
-// import {add_image_layer, remove_image_layer} from './Maputils';
-// import { useMap } from "./MapContext.jsx"
+import type {
+  CatalogLayer,
+  LayerSelectOption,
+  LayerSelectionValue,
+  SelectorConfig,
+  SelectorKey,
+} from '../types/catalogLayer';
 import '../styles/layercontrol.css';
 
 interface LayerControlsProps {
-  activeLayer: DataLayer;
-  onLayerChange: (layer: DataLayer) => void;
+  layers: CatalogLayer[];
+  activeLayerId: string | null;
+  onLayerChange: (layerId: string) => void;
   language: Language;
-  selectionValues: Record<DataLayer, LayerSelectionValue>;
-  selectionOptions: Record<DataLayer, Partial<Record<SelectorKey, LayerSelectOption[]>>>;
-  onSelectionChange: (layer: DataLayer, field: SelectorKey, value?: string) => void;
+  selectionValues: Record<string, LayerSelectionValue>;
+  selectionOptions: Record<string, Partial<Record<SelectorKey, LayerSelectOption[]>>>;
+  onSelectionChange: (layerId: string, field: SelectorKey, value?: string) => void;
+  loading?: boolean;
+  error?: string | null;
 }
 
 const translations = {
   en: {
     title: 'Data Layers',
+    loading: 'Loading layers…',
+    empty: 'No layers published for this project.',
+    error: 'Could not load layers',
   },
   fr: {
     title: 'Couches de Données',
-  }
+    loading: 'Chargement des couches…',
+    empty: 'Aucune couche publiée pour ce projet.',
+    error: 'Impossible de charger les couches',
+  },
 };
 
-export function LayerControls({ activeLayer, onLayerChange, language, selectionValues, selectionOptions, onSelectionChange }: LayerControlsProps) {
+export function LayerControls({
+  layers,
+  activeLayerId,
+  onLayerChange,
+  language,
+  selectionValues,
+  selectionOptions,
+  onSelectionChange,
+  loading,
+  error,
+}: LayerControlsProps) {
   const t = translations[language];
-//    const { mapRef } = useMap() ?? { mapRef: { current: null } };
+  const [infoLayerId, setInfoLayerId] = useState<string | null>(null);
 
   const isFieldEnabled = (selection: LayerSelectionValue, field: SelectorConfig) => {
     if (!field.dependsOn || field.dependsOn.length === 0) {
@@ -35,73 +60,121 @@ export function LayerControls({ activeLayer, onLayerChange, language, selectionV
     return field.dependsOn.every((dependency) => Boolean(selection[dependency]));
   };
 
-//   const boundsArray = [
-//   37.87998010486817,
-//   -0.25144460148935915,
-//   37.89064998256544,
-//   -0.24131712218419182
-// ];
+  if (loading) {
+    return (
+      <div className="p-4 border-b">
+        <h2 className="mb-3">{t.title}</h2>
+        <p className="text-sm text-gray-500">{t.loading}</p>
+      </div>
+    );
+  }
 
-// const [minx, miny, maxx, maxy] = boundsArray;
+  if (error) {
+    return (
+      <div className="p-4 border-b">
+        <h2 className="mb-3">{t.title}</h2>
+        <p className="text-sm text-red-600">{t.error}</p>
+      </div>
+    );
+  }
 
-// const bounds = { minx, miny, maxx, maxy };
+  if (!layers.length) {
+    return (
+      <div className="p-4 border-b">
+        <h2 className="mb-3">{t.title}</h2>
+        <p className="text-sm text-gray-500">{t.empty}</p>
+      </div>
+    );
+  }
 
-// var dataset_url = "https://climatehub.acmad.org/titiler/cog/tiles/WebMercatorQuad/{z}/{x}/{y}.png?url=https%3A%2F%2Fminio.acmad.org%2Fgeodata%2FTharaka_Nithi_Mission_2_transparent_mosaic_RGB.tif&bidx=1&bidx=2&bidx=3&tilesize=512"
-
-//     // add_image_layer(mapRef.current, dataset_url, "test-layer", true, bounds, true);
-
-    // 
-  
   return (
     <div className="p-4 border-b">
       <h2 className="mb-3">{t.title}</h2>
       <div className="space-y-2">
-        {layerRegistry.map((layer) => {
-          const Icon = layer.icon;
+        {layers.map((layer) => {
+          const isActive = activeLayerId === layer.id;
+          const colorClass = layer.ui?.color_class || 'text-blue-600';
+          const description = layer.description?.plain || layer.labels.description[language];
+
           return (
             <div key={layer.id} className="space-y-2">
               <Card
                 className={`p-3 cursor-pointer transition-all ${
-                  activeLayer === layer.id
+                  isActive
                     ? 'bg-green-50 border-green-500 shadow-md'
                     : 'hover:bg-gray-50 border-gray-200'
                 }`}
                 onClick={() => onLayerChange(layer.id)}
               >
                 <div className="flex items-start gap-3">
-                  <Icon className={`size-5 mt-0.5 ${layer.color}`} />
-                  <div className="flex-1">
-                    <div className={activeLayer === layer.id ? 'text-green-900' : ''}>
-                      {layer.label[language]}
+                  {layer.icon?.url ? (
+                    <img
+                      src={layer.icon.url}
+                      alt={layer.title}
+                      className="size-8 mt-0.5 object-contain shrink-0"
+                    />
+                  ) : null}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className={isActive ? 'text-green-900 font-medium' : ''}>
+                        {layer.labels.title[language]}
+                      </span>
+                      {description ? (
+                        <button
+                          type="button"
+                          className={`shrink-0 p-0.5 rounded hover:bg-gray-200 ${colorClass}`}
+                          aria-label={language === 'fr' ? 'Informations' : 'Info'}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setInfoLayerId((current) =>
+                              current === layer.id ? null : layer.id,
+                            );
+                          }}
+                        >
+                          <Info className="size-4" />
+                        </button>
+                      ) : null}
                     </div>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      {layer.description[language]}
-                    </p>
+                    {infoLayerId === layer.id && description ? (
+                      <p className="text-xs text-gray-600 mt-1 border-l-2 border-gray-300 pl-2">
+                        {description}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
               </Card>
 
-              {activeLayer === layer.id && layer.selection?.selectors?.length ? (
+              {isActive && layer.selectors.length > 0 ? (
                 <div className="pl-8 pr-1 pb-1" onClick={(event) => event.stopPropagation()}>
                   <div className="flex flex-wrap items-end gap-2">
-                    {layer.selection.selectors.map((field) => {
+                    {layer.selectors.map((field) => {
                       const selection = selectionValues[layer.id] || {};
                       const options = selectionOptions[layer.id]?.[field.key] || [];
-                      const selectedOption = options.find((option) => option.value === selection[field.key]) || null;
+                      const selectedOption =
+                        options.find((option) => option.value === selection[field.key]) ||
+                        null;
                       const enabled = isFieldEnabled(selection, field);
 
                       return (
-                        <div key={`${layer.id}-${field.key}`} className="flex-1" style={{ minWidth: field.minWidthPx || 120 }}>
-                          <p className="mb-1 text-xs text-gray-600">{field.label[language]}</p>
+                        <div
+                          key={`${layer.id}-${field.key}`}
+                          className="flex-1"
+                          style={{ minWidth: field.minWidthPx || 120 }}
+                        >
+                          <p className="mb-1 text-xs text-gray-600">
+                            {field.label[language]}
+                          </p>
                           <Select
-                            className='layer-select'
+                            className="layer-select"
                             classNamePrefix="layer-select-controls"
                             options={options}
                             value={selectedOption}
                             isClearable={!field.required}
                             isDisabled={!enabled}
                             placeholder={language === 'fr' ? 'Sélectionner..' : 'Select..'}
-                            onChange={(option) => onSelectionChange(layer.id, field.key, option?.value)}
+                            onChange={(option) =>
+                              onSelectionChange(layer.id, field.key, option?.value)
+                            }
                           />
                         </div>
                       );

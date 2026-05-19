@@ -1,3 +1,5 @@
+import { catalogBaseUrl } from "../config/api";
+
 const MAPBOX_KEY = import.meta.env.VITE_MAPBOX_KEY;
 
 export const basemaps = [
@@ -47,6 +49,7 @@ export const basemaps = [
   export const maplibre_str =
   "bbox={bbox-epsg-3857}&format=image/png&service=WMS&version=1.1.1&request=GetMap&srs=EPSG:3857&width=256&height=256&layers=";
 
-  export const base_url = "https://climatehub.acmad.org"
+  /** API origin (catalog, TiTiler via backend); from BASE_URL in .env, default production. */
+  export const base_url = catalogBaseUrl;
 
 

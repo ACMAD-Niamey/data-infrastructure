@@ -3,7 +3,7 @@ import Legend from './Legend';
 import { DataPanel } from './DataPanel';
 import "../styles/rightbar.css"
 
-const RightBar = ({ activeLayer, language, selectedFeature, selectedYear, onYearChange, activeTab, onTabChange }) => {
+const RightBar = ({ activeLayer, language, selectedFeature, activeTab, onTabChange }) => {
     const [active_tab, setActive_tab] = useState(activeTab || "Legend");
 
     useEffect(() => {
@@ -34,8 +34,6 @@ const RightBar = ({ activeLayer, language, selectedFeature, selectedYear, onYear
                     activeLayer={activeLayer}
                     language={language}
                     selectedFeature={selectedFeature}
-                    selectedYear={selectedYear}
-                    onYearChange={onYearChange}
                   />
                     </div>
                 );

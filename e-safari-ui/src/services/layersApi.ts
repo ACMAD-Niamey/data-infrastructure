@@ -1,8 +1,9 @@
-import { DataLayer, LayerSelectOption, LayerSelectionValue, SelectorKey } from "../components/layers/layerRegistry";
+import type { LayerSelectOption, LayerSelectionValue, SelectorKey } from "../types/catalogLayer";
+import { catalogBaseUrl, layersApiBaseUrl } from "../config/api";
 import axios from "axios";
 
 type FetchSelectorOptionsParams = {
-  layerId: DataLayer;
+  layerId: string;
   field: SelectorKey;
   selection?: LayerSelectionValue;
 };
@@ -47,9 +48,6 @@ export type SatelliteVisualizationResult = {
   bounds: BoundsObject | null;
 };
 
-const viteEnv = ((import.meta as unknown as { env?: Record<string, string | undefined> }).env) || {};
-const apiBaseUrl = viteEnv.VITE_LAYERS_API_BASE_URL || "";
-const catalogBaseUrl = viteEnv.VITE_CATALOG_API_BASE_URL || "https://e-safari.acmad.org";
 
 const catalogClient = axios.create({
   baseURL: catalogBaseUrl,
@@ -95,7 +93,7 @@ export const fetchSelectorOptions = async ({
   field,
   selection,
 }: FetchSelectorOptionsParams): Promise<LayerSelectOption[]> => {
-  if (!apiBaseUrl) {
+  if (!layersApiBaseUrl) {
     return [];
   }
 
@@ -107,7 +105,7 @@ export const fetchSelectorOptions = async ({
     query.set(key, value);
   });
 
-  const endpoint = `${apiBaseUrl.replace(/\/$/, "")}/layers/${layerId}/options?${query.toString()}`;
+  const endpoint = `${layersApiBaseUrl}/layers/${layerId}/options?${query.toString()}`;
   const response = await fetch(endpoint);
 
   if (!response.ok) {
@@ -131,11 +129,11 @@ const toBoundsObject = (bounds?: [number, number, number, number]): BoundsObject
   return { minx, miny, maxx, maxy };
 };
 
-export const fetchSatelliteAvailability = async ({
-  datasetId = "drone-image",
+export const fetchDatasetAvailability = async ({
+  datasetId,
   cadence = "monthly",
 }: {
-  datasetId?: string;
+  datasetId: string;
   cadence?: string;
 }): Promise<SatelliteAvailabilityResult> => {
   const response = await catalogClient.get<SatelliteAvailabilityResponse>(
@@ -157,12 +155,12 @@ export const fetchSatelliteAvailability = async ({
   };
 };
 
-export const fetchSatelliteVisualization = async ({
-  datasetId = "drone-image",
+export const fetchDatasetVisualization = async ({
+  datasetId,
   cadence = "monthly",
   date,
 }: {
-  datasetId?: string;
+  datasetId: string;
   cadence?: string;
   date: string;
 }): Promise<SatelliteVisualizationResult> => {
@@ -179,3 +177,9 @@ export const fetchSatelliteVisualization = async ({
     bounds: toBoundsObject(payload.titiler_info?.bounds),
   };
 };
+
+/** @deprecated Use fetchDatasetAvailability */
+export const fetchSatelliteAvailability = fetchDatasetAvailability;
+
+/** @deprecated Use fetchDatasetVisualization */
+export const fetchSatelliteVisualization = fetchDatasetVisualization;

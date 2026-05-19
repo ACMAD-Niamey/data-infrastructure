@@ -35,6 +35,23 @@ class UIConfigSerializer(serializers.Serializer):
     opacity = serializers.FloatField(min_value=0.0, max_value=1.0)
     minzoom = serializers.IntegerField(min_value=0)
     maxzoom = serializers.IntegerField(min_value=0, max_value=22)
+    color_class = serializers.CharField(max_length=80, required=False)
+
+
+class DescriptionSerializer(serializers.Serializer):
+    html = serializers.CharField()
+    plain = serializers.CharField()
+
+
+class IconSerializer(serializers.Serializer):
+    slug = serializers.CharField(max_length=80)
+    url = serializers.URLField()
+
+
+class SelectionSerializer(serializers.Serializer):
+    cadence = serializers.ChoiceField(
+        choices=["daily", "dekadal", "monthly", "seasonal"]
+    )
 
 
 class LayerSerializer(serializers.Serializer):
@@ -42,8 +59,11 @@ class LayerSerializer(serializers.Serializer):
     id = serializers.CharField(max_length=120)
     title = serializers.CharField(max_length=120)
     type = serializers.ChoiceField(choices=["raster", "vector"])
-    project = serializers.CharField(max_length=255, allow_null=True)
+    project = serializers.CharField(max_length=255, allow_null=True, required=False)
+    description = DescriptionSerializer()
+    icon = IconSerializer(allow_null=True)
     dataset = DatasetSerializer()
+    selection = SelectionSerializer()
     tile = TileConfigSerializer()
     ui = UIConfigSerializer()
     legend = serializers.JSONField()
@@ -53,6 +73,7 @@ class LayerSerializer(serializers.Serializer):
 class UILayersResponseSerializer(serializers.Serializer):
     """Response serializer for UI layers endpoint"""
     version = serializers.CharField(max_length=10)
+    project = serializers.CharField(max_length=255)
     layers = LayerSerializer(many=True)
 
 
