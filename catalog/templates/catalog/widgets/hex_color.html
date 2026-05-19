@@ -1,0 +1,17 @@
+{% with id=widget.attrs.id %}
+<div class="hex-color-widget" data-hex-color-widget>
+  <button type="button" class="hex-color-swatch" aria-label="Pick color" style="background-color: {{ widget.picker_value }}"></button>
+  <input type="color" class="hex-color-picker" value="{{ widget.picker_value }}" tabindex="-1" aria-hidden="true">
+  <input
+    type="text"
+    name="{{ widget.name }}"
+    {% if widget.value != None %}value="{{ widget.value }}"{% endif %}
+    {% if id %}id="{{ id }}"{% endif %}
+    class="hex-color-text"
+    maxlength="7"
+    placeholder="#RRGGBB"
+    autocomplete="off"
+    spellcheck="false"
+  >
+</div>
+{% endwith %}

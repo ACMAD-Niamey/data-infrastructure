@@ -3,40 +3,53 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from './ui/sheet';
 import { LayerControls } from './LayerControls';
 import { DataPanel } from './DataPanel';
 import { ScrollArea } from './ui/scroll-area';
-import { DataLayer, LayerSelectOption, LayerSelectionValue, SelectorKey } from './layers/layerRegistry';
+import type {
+  CatalogLayer,
+  LayerSelectOption,
+  LayerSelectionValue,
+  SelectorKey,
+} from '../types/catalogLayer';
 
 interface MobileDrawerProps {
   isOpen: boolean;
   onClose: () => void;
-  activeLayer: DataLayer;
-  onLayerChange: (layer: DataLayer) => void;
+  layers: CatalogLayer[];
+  activeLayerId: string | null;
+  activeLayer: CatalogLayer | null;
+  onLayerChange: (layerId: string) => void;
   language: Language;
-  selectionValues: Record<DataLayer, LayerSelectionValue>;
-  selectionOptions: Record<DataLayer, Partial<Record<SelectorKey, LayerSelectOption[]>>>;
-  onSelectionChange: (layer: DataLayer, field: SelectorKey, value?: string) => void;
+  selectionValues: Record<string, LayerSelectionValue>;
+  selectionOptions: Record<string, Partial<Record<SelectorKey, LayerSelectOption[]>>>;
+  onSelectionChange: (layerId: string, field: SelectorKey, value?: string) => void;
+  loading?: boolean;
+  error?: string | null;
 }
 
 const translations = {
   en: {
-    title: 'Dashboard Controls'
+    title: 'Dashboard Controls',
   },
   fr: {
-    title: 'Contrôles du Tableau de Bord'
-  }
+    title: 'Contrôles du Tableau de Bord',
+  },
 };
 
-export function MobileDrawer({ 
-  isOpen, 
-  onClose, 
-  activeLayer, 
+export function MobileDrawer({
+  isOpen,
+  onClose,
+  layers,
+  activeLayerId,
+  activeLayer,
   onLayerChange,
   language,
   selectionValues,
   selectionOptions,
   onSelectionChange,
+  loading,
+  error,
 }: MobileDrawerProps) {
   const t = translations[language];
-  
+
   return (
     <Sheet open={isOpen} onOpenChange={onClose}>
       <SheetContent side="bottom" className="h-[85vh]">
@@ -44,16 +57,19 @@ export function MobileDrawer({
           <SheetTitle>{t.title}</SheetTitle>
         </SheetHeader>
         <ScrollArea className="h-[calc(85vh-4rem)] mt-4">
-          <LayerControls 
-            activeLayer={activeLayer}
-            onLayerChange={(layer) => {
-              onLayerChange(layer);
+          <LayerControls
+            layers={layers}
+            activeLayerId={activeLayerId}
+            onLayerChange={(layerId) => {
+              onLayerChange(layerId);
               onClose();
             }}
             language={language}
             selectionValues={selectionValues}
             selectionOptions={selectionOptions}
             onSelectionChange={onSelectionChange}
+            loading={loading}
+            error={error}
           />
           <DataPanel activeLayer={activeLayer} language={language} />
         </ScrollArea>

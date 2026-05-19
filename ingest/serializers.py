@@ -80,3 +80,42 @@ class IngestResponseSerializer(serializers.Serializer):
     status = serializers.CharField(
         help_text="Current status of the ingestion run (e.g., 'accepted')"
     )
+
+
+class DeleteByDatetimeSerializer(serializers.Serializer):
+    """Identify a STAC item to delete by temporal fields (same rules as ingest)."""
+
+    datetime = serializers.DateTimeField(
+        required=False,
+        allow_null=True,
+        help_text="Required for daily/monthly cadence (same as ingest)",
+    )
+    start_datetime = serializers.DateTimeField(
+        required=False,
+        allow_null=True,
+        help_text="Required for dekadal/seasonal cadence",
+    )
+    end_datetime = serializers.DateTimeField(
+        required=False,
+        allow_null=True,
+        help_text="Required for dekadal/seasonal cadence",
+    )
+    item_id = serializers.CharField(
+        required=False,
+        allow_null=True,
+        help_text="Optional explicit STAC item id (skips STAC search)",
+    )
+
+
+class DeleteResponseSerializer(serializers.Serializer):
+    """Response from delete request (async deletion run)."""
+
+    run_id = serializers.IntegerField(help_text="ID of the deletion run for tracking")
+    status = serializers.CharField(help_text="Current status (e.g. accepted)")
+    item_id = serializers.CharField(
+        required=False,
+        help_text="STAC item id that will be deleted",
+    )
+    delete_object = serializers.BooleanField(
+        help_text="Whether the MinIO raster will also be removed",
+    )

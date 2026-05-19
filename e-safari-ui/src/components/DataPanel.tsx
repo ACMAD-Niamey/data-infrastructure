@@ -1,30 +1,43 @@
 import { Language } from '../types';
 import { SelectedFeatureStats } from './stats/SelectedFeatureStats';
 import { SelectedFeature } from '../Portal';
-import { DataLayer, layerRegistry } from './layers/layerRegistry';
+import type { CatalogLayer } from '../types/catalogLayer';
+import { renderLegend } from './LegendUtils';
 
 interface DataPanelProps {
-  activeLayer: DataLayer;
+  activeLayer: CatalogLayer | null;
   language: Language;
   selectedFeature?: SelectedFeature | null;
-  selectedYear?: string;
-  onYearChange?: (year: string) => void;
 }
 
-export function DataPanel({ activeLayer, language, selectedFeature, selectedYear, onYearChange }: DataPanelProps) {
-  const activeConfig = layerRegistry.find((layer) => layer.id === activeLayer);
+const emptyCopy = {
+  en: 'Select a layer to view its legend and description.',
+  fr: 'Sélectionnez une couche pour voir sa légende et sa description.',
+};
 
+export function DataPanel({ activeLayer, language, selectedFeature }: DataPanelProps) {
   return (
     <div className="p-4 space-y-4">
       {selectedFeature && (
-        <SelectedFeatureStats 
-          feature={selectedFeature} 
+        <SelectedFeatureStats
+          feature={selectedFeature}
           language={language}
           onClose={() => {}}
         />
       )}
-      
-      {activeConfig?.renderAnalysis({ language, selectedYear, onYearChange })}
+
+      {!activeLayer ? (
+        <p className="text-sm text-gray-500">{emptyCopy[language]}</p>
+      ) : (
+        <>
+          {activeLayer.description?.plain ? (
+            <p className="text-sm text-gray-700">{activeLayer.description.plain}</p>
+          ) : null}
+          {activeLayer.legend && Object.keys(activeLayer.legend).length > 0
+            ? renderLegend(activeLayer.legend, activeLayer.title)
+            : null}
+        </>
+      )}
     </div>
   );
 }
