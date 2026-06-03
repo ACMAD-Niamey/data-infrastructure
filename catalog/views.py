@@ -116,8 +116,22 @@ class DatasetAvailabilityView(APIView):
                     "monthly returns year-month strings.",
     )
     def get(self, request, dataset_id: str):
+        from catalog.models import GeoServerLayer, StaticWmsLayer
+        from django.utils.timezone import now
+
+        # Static WMS layers have no date dimension — return today as the single entry
+        sw_layer = StaticWmsLayer.objects.filter(dataset_id=dataset_id).first()
+        if sw_layer:
+            today = now().date().isoformat()
+            return Response({
+                "dataset_id": dataset_id,
+                "cadence": "static",
+                "available": [today],
+                "max": today,
+                "min": today,
+            }, status=status.HTTP_200_OK)
+
         # Route to GeoServer proxy if this dataset_id belongs to a GeoServerLayer
-        from catalog.models import GeoServerLayer
         gs_layer = GeoServerLayer.objects.filter(dataset_id=dataset_id).first()
         if gs_layer:
             return Response(_fetch_geoserver_availability(gs_layer), status=status.HTTP_200_OK)
@@ -217,8 +231,22 @@ class DatasetVisualizationView(APIView):
                     "the dataset as a map layer in the UI.",
     )
     def get(self, request, dataset_id: str):
+        from catalog.models import GeoServerLayer, StaticWmsLayer
+
+        # Static WMS layers — return the tile URL directly, date is ignored
+        sw_layer = StaticWmsLayer.objects.filter(dataset_id=dataset_id).first()
+        if sw_layer:
+            return Response(
+                {
+                    "dataset_id": dataset_id,
+                    "cadence": "static",
+                    "titiler_url": [sw_layer.tile_url],
+                    "titiler_info": {"tiles": [sw_layer.tile_url], "bounds": None},
+                },
+                status=status.HTTP_200_OK,
+            )
+
         # Route to GeoServer proxy if this dataset_id belongs to a GeoServerLayer
-        from catalog.models import GeoServerLayer
         gs_layer = GeoServerLayer.objects.filter(dataset_id=dataset_id).first()
         if gs_layer:
             date_param = request.query_params.get("date", "")
