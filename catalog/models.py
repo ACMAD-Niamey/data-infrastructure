@@ -14,16 +14,94 @@ from wagtail.snippets.models import register_snippet
 Image = get_image_model()
 
 
+@register_snippet
+class HazardCategory(models.Model):
+    """Hazard type used to group datasets in the multi-hazard geoportal."""
+
+    key = models.SlugField(unique=True, help_text="Stable slug matching frontend category keys, e.g. drought")
+    label = models.CharField(max_length=100)
+    icon = models.ForeignKey(
+        Image,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="Optional custom icon; frontend falls back to its built-in lucide icon when not set.",
+    )
+    order = models.PositiveIntegerField(default=0)
+    external_system_name = models.CharField(
+        max_length=200, blank=True,
+        help_text="Name of the linked external system, e.g. Africa Drought System",
+    )
+    external_system_url = models.URLField(
+        blank=True,
+        help_text="URL for the 'Go to [System]' button in the layer details panel.",
+    )
+
+    panels = [
+        FieldPanel("key"),
+        FieldPanel("label"),
+        FieldPanel("icon"),
+        FieldPanel("order"),
+        FieldPanel("external_system_name"),
+        FieldPanel("external_system_url"),
+    ]
+
+    class Meta:
+        ordering = ["order"]
+        verbose_name = "Hazard category"
+        verbose_name_plural = "Hazard categories"
+
+    def __str__(self):
+        return self.label
+
+
 class ProjectPage(Page):
     """A top-level container that groups datasets under one project."""
     intro = RichTextField(blank=True)
 
     content_panels = Page.content_panels + [
         FieldPanel("intro"),
+        InlinePanel("inclusions", label="Included projects"),
     ]
 
     # only allow DatasetPage children
     subpage_types = ["catalog.DatasetPage"]
+
+
+class ProjectInclusion(Orderable):
+    """Borrows another project's datasets into this project without duplication."""
+
+    project = ParentalKey(
+        "catalog.ProjectPage",
+        on_delete=models.CASCADE,
+        related_name="inclusions",
+    )
+    source_project = models.ForeignKey(
+        "catalog.ProjectPage",
+        on_delete=models.CASCADE,
+        related_name="included_by",
+        help_text="Datasets from this project become available in the parent project.",
+    )
+    default_category = models.ForeignKey(
+        "catalog.HazardCategory",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        help_text="Assigned to included datasets that have no category of their own.",
+    )
+
+    panels = [
+        FieldPanel("source_project"),
+        FieldPanel("default_category"),
+    ]
+
+    class Meta(Orderable.Meta):
+        verbose_name = "Included project"
+        verbose_name_plural = "Included projects"
+
+    def __str__(self):
+        return f"{self.source_project} → {self.project}"
 
 
 class DatasetPage(Page):
@@ -63,13 +141,22 @@ class DatasetPage(Page):
     # controls what shows up in the UI config API
     is_published_for_ui = models.BooleanField(default=False)
 
+    hazard_category = models.ForeignKey(
+        "catalog.HazardCategory",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="datasets",
+        help_text="Hazard type for grouping in the multi-hazard geoportal.",
+    )
+
     icon = models.ForeignKey(
         "catalog.LayerIcon",
         on_delete=models.PROTECT,
         related_name="datasets",
         null=True,
         blank=True,
-        help_text="Toolbar icon for this dataset in the e-safari UI.",
+        help_text="Toolbar icon for this dataset in the UI.",
     )
     sort_order = models.PositiveIntegerField(
         default=0,
@@ -84,6 +171,7 @@ class DatasetPage(Page):
 
     content_panels = Page.content_panels + [
         FieldPanel("description"),
+        FieldPanel("hazard_category"),
         FieldPanel("icon"),
         FieldPanel("sort_order"),
         FieldPanel("color_class"),
@@ -230,6 +318,32 @@ class Layer(ClusterableModel):
         help_text="Label → color map for the UI legend, e.g. {\"Low\": \"#d73027\", \"High\": \"#1a9850\"}.",
     )
 
+    # Layer detail fields shown in the full details panel
+    coverage = models.CharField(
+        max_length=200, blank=True, default="Africa",
+        help_text="Geographic coverage, e.g. Africa",
+    )
+    resolution = models.CharField(
+        max_length=100, blank=True,
+        help_text="Spatial resolution, e.g. 5 km",
+    )
+    update_frequency = models.CharField(
+        max_length=100, blank=True,
+        help_text="How often data is updated, e.g. Every 10 days",
+    )
+    source_organization = models.CharField(
+        max_length=200, blank=True,
+        help_text="Data source / producer, e.g. ACMAD / Africa Drought System",
+    )
+    methodology = RichTextField(
+        blank=True,
+        help_text="Methodology description shown in the full details panel.",
+    )
+    methodology_url = models.URLField(
+        blank=True,
+        help_text="Link to external methodology documentation.",
+    )
+
     updated_at = models.DateTimeField(auto_now=True)
 
     panels = [
@@ -259,6 +373,17 @@ class Layer(ClusterableModel):
         FieldPanel("minzoom"),
         FieldPanel("maxzoom"),
         FieldPanel("legend", widget=LegendMapWidget()),
+        MultiFieldPanel(
+            [
+                FieldPanel("coverage"),
+                FieldPanel("resolution"),
+                FieldPanel("update_frequency"),
+                FieldPanel("source_organization"),
+                FieldPanel("methodology"),
+                FieldPanel("methodology_url"),
+            ],
+            heading="Layer details",
+        ),
     ]
 
     def __str__(self):
@@ -386,3 +511,134 @@ class Layer(ClusterableModel):
                     delattr(self, "_pending_style_import")
         finally:
             self._skip_tile_sync = False
+
+
+@register_snippet
+class GeoServerLayer(models.Model):
+    """
+    An externally-hosted WMS layer served via GeoServer.
+    Availability is fetched from the external system's API; tile URLs are
+    constructed from a template and proxied through the catalog endpoints so
+    the frontend needs no changes.
+    """
+
+    dataset_id = models.SlugField(
+        unique=True,
+        help_text="Unique ID used by the catalog API, e.g. ada-cdi",
+    )
+    title = models.CharField(max_length=200)
+    project = models.ForeignKey(
+        "catalog.ProjectPage",
+        on_delete=models.CASCADE,
+        related_name="geoserver_layers",
+    )
+    hazard_category = models.ForeignKey(
+        "catalog.HazardCategory",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    icon = models.ForeignKey(
+        "catalog.LayerIcon",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+    )
+    is_published_for_ui = models.BooleanField(default=False)
+
+    # External availability API
+    availability_api_url = models.URLField(
+        help_text="Base URL of the availability endpoint, e.g. https://ada.acmad.org/api/data_api/rs_data/get_available_datasets/",
+    )
+    data_name = models.CharField(
+        max_length=100,
+        help_text="Value of the data_name query param, e.g. cdi",
+    )
+    cadence = models.CharField(max_length=10, choices=DatasetPage.CADENCES)
+
+    # GeoServer WMS tile URL template
+    wms_url_template = models.TextField(
+        help_text=(
+            "Full WMS URL template. Use {year}, {MM}, {DD}, {TS} as date placeholders. "
+            "Keep {bbox-epsg-3857} — MapLibre fills it in dynamically. "
+            "Copy the url_template value from the external availability API response."
+        ),
+    )
+    timescale = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text="Replaces {TS} in the URL template, e.g. 48 for SPI-48",
+    )
+
+    # UI display config
+    default_visible = models.BooleanField(default=False)
+    opacity = models.FloatField(default=0.85)
+    sort_order = models.PositiveIntegerField(default=0)
+    color_class = models.CharField(max_length=80, default="text-blue-600", blank=True)
+    legend = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Label → hex color map, e.g. {"No Warning": "#ffffff"}',
+    )
+    description = RichTextField(blank=True)
+
+    # Layer detail fields (same set as the Layer snippet)
+    coverage = models.CharField(max_length=200, blank=True, default="Africa")
+    resolution = models.CharField(max_length=100, blank=True, help_text="e.g. 5 km")
+    update_frequency = models.CharField(max_length=100, blank=True, help_text="e.g. Every 10 days")
+    source_organization = models.CharField(max_length=200, blank=True)
+    methodology = RichTextField(blank=True)
+    methodology_url = models.URLField(blank=True)
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+    panels = [
+        FieldPanel("project"),
+        FieldPanel("dataset_id"),
+        FieldPanel("title"),
+        FieldPanel("hazard_category"),
+        FieldPanel("icon"),
+        FieldPanel("is_published_for_ui"),
+        MultiFieldPanel(
+            [
+                FieldPanel("availability_api_url"),
+                FieldPanel("data_name"),
+                FieldPanel("cadence"),
+                FieldPanel("wms_url_template"),
+                FieldPanel("timescale"),
+            ],
+            heading="GeoServer config",
+        ),
+        MultiFieldPanel(
+            [
+                FieldPanel("default_visible"),
+                FieldPanel("opacity"),
+                FieldPanel("sort_order"),
+                FieldPanel("color_class"),
+                FieldPanel("legend", widget=LegendMapWidget()),
+            ],
+            heading="UI config",
+        ),
+        FieldPanel("description"),
+        MultiFieldPanel(
+            [
+                FieldPanel("coverage"),
+                FieldPanel("resolution"),
+                FieldPanel("update_frequency"),
+                FieldPanel("source_organization"),
+                FieldPanel("methodology"),
+                FieldPanel("methodology_url"),
+            ],
+            heading="Layer details",
+        ),
+    ]
+
+    class Meta:
+        ordering = ["sort_order", "title"]
+        verbose_name = "ADMA GeoServer layer"
+        verbose_name_plural = "ADMA GeoServer layers"
+
+    def __str__(self):
+        return self.title

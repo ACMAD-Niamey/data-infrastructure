@@ -7,6 +7,7 @@ from rest_framework import status
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 import os
 import logging
+import requests as http_requests
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger(__name__)
@@ -20,6 +21,65 @@ from .serializers import (
 from .utils import DatasetVisualization
 
 replace_titiler_url = os.getenv("REPLACE_TITILER_URL", "false").lower() in ("true", "1", "yes")
+
+
+# ---------------------------------------------------------------------------
+# GeoServer proxy helpers
+# ---------------------------------------------------------------------------
+
+def _fetch_geoserver_availability(layer) -> dict:
+    """Fetch and normalise availability from an external GeoServer availability API."""
+    try:
+        resp = http_requests.get(
+            layer.availability_api_url,
+            params={"data_name": layer.data_name},
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json().get(layer.data_name, {})
+    except Exception as exc:
+        log.warning("GeoServer availability fetch failed for %s: %s", layer.dataset_id, exc)
+        return {"dataset_id": layer.dataset_id, "cadence": layer.cadence,
+                "available": [], "min": None, "max": None}
+
+    dates = []
+    for year, year_data in data.items():
+        if not str(year).isdigit():
+            continue
+        months = year_data.get("months", [])
+        dekads = year_data.get("dekads", [])
+        if layer.cadence == "dekadal":
+            for month in months:
+                for dekad in dekads:
+                    dates.append(f"{year}-{month}-{dekad.zfill(2)}")
+        elif layer.cadence == "monthly":
+            for month in months:
+                dates.append(f"{year}-{month}")
+        else:  # daily — treat months as approximate; availability API doesn't give daily
+            for month in months:
+                dates.append(f"{year}-{month}-01")
+
+    dates.sort(reverse=True)
+    return {
+        "dataset_id": layer.dataset_id,
+        "cadence": layer.cadence,
+        "available": dates,
+        "max": dates[0] if dates else None,
+        "min": dates[-1] if dates else None,
+    }
+
+
+def _build_geoserver_tile_url(layer, date_str: str) -> str:
+    """Fill the WMS URL template with the chosen date."""
+    parts = date_str.split("-")
+    year  = parts[0]
+    month = parts[1] if len(parts) > 1 else "01"
+    day   = parts[2].zfill(2) if len(parts) > 2 else "01"
+    url = layer.wms_url_template
+    url = url.replace("{year}", year).replace("{MM}", month).replace("{DD}", day)
+    if layer.timescale:
+        url = url.replace("{TS}", layer.timescale)
+    return url
 
 def to_dekad_start(d: date) -> date:
     # 1–10 => 1st, 11–20 => 11th, 21+ => 21st
@@ -56,6 +116,12 @@ class DatasetAvailabilityView(APIView):
                     "monthly returns year-month strings.",
     )
     def get(self, request, dataset_id: str):
+        # Route to GeoServer proxy if this dataset_id belongs to a GeoServerLayer
+        from catalog.models import GeoServerLayer
+        gs_layer = GeoServerLayer.objects.filter(dataset_id=dataset_id).first()
+        if gs_layer:
+            return Response(_fetch_geoserver_availability(gs_layer), status=status.HTTP_200_OK)
+
         cadence = (request.query_params.get("cadence") or "daily").lower()
         # If you have cadence in Wagtail, you can fetch it here instead.
         # For now, allow cadence in querystring or default daily.
@@ -151,14 +217,32 @@ class DatasetVisualizationView(APIView):
                     "the dataset as a map layer in the UI.",
     )
     def get(self, request, dataset_id: str):
+        # Route to GeoServer proxy if this dataset_id belongs to a GeoServerLayer
+        from catalog.models import GeoServerLayer
+        gs_layer = GeoServerLayer.objects.filter(dataset_id=dataset_id).first()
+        if gs_layer:
+            date_param = request.query_params.get("date", "")
+            if not date_param:
+                return Response({"detail": "date is required"}, status=400)
+            tile_url = _build_geoserver_tile_url(gs_layer, date_param)
+            return Response(
+                {
+                    "dataset_id": dataset_id,
+                    "cadence": gs_layer.cadence,
+                    "titiler_url": [tile_url],
+                    "titiler_info": {"tiles": [tile_url], "bounds": None},
+                },
+                status=status.HTTP_200_OK,
+            )
+
         serializer = DatasetVisualizationRequestSerializer(data=request.query_params)
         serializer.is_valid(raise_exception=True)
         date = serializer.validated_data["date"]
-        cadence = serializer.validated_data["cadence"] 
+        cadence = serializer.validated_data["cadence"]
 
         try:
             visualization_info = DatasetVisualization(date, dataset_id, cadence)
-            log.info(f'repalce {replace_titiler_url}')
+            log.info(f'replace_titiler_url={replace_titiler_url}')
             titiler_info = visualization_info.get_visualization(replace_url=replace_titiler_url)
 
             if not titiler_info:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import NamedTuple
+
 from django.utils import timezone
 from django.utils.html import strip_tags
 from wagtail.rich_text import expand_db_html
@@ -48,7 +50,7 @@ def _layer_type_for_dataset(dataset: DatasetPage, style: Layer | None) -> str:
     return dataset.dataset_type
 
 
-def dataset_to_api_dict(dataset: DatasetPage, request) -> dict:
+def dataset_to_api_dict(dataset: DatasetPage, request, category_override: str | None = None) -> dict:
     style: Layer | None = getattr(dataset, "style_config", None)
     icon = icon_payload_from_dataset(dataset, request)
 
@@ -78,11 +80,24 @@ def dataset_to_api_dict(dataset: DatasetPage, request) -> dict:
         else:
             updated_at = timezone.now().isoformat()
 
+    details = {
+        "coverage":            style.coverage or "Africa",
+        "resolution":          style.resolution or "",
+        "update_frequency":    style.update_frequency or "",
+        "source_organization": style.source_organization or "",
+        "methodology_html":    expand_db_html(_description_raw_html(style.methodology)),
+        "methodology_url":     style.methodology_url or "",
+    } if style else None
+
     return {
         "id": dataset.dataset_id,
         "title": dataset.title,
         "type": _layer_type_for_dataset(dataset, style),
         "project": dataset.get_parent().slug if dataset.get_parent() else None,
+        "hazard_category": (
+            dataset.hazard_category.key if dataset.hazard_category_id else category_override
+        ),
+        "details": details,
         "description": dataset_description_payload(dataset),
         "icon": icon,
         "dataset": {
@@ -108,6 +123,7 @@ def datasets_for_project(project_slug: str) -> list[DatasetPage]:
         .filter(is_published_for_ui=True, icon__isnull=False)
         .select_related("icon", "icon__image")
         .select_related("style_config")
+        .select_related("hazard_category")
         .order_by("sort_order", "title")
     )
 
@@ -115,3 +131,34 @@ def datasets_for_project(project_slug: str) -> list[DatasetPage]:
 # Backwards-compatible alias for tests patching layers_for_project
 def layers_for_project(project_slug: str) -> list[DatasetPage]:
     return datasets_for_project(project_slug)
+
+
+class DatasetEntry(NamedTuple):
+    dataset: DatasetPage
+    category_override: str | None
+
+
+def _dataset_qs(project_page: ProjectPage):
+    return (
+        DatasetPage.objects.live()
+        .child_of(project_page)
+        .filter(is_published_for_ui=True, icon__isnull=False)
+        .select_related("icon", "icon__image", "style_config", "hazard_category")
+        .order_by("sort_order", "title")
+    )
+
+
+def dataset_entries_for_project(project_slug: str) -> list[DatasetEntry]:
+    """Like datasets_for_project but also pulls in included projects with category overrides."""
+    project_page = ProjectPage.objects.live().get(slug=project_slug)
+
+    entries: list[DatasetEntry] = [
+        DatasetEntry(ds, None) for ds in _dataset_qs(project_page)
+    ]
+
+    for inc in project_page.inclusions.select_related("source_project", "default_category"):
+        cat_key = inc.default_category.key if inc.default_category_id else None
+        for ds in _dataset_qs(inc.source_project):
+            entries.append(DatasetEntry(ds, cat_key))
+
+    return entries

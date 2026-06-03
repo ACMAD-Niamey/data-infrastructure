@@ -1,0 +1,10 @@
+@import "tailwindcss";
+@import "./styles/globals.css";
+
+@theme {
+  --color-hub-900: #0a2d38;
+  --color-hub-800: #0d3d4a;
+  --color-hub-700: #115e6e;
+  --color-hub-400: #2a9db5;
+  --color-hub-100: #e0f4f8;
+}

@@ -1,0 +1,46 @@
+
+.map-wrap {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.map {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  cursor: pointer;
+}
+
+/* Match afri-met basemap control styling */
+
+
+.maplibregl-ctrl-basemaps .basemap {
+  width: 30px !important;
+  height: 30px !important;
+  margin: 2px !important;
+  border: 2px solid #64748b !important;
+  border-radius: 6px !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35) !important;
+  cursor: pointer !important;
+  z-index: 10 !important;
+}
+
+.maplibregl-ctrl-basemaps .basemap.active {
+  border-color: #22d3ee !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35) !important;
+}
+
+.maplibregl-ctrl-basemaps.closed .basemap.active {
+  width: 30px !important;
+  height: 30px !important;
+  border-radius: 6px !important;
+}
+
+.maplibregl-ctrl-basemaps {
+  pointer-events: auto;
+}

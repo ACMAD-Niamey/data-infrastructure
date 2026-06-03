@@ -30,7 +30,7 @@ from catalog.style.titiler_export import (
     build_colormap_for_titiler,
     compose_titiler_tilejson_params,
 )
-from catalog.ui_layers import dataset_description_payload
+from catalog.ui_layers import DatasetEntry, dataset_description_payload
 
 
 # ---------------------------------------------------------------------------
@@ -60,6 +60,7 @@ def _make_dataset(dataset_id="spi", project_slug="e-safari", with_style=False):
     mock_dataset.is_published_for_ui = True
     mock_dataset.description = None
     mock_dataset.color_class = "text-blue-600"
+    mock_dataset.hazard_category_id = None
     mock_dataset.get_parent.return_value = MagicMock(slug=project_slug)
     mock_dataset.last_published_at = None
 
@@ -85,6 +86,15 @@ def _make_dataset(dataset_id="spi", project_slug="e-safari", with_style=False):
         mock_style.maxzoom = 12
         mock_style.legend = {"low": "#0000ff", "high": "#ff0000"}
         mock_style.updated_at.isoformat.return_value = "2026-04-28T00:00:00"
+        # Set all string detail fields explicitly — MagicMock is truthy so
+        # `mock.field or "fallback"` returns the mock, not the fallback.
+        # expand_db_html also fails if it receives a MagicMock instead of a str.
+        mock_style.coverage = "Africa"
+        mock_style.resolution = ""
+        mock_style.update_frequency = ""
+        mock_style.source_organization = ""
+        mock_style.methodology = None
+        mock_style.methodology_url = ""
         mock_dataset.style_config = mock_style
     else:
         mock_dataset.style_config = None
@@ -134,10 +144,10 @@ class UILayersViewTests(TestCase):
         self.assertIn("project", response.data["detail"])
 
     @patch("catalog.api.ProjectPage")
-    @patch("catalog.api.datasets_for_project")
-    def test_returns_200_with_published_layers(self, mock_datasets_for_project, mock_project_page):
+    @patch("catalog.api.dataset_entries_for_project")
+    def test_returns_200_with_published_layers(self, mock_entries, mock_project_page):
         mock_project_page.objects.live.return_value.filter.return_value.exists.return_value = True
-        mock_datasets_for_project.return_value = [_make_dataset()]
+        mock_entries.return_value = [DatasetEntry(_make_dataset(), None)]
         response = self.client.get("/api/catalog/ui/layers?project=e-safari")
         self.assertEqual(response.status_code, 200)
         self.assertIn("layers", response.data)
@@ -145,29 +155,29 @@ class UILayersViewTests(TestCase):
         self.assertEqual(len(response.data["layers"]), 1)
 
     @patch("catalog.api.ProjectPage")
-    @patch("catalog.api.datasets_for_project")
-    def test_returns_200_with_empty_layer_list(self, mock_datasets_for_project, mock_project_page):
+    @patch("catalog.api.dataset_entries_for_project")
+    def test_returns_200_with_empty_layer_list(self, mock_entries, mock_project_page):
         mock_project_page.objects.live.return_value.filter.return_value.exists.return_value = True
-        mock_datasets_for_project.return_value = []
+        mock_entries.return_value = []
         response = self.client.get("/api/catalog/ui/layers?project=e-safari")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["layers"], [])
 
     @patch("catalog.api.ProjectPage")
-    @patch("catalog.api.datasets_for_project")
-    def test_response_contains_version_and_layers_keys(self, mock_datasets_for_project, mock_project_page):
+    @patch("catalog.api.dataset_entries_for_project")
+    def test_response_contains_version_and_layers_keys(self, mock_entries, mock_project_page):
         mock_project_page.objects.live.return_value.filter.return_value.exists.return_value = True
-        mock_datasets_for_project.return_value = []
+        mock_entries.return_value = []
         response = self.client.get("/api/catalog/ui/layers?project=e-safari")
         self.assertIn("version", response.data)
         self.assertIn("project", response.data)
         self.assertIn("layers", response.data)
 
     @patch("catalog.api.ProjectPage")
-    @patch("catalog.api.datasets_for_project")
-    def test_layer_item_uses_dataset_id_and_includes_icon(self, mock_datasets_for_project, mock_project_page):
+    @patch("catalog.api.dataset_entries_for_project")
+    def test_layer_item_uses_dataset_id_and_includes_icon(self, mock_entries, mock_project_page):
         mock_project_page.objects.live.return_value.filter.return_value.exists.return_value = True
-        mock_datasets_for_project.return_value = [_make_dataset("ndvi")]
+        mock_entries.return_value = [DatasetEntry(_make_dataset("ndvi"), None)]
         response = self.client.get("/api/catalog/ui/layers?project=e-safari")
         layer = response.data["layers"][0]
         self.assertEqual(layer["id"], "ndvi")
@@ -189,10 +199,10 @@ class UILayersViewTests(TestCase):
         self.assertIn("plain", layer["description"])
 
     @patch("catalog.api.ProjectPage")
-    @patch("catalog.api.datasets_for_project")
-    def test_style_config_merges_legend(self, mock_datasets_for_project, mock_project_page):
+    @patch("catalog.api.dataset_entries_for_project")
+    def test_style_config_merges_legend(self, mock_entries, mock_project_page):
         mock_project_page.objects.live.return_value.filter.return_value.exists.return_value = True
-        mock_datasets_for_project.return_value = [_make_dataset("spi", with_style=True)]
+        mock_entries.return_value = [DatasetEntry(_make_dataset("spi", with_style=True), None)]
         response = self.client.get("/api/catalog/ui/layers?project=e-safari")
         layer = response.data["layers"][0]
         self.assertEqual(layer["legend"], {"low": "#0000ff", "high": "#ff0000"})
