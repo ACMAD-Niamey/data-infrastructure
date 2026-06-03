@@ -17,10 +17,7 @@
 }
 
 /* Match afri-met basemap control styling */
-.maplibregl-ctrl-top-right,
-.maplibregl-ctrl-bottom-right {
-  margin: 12px;
-}
+
 
 .maplibregl-ctrl-basemaps .basemap {
   width: 30px !important;

@@ -44,13 +44,14 @@ function inferCategory(layer: CatalogLayer): string {
 
 type RightPanelProps = {
   layer: CatalogLayer;
+  isActive: boolean;
   onClose: () => void;
   onOpacityChange: (layerId: string, opacity: number) => void;
   opacityMap: Record<string, number>;
   categories: HazardCategory[];
 };
 
-function RightPanel({ layer, onClose, onOpacityChange, opacityMap, categories }: RightPanelProps) {
+function RightPanel({ layer, isActive, onClose, onOpacityChange, opacityMap, categories }: RightPanelProps) {
   const [tab, setTab] = useState<'details' | 'analysis'>('details');
   const [availability, setAvailability] = useState<string[]>([]);
   const [maxDate, setMaxDate] = useState<string | null>(null);
@@ -76,8 +77,9 @@ function RightPanel({ layer, onClose, onOpacityChange, opacityMap, categories }:
       .catch(() => setAvailError(true));
   }, [layer.dataset.id, cadence]);
 
-  // Fetch and add the tile when the selected date changes
+  // Fetch and add the tile when the selected date changes — only when layer is active
   useEffect(() => {
+    if (!isActive) return;
     const map = mapRef?.current;
     if (!map) return;
     const vizDate = buildVisualizationDate(cadence, selection);
@@ -94,7 +96,7 @@ function RightPanel({ layer, onClose, onOpacityChange, opacityMap, categories }:
       .catch(() => {});
 
     return () => controller.abort();
-  }, [layer.id, layer.dataset.id, cadence, selection, mapRef]);
+  }, [isActive, layer.id, layer.dataset.id, cadence, selection, mapRef]);
 
   // Apply opacity changes without re-fetching the tile
   useEffect(() => {
@@ -288,11 +290,11 @@ function LayerCard({ layer, isActive, isSelected, onToggle, onSelect }: LayerCar
         {/* Pill toggle */}
         <button
           onClick={() => onToggle(layer)}
-          className={`shrink-0 mt-0.5 w-10 h-5 rounded-full transition-colors relative ${isActive ? 'bg-hub-400' : 'bg-gray-300'}`}
+          className={`shrink-0 w-11 h-6 rounded-full transition-colors relative ${isActive ? 'bg-hub-400' : 'bg-gray-300'}`}
           aria-label={isActive ? 'Disable layer' : 'Enable layer'}
         >
           <span
-            className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform ${isActive ? 'translate-x-5' : 'translate-x-0.5'}`}
+            className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow-sm transition-all duration-200 ${isActive ? 'right-1' : 'left-1'}`}
           />
         </button>
 
@@ -525,7 +527,7 @@ export default function Geoportal() {
           <MapComponent />
 
           {/* Top toolbar */}
-          <div className="absolute top-3 right-3 z-10 flex items-center gap-1 bg-white rounded-full shadow px-1 py-1">
+          <div className="absolute top-3 right-14 z-10 flex items-center gap-1 bg-white rounded-full shadow px-1 py-1">
             <button className="flex items-center gap-1.5 text-xs font-medium text-gray-600 hover:text-hub-700 px-3 py-1.5 rounded-full hover:bg-gray-100 transition-colors">
               <Filter className="size-3.5" /> Filters
             </button>
@@ -549,6 +551,7 @@ export default function Geoportal() {
         {selectedLayer && (
           <RightPanel
             layer={selectedLayer}
+            isActive={activeLayerIds.has(selectedLayer.id)}
             onClose={() => setSelectedLayer(null)}
             onOpacityChange={handleOpacityChange}
             opacityMap={opacityMap}

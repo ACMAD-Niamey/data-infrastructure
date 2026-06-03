@@ -6,7 +6,10 @@ import sys
 import os
 from pathlib import Path
 from dotenv import load_dotenv
+import logging
 
+logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
 load_dotenv()
 load_dotenv(Path(__file__).resolve().parents[1] / ".env")
 
@@ -31,12 +34,15 @@ with NamedTemporaryFile(suffix=".tif") as src_tmp, NamedTemporaryFile(suffix=".t
 
     profile = cog_profiles.get("deflate")
 
+    profile.update({
+    "BIGTIFF": "YES",          # or "IF_SAFER"
+    "blocksize": 512,
+    "compress": "DEFLATE",
+    "predictor": 2,
+})
+
     config = dict(
-        GDAL_NUM_THREADS="ALL_CPUS",
-        RESAMPLING="average",        # or "nearest" if categorical
-        OVERVIEWS="AUTO",
-        OVERVIEW_RESAMPLING="average",
-        BIGTIFF="IF_SAFER",
+        GDAL_NUM_THREADS="ALL_CPUS"
     )
 
     # Create optimized COG
@@ -47,9 +53,11 @@ with NamedTemporaryFile(suffix=".tif") as src_tmp, NamedTemporaryFile(suffix=".t
         config=config,
         in_memory=False,
         quiet=False,
+        overview_resampling="average",
+         resampling="average",
     )
 
     # Upload to SAME key (overwrites)
     client.fput_object(bucket, dest_key, dst_tmp.name)
 
-print("File replaced with optimized COG.")
+log.info("File replaced with optimized COG.")
