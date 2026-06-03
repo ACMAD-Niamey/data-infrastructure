@@ -3,9 +3,13 @@ import {
   Layers, Search, ChevronDown, ChevronUp,
   Info, X, ChevronLeft, ChevronRight,
   Map as MapIcon, Filter, ExternalLink,
+  Download, Copy, Globe, Crosshair,
 } from 'lucide-react';
 import { useHazardCategories } from '../hooks/useHazardCategories';
 import type { HazardCategory } from '../hooks/useHazardCategories';
+import {
+  Dialog, DialogContent, DialogTitle,
+} from '../components/ui/dialog';
 import NavBar from '../components/NavBar';
 import MapComponent from '../components/map.jsx';
 import { useMap } from '../components/MapContext.jsx';
@@ -20,6 +24,7 @@ import {
 } from '../lib/availabilitySelectors';
 import { buildVisualizationDate } from '../lib/cadenceSelectors';
 import type { CatalogLayer, LayerSelectionValue } from '../types/catalogLayer';
+import type { BoundsObject } from '../services/layersApi';
 
 // ---------------------------------------------------------------------------
 // Hazard categories — loaded from backend, fallback to hardcoded list
@@ -46,13 +51,15 @@ type RightPanelProps = {
   layer: CatalogLayer;
   isActive: boolean;
   onClose: () => void;
+  onToggle: (layer: CatalogLayer) => void;
   onOpacityChange: (layerId: string, opacity: number) => void;
   opacityMap: Record<string, number>;
   categories: HazardCategory[];
 };
 
-function RightPanel({ layer, isActive, onClose, onOpacityChange, opacityMap, categories }: RightPanelProps) {
+function RightPanel({ layer, isActive, onClose, onToggle, onOpacityChange, opacityMap, categories }: RightPanelProps) {
   const [tab, setTab] = useState<'details' | 'analysis'>('details');
+  const [showFullDetails, setShowFullDetails] = useState(false);
   const [availability, setAvailability] = useState<string[]>([]);
   const [maxDate, setMaxDate] = useState<string | null>(null);
   const [selection, setSelection] = useState<LayerSelectionValue>({});
@@ -243,10 +250,10 @@ function RightPanel({ layer, isActive, onClose, onOpacityChange, opacityMap, cat
               <table className="w-full text-xs">
                 <tbody className="divide-y divide-gray-100">
                   {[
-                    ['Source', layer.dataset.title],
+                    ['Source', layer.details?.source_organization || layer.dataset.title],
                     ['Cadence', layer.dataset.cadence],
                     ['Dataset Type', layer.dataset.dataset_type],
-                    ['Coverage', 'Africa'],
+                    ['Coverage', layer.details?.coverage || 'Africa'],
                   ].map(([k, v]) => (
                     <tr key={k}>
                       <td className="py-1.5 text-gray-500 pr-4 whitespace-nowrap">{k}</td>
@@ -257,9 +264,25 @@ function RightPanel({ layer, isActive, onClose, onOpacityChange, opacityMap, cat
               </table>
             </div>
 
-            <button className="w-full flex items-center justify-center gap-2 border border-hub-400 text-hub-700 hover:bg-hub-100 rounded px-4 py-2 text-sm font-medium transition-colors">
+            <button
+              onClick={() => setShowFullDetails(true)}
+              className="w-full flex items-center justify-center gap-2 border border-hub-400 text-hub-700 hover:bg-hub-100 rounded px-4 py-2 text-sm font-medium transition-colors"
+            >
               View Full Details <ExternalLink className="size-3.5" />
             </button>
+
+            <FullDetailsDialog
+              open={showFullDetails}
+              onClose={() => setShowFullDetails(false)}
+              layer={layer}
+              isActive={isActive}
+              onToggle={onToggle}
+              categories={categories}
+              availability={availability}
+              dateIndex={dateIndex}
+              currentDateLabel={currentDateLabel}
+              onDateNav={handleDateNav}
+            />
           </>
         ) : (
           <div className="flex items-center justify-center h-32 text-gray-400 text-sm">
@@ -268,6 +291,334 @@ function RightPanel({ layer, isActive, onClose, onOpacityChange, opacityMap, cat
         )}
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Full details dialog
+// ---------------------------------------------------------------------------
+
+const DETAIL_TABS = ['Overview', 'Metadata', 'Legend', 'Time Range', 'Access', 'Methodology'] as const;
+type DetailTab = typeof DETAIL_TABS[number];
+
+type FullDetailsDialogProps = {
+  open: boolean;
+  onClose: () => void;
+  layer: CatalogLayer;
+  isActive: boolean;
+  onToggle: (layer: CatalogLayer) => void;
+  categories: HazardCategory[];
+  availability: string[];
+  dateIndex: number;
+  currentDateLabel: string;
+  onDateNav: (dir: -1 | 1) => void;
+};
+
+function FullDetailsDialog({
+  open, onClose, layer, isActive, onToggle, categories,
+  availability, dateIndex, currentDateLabel, onDateNav,
+}: FullDetailsDialogProps) {
+  const [activeTab, setActiveTab] = useState<DetailTab>('Overview');
+  const categoryKey = inferCategory(layer);
+  const hazardCat = categories.find((c) => c.key === categoryKey);
+
+  const badgeColors: Record<string, string> = {
+    drought: 'bg-amber-100 text-amber-700',
+    flood: 'bg-blue-100 text-blue-700',
+    weather: 'bg-sky-100 text-sky-700',
+    heat: 'bg-red-100 text-red-700',
+    agriculture: 'bg-green-100 text-green-700',
+    exposure: 'bg-purple-100 text-purple-700',
+    impact: 'bg-orange-100 text-orange-700',
+    boundary: 'bg-gray-100 text-gray-700',
+    other: 'bg-gray-100 text-gray-600',
+  };
+
+  const d = layer.details;
+
+  return (
+    <Dialog open={open} onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-lg w-full max-h-[85vh] flex flex-col p-0 gap-0 overflow-hidden">
+        {/* Header */}
+        <div className="px-5 pt-5 pb-3 border-b border-gray-100">
+          <div className="flex items-start justify-between gap-3 pr-6">
+            <div>
+              <div className="flex items-center gap-2 mb-0.5">
+                <DialogTitle className="text-base font-bold text-gray-800 leading-snug">
+                  {layer.title}
+                </DialogTitle>
+                {isActive && (
+                  <span className="text-[10px] font-semibold px-1.5 py-0.5 bg-hub-400 text-white rounded">
+                    Active
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-gray-500">{layer.dataset.title}</p>
+            </div>
+          </div>
+
+          {/* Tabs */}
+          <div className="flex gap-0 mt-3 -mb-px overflow-x-auto">
+            {DETAIL_TABS.map((t) => (
+              <button
+                key={t}
+                onClick={() => setActiveTab(t)}
+                className={`text-xs font-medium px-3 py-2 border-b-2 whitespace-nowrap transition-colors ${
+                  activeTab === t
+                    ? 'border-hub-400 text-hub-700'
+                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Tab content */}
+        <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          {activeTab === 'Overview' && (
+            <div className="space-y-5">
+              {/* Description */}
+              <p className="text-sm text-gray-700 leading-relaxed">
+                {layer.description?.plain || 'No description available.'}
+              </p>
+
+              {/* Metadata + Legend side by side */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Metadata</p>
+                  <table className="w-full text-xs">
+                    <tbody className="divide-y divide-gray-100">
+                      {[
+                        ['Category',   hazardCat?.label ?? '—'],
+                        ['Latest',     availability[0] ?? '—'],
+                        ['Coverage',   d?.coverage || 'Africa'],
+                        ['Resolution', d?.resolution || '—'],
+                        ['Update',     d?.update_frequency || '—'],
+                        ['Source',     d?.source_organization || layer.dataset.title],
+                      ].map(([k, v]) => (
+                        <tr key={k}>
+                          <td className="py-1.5 text-gray-500 pr-3 whitespace-nowrap">{k}</td>
+                          <td className="py-1.5 text-gray-800 font-medium">{v}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Legend</p>
+                  {layer.legend && Object.keys(layer.legend).length > 0 ? (
+                    <div className="space-y-1.5">
+                      {Object.entries(layer.legend).map(([label, color]) => (
+                        <div key={label} className="flex items-center gap-2">
+                          <div className="w-4 h-4 rounded-full border border-gray-200 shrink-0"
+                               style={{ backgroundColor: color as string }} />
+                          <span className="text-xs text-gray-700">{label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-gray-400">No legend defined.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Time Range */}
+              {availability.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Time Range</p>
+                  <div className="flex items-center gap-3 border border-gray-200 rounded px-3 py-2">
+                    <button onClick={() => onDateNav(1)} disabled={dateIndex >= availability.length - 1}
+                            className="text-gray-400 hover:text-gray-700 disabled:opacity-30" title="Older">
+                      <ChevronLeft className="size-4" />
+                    </button>
+                    <span className="flex-1 text-center text-sm font-medium text-gray-700">{currentDateLabel}</span>
+                    <button onClick={() => onDateNav(-1)} disabled={dateIndex <= 0}
+                            className="text-gray-400 hover:text-gray-700 disabled:opacity-30" title="Newer">
+                      <ChevronRight className="size-4" />
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Access */}
+              <div className="space-y-2">
+                <button onClick={() => onToggle(layer)}
+                        className={`w-full flex items-center justify-center gap-2 rounded px-4 py-2 text-sm font-medium transition-colors ${
+                          isActive ? 'bg-gray-100 text-gray-700 hover:bg-gray-200' : 'bg-hub-800 text-white hover:bg-hub-700'
+                        }`}>
+                  <Layers className="size-4" />
+                  {isActive ? 'Remove from Map' : 'Add to Map'}
+                </button>
+                <div className="flex gap-2">
+                  <button className="flex-1 flex items-center justify-center gap-1.5 border border-gray-300 text-gray-700 hover:border-hub-400 rounded px-3 py-2 text-sm font-medium">
+                    <Download className="size-4" /> Download
+                  </button>
+                  <button className="flex-1 flex items-center justify-center gap-1.5 border border-gray-300 text-gray-700 hover:border-hub-400 rounded px-3 py-2 text-sm font-medium">
+                    <Copy className="size-4" /> Copy API Link
+                  </button>
+                </div>
+                {hazardCat?.external_system_url && (
+                  <a href={hazardCat.external_system_url} target="_blank" rel="noopener noreferrer"
+                     className="w-full flex items-center justify-center gap-2 bg-hub-100 text-hub-800 hover:bg-hub-400 hover:text-white rounded px-4 py-2 text-sm font-semibold transition-colors">
+                    <Globe className="size-4" />
+                    Go to {hazardCat.external_system_name || hazardCat.label} System
+                    <ExternalLink className="size-3.5" />
+                  </a>
+                )}
+              </div>
+
+              {/* Methodology snippet */}
+              {d?.methodology_html && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Methodology</p>
+                  <div className="text-sm text-gray-700 leading-relaxed line-clamp-4 prose prose-sm max-w-none"
+                       dangerouslySetInnerHTML={{ __html: d.methodology_html }} />
+                  {d.methodology_url && (
+                    <a href={d.methodology_url} target="_blank" rel="noopener noreferrer"
+                       className="inline-flex items-center gap-1 mt-2 text-xs font-medium text-hub-700 hover:text-hub-400">
+                      View full methodology documentation <ExternalLink className="size-3" />
+                    </a>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'Metadata' && (
+            <table className="w-full text-sm">
+              <tbody className="divide-y divide-gray-100">
+                {[
+                  ['Category',   hazardCat?.label ?? '—'],
+                  ['Latest',     availability[0] ?? '—'],
+                  ['Coverage',   d?.coverage || 'Africa'],
+                  ['Resolution', d?.resolution || '—'],
+                  ['Update',     d?.update_frequency || '—'],
+                  ['Source',     d?.source_organization || layer.dataset.title],
+                ].map(([k, v]) => (
+                  <tr key={k}>
+                    <td className="py-2 text-gray-500 pr-6 whitespace-nowrap w-28">{k}</td>
+                    <td className="py-2 text-gray-800 font-medium">{v}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+
+          {activeTab === 'Legend' && (
+            layer.legend && Object.keys(layer.legend).length > 0 ? (
+              <div className="space-y-2">
+                {Object.entries(layer.legend).map(([label, color]) => (
+                  <div key={label} className="flex items-center gap-3">
+                    <div
+                      className="w-5 h-5 rounded border border-gray-300 shrink-0"
+                      style={{ backgroundColor: color as string }}
+                    />
+                    <span className="text-sm text-gray-700">{label}</span>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400">No legend defined for this layer.</p>
+            )
+          )}
+
+          {activeTab === 'Time Range' && (
+            <div>
+              {availability.length > 0 ? (
+                <>
+                  <p className="text-xs text-gray-500 mb-3 font-medium uppercase tracking-wide">Date</p>
+                  <div className="flex items-center gap-3 border border-gray-200 rounded px-3 py-2">
+                    <button
+                      onClick={() => onDateNav(1)}
+                      disabled={dateIndex >= availability.length - 1}
+                      className="text-gray-400 hover:text-gray-700 disabled:opacity-30"
+                      title="Older"
+                    >
+                      <ChevronLeft className="size-4" />
+                    </button>
+                    <span className="flex-1 text-center text-sm font-medium text-gray-700">
+                      {currentDateLabel}
+                    </span>
+                    <button
+                      onClick={() => onDateNav(-1)}
+                      disabled={dateIndex <= 0}
+                      className="text-gray-400 hover:text-gray-700 disabled:opacity-30"
+                      title="Newer"
+                    >
+                      <ChevronRight className="size-4" />
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-2 text-center">
+                    {dateIndex + 1} of {availability.length} available dates
+                  </p>
+                </>
+              ) : (
+                <p className="text-sm text-gray-400">No time range data available.</p>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'Access' && (
+            <div className="space-y-3">
+              <button
+                onClick={() => onToggle(layer)}
+                className={`w-full flex items-center justify-center gap-2 rounded px-4 py-2.5 text-sm font-medium transition-colors ${
+                  isActive
+                    ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    : 'bg-hub-800 text-white hover:bg-hub-700'
+                }`}
+              >
+                <Layers className="size-4" />
+                {isActive ? 'Remove from Map' : 'Add to Map'}
+              </button>
+              <button className="w-full flex items-center justify-center gap-2 border border-gray-300 text-gray-700 hover:border-hub-400 hover:text-hub-700 rounded px-4 py-2.5 text-sm font-medium transition-colors">
+                <Download className="size-4" /> Download
+              </button>
+              <button className="w-full flex items-center justify-center gap-2 border border-gray-300 text-gray-700 hover:border-hub-400 hover:text-hub-700 rounded px-4 py-2.5 text-sm font-medium transition-colors">
+                <Copy className="size-4" /> Copy API Link
+              </button>
+              {hazardCat?.external_system_url && (
+                <a
+                  href={hazardCat.external_system_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full flex items-center justify-center gap-2 bg-hub-100 text-hub-800 hover:bg-hub-400 hover:text-white rounded px-4 py-2.5 text-sm font-semibold transition-colors"
+                >
+                  <Globe className="size-4" />
+                  Go to {hazardCat.external_system_name || hazardCat.label} System
+                  <ExternalLink className="size-3.5" />
+                </a>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'Methodology' && (
+            <div>
+              {d?.methodology_html ? (
+                <div
+                  className="text-sm text-gray-700 leading-relaxed prose prose-sm max-w-none"
+                  dangerouslySetInnerHTML={{ __html: d.methodology_html }}
+                />
+              ) : (
+                <p className="text-sm text-gray-400">No methodology description added yet.</p>
+              )}
+              {d?.methodology_url && (
+                <a
+                  href={d.methodology_url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 mt-4 text-sm font-medium text-hub-700 hover:text-hub-400"
+                >
+                  View full methodology documentation <ExternalLink className="size-3.5" />
+                </a>
+              )}
+            </div>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -348,6 +699,7 @@ export default function Geoportal() {
   const [activeLayerIds, setActiveLayerIds] = useState<Set<string>>(new Set());
   const [selectedLayer, setSelectedLayer] = useState<CatalogLayer | null>(null);
   const [opacityMap, setOpacityMap] = useState<Record<string, number>>({});
+  const [boundsMap, setBoundsMap] = useState<Record<string, BoundsObject>>({});
   const [showDatasets, setShowDatasets] = useState(true);
   const [search, setSearch] = useState('');
 
@@ -394,6 +746,7 @@ export default function Geoportal() {
       if (!tileUrl) return;
       const rasterId = `raster-${layer.id}`;
       add_image_layer(map, tileUrl, rasterId, true, bounds, false);
+      if (bounds) setBoundsMap((prev) => ({ ...prev, [layer.id]: bounds }));
       const opacity = (opacityMap[layer.id] ?? layer.ui.opacity ?? 85) / 100;
       map.setPaintProperty(rasterId, 'raster-opacity', opacity);
     } catch {}
@@ -545,6 +898,21 @@ export default function Geoportal() {
               <Layers className="size-3.5" /> Layers
             </button>
           </div>
+
+          {/* Zoom to layer — appears below the north arrow when selected layer has bounds */}
+          {selectedLayer && boundsMap[selectedLayer.id] && (
+            <button
+              onClick={() => {
+                const b = boundsMap[selectedLayer.id];
+                const map = mapRef?.current as any;
+                if (map && b) map.fitBounds([[b.minx, b.miny], [b.maxx, b.maxy]], { padding: 40, duration: 800 });
+              }}
+              title="Zoom to layer"
+              className="absolute top-[128px] right-3 z-10 bg-white rounded shadow p-1.5 hover:bg-gray-50 text-gray-600 hover:text-hub-700 transition-colors"
+            >
+              <Crosshair className="size-4" />
+            </button>
+          )}
         </div>
 
         {/* Right panel */}
@@ -553,6 +921,7 @@ export default function Geoportal() {
             layer={selectedLayer}
             isActive={activeLayerIds.has(selectedLayer.id)}
             onClose={() => setSelectedLayer(null)}
+            onToggle={handleToggle}
             onOpacityChange={handleOpacityChange}
             opacityMap={opacityMap}
             categories={categories}

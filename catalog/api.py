@@ -5,7 +5,7 @@ from drf_spectacular.utils import OpenApiParameter, extend_schema
 
 from catalog.models import HazardCategory, ProjectPage
 from catalog.serializers import UILayersResponseSerializer
-from catalog.ui_layers import dataset_to_api_dict, datasets_for_project
+from catalog.ui_layers import dataset_entries_for_project, dataset_to_api_dict
 
 
 class UILayersView(APIView):
@@ -47,14 +47,14 @@ class UILayersView(APIView):
             )
 
         try:
-            dataset_qs = datasets_for_project(project_slug)
+            entries = dataset_entries_for_project(project_slug)
         except ProjectPage.DoesNotExist:
             return Response(
                 {"detail": f"Unknown or unpublished project '{project_slug}'."},
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        out = [dataset_to_api_dict(ds, request) for ds in dataset_qs]
+        out = [dataset_to_api_dict(e.dataset, request, e.category_override) for e in entries]
         return Response({"version": "1.0", "project": project_slug, "layers": out})
 
 
@@ -74,6 +74,8 @@ class HazardCategoriesView(APIView):
                 "label": c.label,
                 "icon_url": request.build_absolute_uri(c.icon.file.url) if c.icon else None,
                 "order": c.order,
+                "external_system_name": c.external_system_name,
+                "external_system_url": c.external_system_url,
             }
             for c in cats
         ])

@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 import { Menu, Mail } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger } from './ui/sheet';
 import acmadLogo from './images/acmadLogo.svg';
+import norcapLogo from './images/norcap_logo.svg';
 
 const navLinks = [
   { label: 'HOME', to: '/' },
@@ -65,7 +66,7 @@ export default function NavBar() {
             <Mail className="size-3.5" />
             SUBSCRIBE
           </button>
-          <img src={acmadLogo} alt="ACMAD" className="w-9 h-9 hidden sm:block" />
+          <img src={norcapLogo} alt="NORCAP" className="h-8 hidden sm:block" />
 
           {/* Mobile hamburger */}
           <Sheet open={open} onOpenChange={setOpen}>

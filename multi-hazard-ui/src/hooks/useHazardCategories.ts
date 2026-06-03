@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import React from 'react';
 import {
   CloudSun, Droplets, Waves, Thermometer, Wheat,
-  Users, AlertTriangle, Layers, MoreHorizontal,
+  Users, AlertTriangle, Layers, MoreHorizontal, Globe2,
 } from 'lucide-react';
 import { catalogBaseUrl } from '../config/api';
 
@@ -10,6 +10,8 @@ export type HazardCategory = {
   key: string;
   label: string;
   icon: React.ReactNode;
+  external_system_name?: string;
+  external_system_url?: string;
 };
 
 type RemoteCategory = {
@@ -17,6 +19,8 @@ type RemoteCategory = {
   label: string;
   icon_url: string | null;
   order: number;
+  external_system_name: string;
+  external_system_url: string;
 };
 
 // Lucide fallback icons keyed by category slug
@@ -29,6 +33,7 @@ const ICON_FALLBACK: Record<string, React.ReactNode> = {
   exposure:    React.createElement(Users,         { className: 'size-5' }),
   impact:      React.createElement(AlertTriangle, { className: 'size-5' }),
   boundary:    React.createElement(Layers,        { className: 'size-5' }),
+  climate:     React.createElement(Globe2,        { className: 'size-5' }),
 };
 
 const OTHER_CATEGORY: HazardCategory = {
@@ -47,6 +52,7 @@ const FALLBACK_CATEGORIES: HazardCategory[] = [
   { key: 'exposure',    label: 'Exposure',        icon: ICON_FALLBACK.exposure },
   { key: 'impact',      label: 'Impact',          icon: ICON_FALLBACK.impact },
   { key: 'boundary',    label: 'Boundary Layers', icon: ICON_FALLBACK.boundary },
+  { key: 'climate',     label: 'Climate',         icon: ICON_FALLBACK.climate },
   OTHER_CATEGORY,
 ];
 
@@ -66,6 +72,8 @@ export function useHazardCategories(): HazardCategory[] {
           icon:  c.icon_url
             ? React.createElement('img', { src: c.icon_url, className: 'size-5', alt: c.label })
             : (ICON_FALLBACK[c.key] ?? React.createElement(MoreHorizontal, { className: 'size-5' })),
+          external_system_name: c.external_system_name || undefined,
+          external_system_url:  c.external_system_url  || undefined,
         }));
         setCategories([...resolved, OTHER_CATEGORY]);
       })

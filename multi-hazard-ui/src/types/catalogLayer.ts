@@ -30,12 +30,22 @@ export type CatalogDataset = {
   stac_collection: string;
 };
 
+export type LayerDetails = {
+  coverage: string;
+  resolution: string;
+  update_frequency: string;
+  source_organization: string;
+  methodology_html: string;
+  methodology_url: string;
+};
+
 export type CatalogLayer = {
   id: string;
   title: string;
   type: string;
   project: string | null;
   hazard_category?: string;
+  details: LayerDetails | null;
   description: {
     html: string;
     plain: string;
