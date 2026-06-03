@@ -242,7 +242,7 @@ class DatasetVisualizationView(APIView):
 
         try:
             visualization_info = DatasetVisualization(date, dataset_id, cadence)
-            log.info(f'repalce {replace_titiler_url}')
+            log.info(f'replace_titiler_url={replace_titiler_url}')
             titiler_info = visualization_info.get_visualization(replace_url=replace_titiler_url)
 
             if not titiler_info:
