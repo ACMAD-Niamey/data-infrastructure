@@ -19,11 +19,7 @@ import {
   fetchDatasetAvailability,
   fetchDatasetVisualization,
 } from '../services/layersApi';
-import {
-  defaultSelectionFromAvailability,
-} from '../lib/availabilitySelectors';
-import { buildVisualizationDate } from '../lib/cadenceSelectors';
-import type { CatalogLayer, LayerSelectionValue } from '../types/catalogLayer';
+import type { CatalogLayer } from '../types/catalogLayer';
 import type { BoundsObject } from '../services/layersApi';
 
 // ---------------------------------------------------------------------------
@@ -62,7 +58,7 @@ function RightPanel({ layer, isActive, onClose, onToggle, onOpacityChange, opaci
   const [showFullDetails, setShowFullDetails] = useState(false);
   const [availability, setAvailability] = useState<string[]>([]);
   const [maxDate, setMaxDate] = useState<string | null>(null);
-  const [selection, setSelection] = useState<LayerSelectionValue>({});
+  const [vizDate, setVizDate] = useState<string | null>(null);
   const [dateIndex, setDateIndex] = useState(0);
   const [availError, setAvailError] = useState(false);
   const { mapRef } = useMap() ?? { mapRef: { current: null } };
@@ -72,13 +68,14 @@ function RightPanel({ layer, isActive, onClose, onToggle, onOpacityChange, opaci
   // Load availability when the layer changes
   useEffect(() => {
     setAvailability([]);
+    setVizDate(null);
     setAvailError(false);
     fetchDatasetAvailability({ datasetId: layer.dataset.id, cadence })
       .then(({ options, max }) => {
         const dates = options.map((o) => o.value);
         setAvailability(dates);
         setMaxDate(max);
-        setSelection(defaultSelectionFromAvailability(cadence, dates, max));
+        setVizDate(max || dates[0] || null);
         setDateIndex(0);
       })
       .catch(() => setAvailError(true));
@@ -86,11 +83,9 @@ function RightPanel({ layer, isActive, onClose, onToggle, onOpacityChange, opaci
 
   // Fetch and add the tile when the selected date changes — only when layer is active
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive || !vizDate) return;
     const map = mapRef?.current;
     if (!map) return;
-    const vizDate = buildVisualizationDate(cadence, selection);
-    if (!vizDate) return;
 
     const rasterId = `raster-${layer.id}`;
     const controller = new AbortController();
@@ -103,7 +98,7 @@ function RightPanel({ layer, isActive, onClose, onToggle, onOpacityChange, opaci
       .catch(() => {});
 
     return () => controller.abort();
-  }, [isActive, layer.id, layer.dataset.id, cadence, selection, mapRef]);
+  }, [isActive, layer.id, layer.dataset.id, cadence, vizDate, mapRef]);
 
   // Apply opacity changes without re-fetching the tile
   useEffect(() => {
@@ -119,8 +114,7 @@ function RightPanel({ layer, isActive, onClose, onToggle, onOpacityChange, opaci
     const next = dateIndex + dir;
     if (next < 0 || next >= availability.length) return;
     setDateIndex(next);
-    const date = availability[next];
-    setSelection(defaultSelectionFromAvailability(cadence, [date], date));
+    setVizDate(availability[next]);
   };
 
   const currentDateLabel = availability[dateIndex] ?? (maxDate ?? '—');
