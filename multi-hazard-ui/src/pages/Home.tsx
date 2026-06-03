@@ -215,6 +215,8 @@ export default function Home() {
         if (controller.signal.aborted || !result || !result.tileUrl) return;
         prevLayerIdRef.current = target.id;
         const { tileUrl, bounds } = result;
+        if (map.loaded()) {
+          add_image_layer(map, tileUrl, rasterId, true, bounds, false);
         } else {
           map.once('load', () => {
             if (controller.signal.aborted) return;
