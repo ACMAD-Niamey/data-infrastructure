@@ -60,6 +60,7 @@ def _make_dataset(dataset_id="spi", project_slug="e-safari", with_style=False):
     mock_dataset.is_published_for_ui = True
     mock_dataset.description = None
     mock_dataset.color_class = "text-blue-600"
+    mock_dataset.hazard_category_id = None
     mock_dataset.get_parent.return_value = MagicMock(slug=project_slug)
     mock_dataset.last_published_at = None
 
