@@ -107,11 +107,11 @@ def static_wms_to_api_dict(layer: StaticWmsLayer, request) -> dict:
         "dataset": {
             "id":           layer.dataset_id,
             "title":        layer.title,
-            "cadence":      "static",
+            "cadence":      "monthly",
             "dataset_type": "raster",
             "stac_collection": "",
         },
-        "selection":  {"cadence": "static"},
+        "selection":  {"cadence": "monthly"},
         "tile":       {"template": layer.tile_url, "params": {}},
         "ui": {
             "default_visible": layer.default_visible,
