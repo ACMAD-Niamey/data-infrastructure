@@ -117,18 +117,17 @@ class DatasetAvailabilityView(APIView):
     )
     def get(self, request, dataset_id: str):
         from catalog.models import GeoServerLayer, StaticWmsLayer
-        from django.utils.timezone import now
 
-        # Static WMS layers have no date dimension — return today as the single entry
+        # Static WMS layers have no date dimension — return the layer's last update date as a stable single entry
         sw_layer = StaticWmsLayer.objects.filter(dataset_id=dataset_id).first()
         if sw_layer:
-            today = now().date().isoformat()
+            updated = sw_layer.updated_at.date().isoformat()
             return Response({
                 "dataset_id": dataset_id,
                 "cadence": "static",
-                "available": [today],
-                "max": today,
-                "min": today,
+                "available": [updated],
+                "max": updated,
+                "min": updated,
             }, status=status.HTTP_200_OK)
 
         # Route to GeoServer proxy if this dataset_id belongs to a GeoServerLayer
