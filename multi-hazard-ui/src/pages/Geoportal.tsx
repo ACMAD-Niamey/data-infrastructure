@@ -528,7 +528,7 @@ function FullDetailsDialog({
             <div>
               {availability.length > 0 ? (
                 <>
-                  <p className="text-xs text-gray-500 mb-3 font-medium uppercase tracking-wide">Date</p>
+                  {/* Date navigator */}
                   <div className="flex items-center gap-3 border border-gray-200 rounded px-3 py-2">
                     <button
                       onClick={() => onDateNav(1)}
@@ -550,8 +550,33 @@ function FullDetailsDialog({
                       <ChevronRight className="size-4" />
                     </button>
                   </div>
-                  <p className="text-xs text-gray-400 mt-2 text-center">
-                    {dateIndex + 1} of {availability.length} available dates
+
+                  {/* Timeline range */}
+                  <div className="mt-5">
+                    {/* Track with cursor dot */}
+                    <div className="relative h-1.5 bg-gray-200 rounded-full mx-1">
+                      <div
+                        className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-hub-400 rounded-full shadow border-2 border-white transition-all duration-150"
+                        style={{
+                          left: `calc(${((availability.length - 1 - dateIndex) / Math.max(availability.length - 1, 1)) * 100}% - 6px)`,
+                        }}
+                      />
+                    </div>
+                    {/* Start / end labels */}
+                    <div className="flex justify-between mt-2">
+                      <div className="text-left">
+                        <p className="text-[10px] text-gray-400 uppercase tracking-wide">Start</p>
+                        <p className="text-xs font-medium text-gray-600">{availability[availability.length - 1]}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[10px] text-gray-400 uppercase tracking-wide">End</p>
+                        <p className="text-xs font-medium text-gray-600">{availability[0]}</p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="text-xs text-gray-400 mt-3 text-center">
+                    {availability.length} available dates
                   </p>
                 </>
               ) : (
@@ -733,23 +758,37 @@ export default function Geoportal() {
 
   // Fetch the latest tile for a layer and add it to the map
   const loadLayerTile = async (layer: CatalogLayer) => {
-    const map = mapRef?.current;
+    const map = mapRef?.current as any;
     if (!map) return;
     const cadence = layer.dataset.cadence;
     try {
       const { options, max } = await fetchDatasetAvailability({ datasetId: layer.dataset.id, cadence });
       const dates = options.map((o) => o.value);
-      const def = defaultSelectionFromAvailability(cadence, dates, max);
-      const vizDate = buildVisualizationDate(cadence, def);
+      // Use max directly — avoids cadence-specific key mismatches in buildVisualizationDate
+      const vizDate = max || dates[0] || null;
       if (!vizDate) return;
       const { tileUrl, bounds } = await fetchDatasetVisualization({ datasetId: layer.dataset.id, cadence, date: vizDate });
       if (!tileUrl) return;
       const rasterId = `raster-${layer.id}`;
-      add_image_layer(map, tileUrl, rasterId, true, bounds, false);
-      if (bounds) setBoundsMap((prev) => ({ ...prev, [layer.id]: bounds }));
       const opacity = (opacityMap[layer.id] ?? layer.ui.opacity ?? 85) / 100;
-      map.setPaintProperty(rasterId, 'raster-opacity', opacity);
-    } catch {}
+
+      const doAdd = () => {
+        add_image_layer(map, tileUrl, rasterId, true, bounds, false);
+        if (bounds) setBoundsMap((prev) => ({ ...prev, [layer.id]: bounds }));
+        if (map.getLayer(rasterId)) {
+          map.setPaintProperty(rasterId, 'raster-opacity', opacity);
+        }
+      };
+
+      // Defer until the map style is loaded — addSource/addLayer throw if called too early
+      if (map.loaded()) {
+        doAdd();
+      } else {
+        map.once('load', doAdd);
+      }
+    } catch (err) {
+      console.error('[loadLayerTile] failed:', err);
+    }
   };
 
   const handleToggle = (layer: CatalogLayer) => {

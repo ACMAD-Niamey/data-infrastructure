@@ -511,3 +511,134 @@ class Layer(ClusterableModel):
                     delattr(self, "_pending_style_import")
         finally:
             self._skip_tile_sync = False
+
+
+@register_snippet
+class GeoServerLayer(models.Model):
+    """
+    An externally-hosted WMS layer served via GeoServer.
+    Availability is fetched from the external system's API; tile URLs are
+    constructed from a template and proxied through the catalog endpoints so
+    the frontend needs no changes.
+    """
+
+    dataset_id = models.SlugField(
+        unique=True,
+        help_text="Unique ID used by the catalog API, e.g. ada-cdi",
+    )
+    title = models.CharField(max_length=200)
+    project = models.ForeignKey(
+        "catalog.ProjectPage",
+        on_delete=models.CASCADE,
+        related_name="geoserver_layers",
+    )
+    hazard_category = models.ForeignKey(
+        "catalog.HazardCategory",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    icon = models.ForeignKey(
+        "catalog.LayerIcon",
+        null=True,
+        blank=True,
+        on_delete=models.PROTECT,
+        related_name="+",
+    )
+    is_published_for_ui = models.BooleanField(default=False)
+
+    # External availability API
+    availability_api_url = models.URLField(
+        help_text="Base URL of the availability endpoint, e.g. https://ada.acmad.org/api/data_api/rs_data/get_available_datasets/",
+    )
+    data_name = models.CharField(
+        max_length=100,
+        help_text="Value of the data_name query param, e.g. cdi",
+    )
+    cadence = models.CharField(max_length=10, choices=DatasetPage.CADENCES)
+
+    # GeoServer WMS tile URL template
+    wms_url_template = models.TextField(
+        help_text=(
+            "Full WMS URL template. Use {year}, {MM}, {DD}, {TS} as date placeholders. "
+            "Keep {bbox-epsg-3857} — MapLibre fills it in dynamically. "
+            "Copy the url_template value from the external availability API response."
+        ),
+    )
+    timescale = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text="Replaces {TS} in the URL template, e.g. 48 for SPI-48",
+    )
+
+    # UI display config
+    default_visible = models.BooleanField(default=False)
+    opacity = models.FloatField(default=0.85)
+    sort_order = models.PositiveIntegerField(default=0)
+    color_class = models.CharField(max_length=80, default="text-blue-600", blank=True)
+    legend = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text='Label → hex color map, e.g. {"No Warning": "#ffffff"}',
+    )
+    description = RichTextField(blank=True)
+
+    # Layer detail fields (same set as the Layer snippet)
+    coverage = models.CharField(max_length=200, blank=True, default="Africa")
+    resolution = models.CharField(max_length=100, blank=True, help_text="e.g. 5 km")
+    update_frequency = models.CharField(max_length=100, blank=True, help_text="e.g. Every 10 days")
+    source_organization = models.CharField(max_length=200, blank=True)
+    methodology = RichTextField(blank=True)
+    methodology_url = models.URLField(blank=True)
+
+    updated_at = models.DateTimeField(auto_now=True)
+
+    panels = [
+        FieldPanel("project"),
+        FieldPanel("dataset_id"),
+        FieldPanel("title"),
+        FieldPanel("hazard_category"),
+        FieldPanel("icon"),
+        FieldPanel("is_published_for_ui"),
+        MultiFieldPanel(
+            [
+                FieldPanel("availability_api_url"),
+                FieldPanel("data_name"),
+                FieldPanel("cadence"),
+                FieldPanel("wms_url_template"),
+                FieldPanel("timescale"),
+            ],
+            heading="GeoServer config",
+        ),
+        MultiFieldPanel(
+            [
+                FieldPanel("default_visible"),
+                FieldPanel("opacity"),
+                FieldPanel("sort_order"),
+                FieldPanel("color_class"),
+                FieldPanel("legend", widget=LegendMapWidget()),
+            ],
+            heading="UI config",
+        ),
+        FieldPanel("description"),
+        MultiFieldPanel(
+            [
+                FieldPanel("coverage"),
+                FieldPanel("resolution"),
+                FieldPanel("update_frequency"),
+                FieldPanel("source_organization"),
+                FieldPanel("methodology"),
+                FieldPanel("methodology_url"),
+            ],
+            heading="Layer details",
+        ),
+    ]
+
+    class Meta:
+        ordering = ["sort_order", "title"]
+        verbose_name = "ADMA GeoServer layer"
+        verbose_name_plural = "ADMA GeoServer layers"
+
+    def __str__(self):
+        return self.title
