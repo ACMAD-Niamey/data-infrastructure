@@ -290,14 +290,54 @@ class CogModuleTests(TestCase):
         self.assertTrue(is_tiff_key("path/file.TIFF"))
         self.assertFalse(is_tiff_key("path/file.nc"))
 
-    @patch("ingest.cog.is_valid_cog", return_value=True)
-    def test_ensure_raster_is_cog_skips_when_already_valid(self, _mock_valid):
+    @patch("ingest.cog.validate_cog", return_value=(True, [], []))
+    def test_ensure_raster_is_cog_skips_when_already_valid(self, _mock_validate):
         from ingest.cog import ensure_raster_is_cog
 
         client = MagicMock()
         result = ensure_raster_is_cog(client, "geodata", "spi/file.tif")
         self.assertEqual(result["skipped"], "already_cog")
         client.upload_file.assert_not_called()
+
+    @patch("ingest.cog.convert_to_cog")
+    @patch("ingest.cog.validate_cog")
+    def test_ensure_raster_is_cog_converts_when_strict_warnings(self, mock_validate, mock_convert):
+        from ingest.cog import ensure_raster_is_cog
+
+        mock_validate.return_value = (
+            False,
+            [],
+            ["The file is greater than 512xH or 512xW, it is recommended to include internal overviews"],
+        )
+        client = MagicMock()
+        result = ensure_raster_is_cog(client, "geodata", "e-safari/buildings.tif")
+        self.assertEqual(result, {"optimized": True, "skipped": None})
+        mock_convert.assert_called_once()
+        client.upload_file.assert_called_once()
+
+    @patch("ingest.cog.cog_validate")
+    def test_is_valid_cog_strict_false_skips_on_warnings_only(self, mock_validate):
+        from ingest.cog import is_valid_cog
+
+        mock_validate.return_value = (
+            True,
+            [],
+            ["The file is greater than 512xH or 512xW, it is recommended to include internal overviews"],
+        )
+        self.assertTrue(is_valid_cog("/tmp/file.tif", strict=False))
+        mock_validate.assert_called_once_with("/tmp/file.tif", strict=False, quiet=True)
+
+    @patch("ingest.cog.cog_validate")
+    def test_is_valid_cog_strict_true_fails_on_warnings(self, mock_validate):
+        from ingest.cog import is_valid_cog
+
+        mock_validate.return_value = (
+            False,
+            [],
+            ["The file is greater than 512xH or 512xW, it is recommended to include internal overviews"],
+        )
+        self.assertFalse(is_valid_cog("/tmp/file.tif", strict=True))
+        mock_validate.assert_called_once_with("/tmp/file.tif", strict=True, quiet=True)
 
     def test_ensure_raster_is_cog_skips_non_tiff(self):
         from ingest.cog import ensure_raster_is_cog

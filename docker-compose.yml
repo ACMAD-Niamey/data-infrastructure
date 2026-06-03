@@ -144,8 +144,8 @@ services:
       - ${LETSENCRYPT_VOLUME:-./nginx/letsencrypt}:/etc/letsencrypt
       - ./nginx/webroot:/var/www/certbot
     entrypoint: ""
-    command: certbot certonly --webroot --webroot-path=/var/www/certbot --email ${EMAIL} --agree-tos --no-eff-email -d ${DOMAIN} -d ${DOMAIN_MINIO_CONSOLE} -d ${DOMAIN_MINIO} -d ${DOMAIN_AFRIMET:-afrimet.acmad.org}
-  
+    command: certbot certonly --webroot --webroot-path=/var/www/certbot --email ${EMAIL} --agree-tos --no-eff-email -d ${DOMAIN} -d ${DOMAIN_MINIO_CONSOLE} -d ${DOMAIN_MINIO} -d ${DOMAIN_AFRIMET:-afrimet.acmad.org} -d ${DOMAIN_MULTI_HAZARD:-multi-hazard.acmad.org}
+   
   certbot-renew:
     image: certbot/certbot
     container_name: geodatamanager_certbot_renew

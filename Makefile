@@ -35,4 +35,4 @@ connectdb-container:
 certificate:
 	docker compose run --rm certbot
 test:
-	docker compose exec web python3 manage.py test
+	docker compose exec web python3 manage.py test --verbosity=2

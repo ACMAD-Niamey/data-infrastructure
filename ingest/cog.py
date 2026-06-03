@@ -20,14 +20,20 @@ def is_tiff_key(key: str) -> bool:
     return lower.endswith(_TIFF_SUFFIXES)
 
 
-def is_valid_cog(path: str, *, strict: bool = False) -> bool:
-    """Return True when the local file is already a valid COG."""
+def validate_cog(path: str, *, strict: bool = True) -> tuple[bool, list[str], list[str]]:
+    """Return (valid, errors, warnings) from rio-cogeo COG validation."""
     try:
-        valid, _errors, _warnings = cog_validate(path, strict=strict)
-        return bool(valid)
+        valid, errors, warnings = cog_validate(path, strict=strict, quiet=True)
+        return bool(valid), list(errors), list(warnings)
     except Exception as exc:
         log.debug("COG validation failed for %s: %s", path, exc)
-        return False
+        return False, [str(exc)], []
+
+
+def is_valid_cog(path: str, *, strict: bool = True) -> bool:
+    """Return True when the local file is already a valid COG."""
+    valid, _, _ = validate_cog(path, strict=strict)
+    return valid
 
 
 def convert_to_cog(src_path: str, dst_path: str, *, resampling: str = "average") -> None:
@@ -73,9 +79,15 @@ def ensure_raster_is_cog(
             src_path = src_tmp.name
         s3_client.download_file(bucket, key, src_path)
 
-        if is_valid_cog(src_path):
+        valid, errors, warnings = validate_cog(src_path)
+        if valid:
             log.info("Skipping COG conversion; already valid: s3://%s/%s", bucket, key)
             return {"optimized": False, "skipped": "already_cog"}
+
+        if errors:
+            log.info("COG validation errors for s3://%s/%s: %s", bucket, key, errors)
+        if warnings:
+            log.info("COG validation warnings for s3://%s/%s: %s", bucket, key, warnings)
 
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as dst_tmp:
             dst_path = dst_tmp.name

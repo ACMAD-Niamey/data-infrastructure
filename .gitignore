@@ -12,6 +12,7 @@ nginx/letsencrypt/
 !e-safari-ui/src/data/
 !e-safari-ui/src/data/**
 .DS_Store
+.claude/
 *node_modules
 stations_export.ndjson
 celerybeat-schedule
