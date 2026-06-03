@@ -85,6 +85,15 @@ def _make_dataset(dataset_id="spi", project_slug="e-safari", with_style=False):
         mock_style.maxzoom = 12
         mock_style.legend = {"low": "#0000ff", "high": "#ff0000"}
         mock_style.updated_at.isoformat.return_value = "2026-04-28T00:00:00"
+        # Set all string detail fields explicitly — MagicMock is truthy so
+        # `mock.field or "fallback"` returns the mock, not the fallback.
+        # expand_db_html also fails if it receives a MagicMock instead of a str.
+        mock_style.coverage = "Africa"
+        mock_style.resolution = ""
+        mock_style.update_frequency = ""
+        mock_style.source_organization = ""
+        mock_style.methodology = None
+        mock_style.methodology_url = ""
         mock_dataset.style_config = mock_style
     else:
         mock_dataset.style_config = None
