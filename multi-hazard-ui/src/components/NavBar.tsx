@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink } from 'react-router-dom';
-import { Menu, Mail, Globe2 } from 'lucide-react';
+import { Menu, Mail } from 'lucide-react';
 import { Sheet, SheetContent, SheetTrigger } from './ui/sheet';
 import acmadLogo from './images/acmadLogo.svg';
 

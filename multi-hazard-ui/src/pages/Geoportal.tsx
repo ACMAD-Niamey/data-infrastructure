@@ -1,47 +1,29 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import {
-  CloudSun, Droplets, Waves, Thermometer, Wheat, Users,
-  AlertTriangle, Layers, Search, ChevronDown, ChevronUp,
-  Info, X, ChevronLeft, ChevronRight, SlidersHorizontal,
+  Layers, Search, ChevronDown, ChevronUp,
+  Info, X, ChevronLeft, ChevronRight,
   Map as MapIcon, Filter, ExternalLink,
 } from 'lucide-react';
+import { useHazardCategories } from '../hooks/useHazardCategories';
+import type { HazardCategory } from '../hooks/useHazardCategories';
 import NavBar from '../components/NavBar';
 import MapComponent from '../components/map.jsx';
 import { useMap } from '../components/MapContext.jsx';
 import { add_image_layer, remove_image_layer } from '../components/Maputils.js';
 import { useCatalogLayers } from '../hooks/useCatalogLayers';
-import { renderLegend } from '../components/LegendUtils.jsx';
 import {
   fetchDatasetAvailability,
   fetchDatasetVisualization,
 } from '../services/layersApi';
 import {
   defaultSelectionFromAvailability,
-  optionsFromAvailability,
 } from '../lib/availabilitySelectors';
 import { buildVisualizationDate } from '../lib/cadenceSelectors';
 import type { CatalogLayer, LayerSelectionValue } from '../types/catalogLayer';
 
 // ---------------------------------------------------------------------------
-// Hazard categories
+// Hazard categories — loaded from backend, fallback to hardcoded list
 // ---------------------------------------------------------------------------
-
-type HazardCategory = {
-  key: string;
-  label: string;
-  icon: React.ReactNode;
-};
-
-const HAZARD_CATEGORIES: HazardCategory[] = [
-  { key: 'weather', label: 'Weather', icon: <CloudSun className="size-5" /> },
-  { key: 'drought', label: 'Drought', icon: <Droplets className="size-5" /> },
-  { key: 'flood', label: 'Flood', icon: <Waves className="size-5" /> },
-  { key: 'heat', label: 'Heat', icon: <Thermometer className="size-5" /> },
-  { key: 'agriculture', label: 'Agriculture', icon: <Wheat className="size-5" /> },
-  { key: 'exposure', label: 'Exposure', icon: <Users className="size-5" /> },
-  { key: 'impact', label: 'Impact', icon: <AlertTriangle className="size-5" /> },
-  { key: 'boundary', label: 'Boundary Layers', icon: <Layers className="size-5" /> },
-];
 
 // Fallback: assign category from layer title keywords when hazard_category not set
 function inferCategory(layer: CatalogLayer): string {
@@ -63,36 +45,38 @@ function inferCategory(layer: CatalogLayer): string {
 type RightPanelProps = {
   layer: CatalogLayer;
   onClose: () => void;
-  activeLayerIds: Set<string>;
   onOpacityChange: (layerId: string, opacity: number) => void;
   opacityMap: Record<string, number>;
+  categories: HazardCategory[];
 };
 
-function RightPanel({ layer, onClose, activeLayerIds, onOpacityChange, opacityMap }: RightPanelProps) {
+function RightPanel({ layer, onClose, onOpacityChange, opacityMap, categories }: RightPanelProps) {
   const [tab, setTab] = useState<'details' | 'analysis'>('details');
   const [availability, setAvailability] = useState<string[]>([]);
   const [maxDate, setMaxDate] = useState<string | null>(null);
   const [selection, setSelection] = useState<LayerSelectionValue>({});
   const [dateIndex, setDateIndex] = useState(0);
+  const [availError, setAvailError] = useState(false);
   const { mapRef } = useMap() ?? { mapRef: { current: null } };
 
   const cadence = layer.dataset.cadence;
 
-  // Load availability on mount / layer change
+  // Load availability when the layer changes
   useEffect(() => {
+    setAvailability([]);
+    setAvailError(false);
     fetchDatasetAvailability({ datasetId: layer.dataset.id, cadence })
       .then(({ options, max }) => {
         const dates = options.map((o) => o.value);
         setAvailability(dates);
         setMaxDate(max);
-        const def = defaultSelectionFromAvailability(cadence, dates, max);
-        setSelection(def);
+        setSelection(defaultSelectionFromAvailability(cadence, dates, max));
         setDateIndex(0);
       })
-      .catch(() => {});
+      .catch(() => setAvailError(true));
   }, [layer.dataset.id, cadence]);
 
-  // Load tile when selection changes
+  // Fetch and add the tile when the selected date changes
   useEffect(() => {
     const map = mapRef?.current;
     if (!map) return;
@@ -100,29 +84,40 @@ function RightPanel({ layer, onClose, activeLayerIds, onOpacityChange, opacityMa
     if (!vizDate) return;
 
     const rasterId = `raster-${layer.id}`;
+    const controller = new AbortController();
+
     fetchDatasetVisualization({ datasetId: layer.dataset.id, cadence, date: vizDate })
       .then(({ tileUrl, bounds }) => {
-        if (!tileUrl) return;
+        if (controller.signal.aborted || !tileUrl) return;
         add_image_layer(map, tileUrl, rasterId, true, bounds, false);
-        const opacity = (opacityMap[layer.id] ?? 85) / 100;
-        map.setPaintProperty(rasterId, 'raster-opacity', opacity);
       })
       .catch(() => {});
+
+    return () => controller.abort();
   }, [layer.id, layer.dataset.id, cadence, selection, mapRef]);
+
+  // Apply opacity changes without re-fetching the tile
+  useEffect(() => {
+    const map = mapRef?.current;
+    if (!map) return;
+    const rasterId = `raster-${layer.id}`;
+    if (!map.getLayer(rasterId)) return;
+    const opacity = (opacityMap[layer.id] ?? layer.ui.opacity ?? 85) / 100;
+    map.setPaintProperty(rasterId, 'raster-opacity', opacity);
+  }, [layer.id, layer.ui.opacity, opacityMap, mapRef]);
 
   const handleDateNav = (dir: -1 | 1) => {
     const next = dateIndex + dir;
     if (next < 0 || next >= availability.length) return;
     setDateIndex(next);
     const date = availability[next];
-    const def = defaultSelectionFromAvailability(cadence, [date], date);
-    setSelection(def);
+    setSelection(defaultSelectionFromAvailability(cadence, [date], date));
   };
 
   const currentDateLabel = availability[dateIndex] ?? (maxDate ?? '—');
-  const opacity = opacityMap[layer.id] ?? 85;
+  const opacity = opacityMap[layer.id] ?? layer.ui.opacity ?? 85;
   const categoryKey = inferCategory(layer);
-  const category = HAZARD_CATEGORIES.find((c) => c.key === categoryKey);
+  const category = categories.find((c) => c.key === categoryKey);
 
   const badgeColors: Record<string, string> = {
     drought: 'bg-amber-100 text-amber-700',
@@ -133,6 +128,7 @@ function RightPanel({ layer, onClose, activeLayerIds, onOpacityChange, opacityMa
     exposure: 'bg-purple-100 text-purple-700',
     impact: 'bg-orange-100 text-orange-700',
     boundary: 'bg-gray-100 text-gray-700',
+    other: 'bg-gray-100 text-gray-600',
   };
 
   return (
@@ -174,7 +170,7 @@ function RightPanel({ layer, onClose, activeLayerIds, onOpacityChange, opacityMa
               )}
             </div>
 
-            {/* Date navigator */}
+            {/* Date navigator — dates are sorted newest-first; left=older, right=newer */}
             {availability.length > 0 && (
               <div>
                 <p className="text-xs text-gray-500 mb-1 font-medium uppercase tracking-wide">Date</p>
@@ -183,6 +179,7 @@ function RightPanel({ layer, onClose, activeLayerIds, onOpacityChange, opacityMa
                     onClick={() => handleDateNav(1)}
                     disabled={dateIndex >= availability.length - 1}
                     className="text-gray-400 hover:text-gray-700 disabled:opacity-30"
+                    title="Older"
                   >
                     <ChevronLeft className="size-4" />
                   </button>
@@ -193,11 +190,15 @@ function RightPanel({ layer, onClose, activeLayerIds, onOpacityChange, opacityMa
                     onClick={() => handleDateNav(-1)}
                     disabled={dateIndex <= 0}
                     className="text-gray-400 hover:text-gray-700 disabled:opacity-30"
+                    title="Newer"
                   >
                     <ChevronRight className="size-4" />
                   </button>
                 </div>
               </div>
+            )}
+            {availError && (
+              <p className="text-xs text-red-500">Could not load date availability.</p>
             )}
 
             {/* Legend */}
@@ -209,7 +210,7 @@ function RightPanel({ layer, onClose, activeLayerIds, onOpacityChange, opacityMa
                     <div key={label} className="flex items-center gap-2">
                       <div
                         className="size-4 rounded-full border border-gray-300 shrink-0"
-                        style={{ backgroundColor: color }}
+                        style={{ backgroundColor: color as string }}
                       />
                       <span className="text-xs text-gray-700">{label}</span>
                     </div>
@@ -276,7 +277,7 @@ type LayerCardProps = {
   layer: CatalogLayer;
   isActive: boolean;
   isSelected: boolean;
-  onToggle: (id: string) => void;
+  onToggle: (layer: CatalogLayer) => void;
   onSelect: (layer: CatalogLayer) => void;
 };
 
@@ -284,9 +285,9 @@ function LayerCard({ layer, isActive, isSelected, onToggle, onSelect }: LayerCar
   return (
     <div className={`rounded-lg border p-3 mb-2 transition-all ${isSelected ? 'border-hub-400 bg-hub-100/40' : 'border-gray-200 bg-white'}`}>
       <div className="flex items-start gap-2">
-        {/* Toggle */}
+        {/* Pill toggle */}
         <button
-          onClick={() => onToggle(layer.id)}
+          onClick={() => onToggle(layer)}
           className={`shrink-0 mt-0.5 w-10 h-5 rounded-full transition-colors relative ${isActive ? 'bg-hub-400' : 'bg-gray-300'}`}
           aria-label={isActive ? 'Disable layer' : 'Enable layer'}
         >
@@ -298,7 +299,11 @@ function LayerCard({ layer, isActive, isSelected, onToggle, onSelect }: LayerCar
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-1">
             <span className="text-sm font-semibold text-gray-800 leading-snug">{layer.title}</span>
-            <button className="text-gray-400 hover:text-gray-700 shrink-0">
+            <button
+              onClick={() => onSelect(layer)}
+              className="text-gray-400 hover:text-gray-700 shrink-0"
+              title="Layer details"
+            >
               <Info className="size-3.5" />
             </button>
           </div>
@@ -310,7 +315,11 @@ function LayerCard({ layer, isActive, isSelected, onToggle, onSelect }: LayerCar
 
       <div className="flex gap-2 mt-2.5">
         <button
-          onClick={() => { onToggle(layer.id); onSelect(layer); }}
+          onClick={() => {
+            // Always activate (never deactivate) — use the pill toggle to turn off
+            if (!isActive) onToggle(layer);
+            onSelect(layer);
+          }}
           className="flex items-center gap-1.5 bg-hub-800 hover:bg-hub-700 text-white text-xs font-medium px-3 py-1.5 rounded transition-colors"
         >
           <Layers className="size-3" />
@@ -341,7 +350,8 @@ export default function Geoportal() {
   const [search, setSearch] = useState('');
 
   const { mapRef } = useMap() ?? { mapRef: { current: null } };
-  const { layers, loading } = useCatalogLayers('en');
+  const { layers, loading, error: layersError, reload } = useCatalogLayers('en');
+  const categories = useHazardCategories();
 
   // Group layers by inferred category
   const layersByCategory: Record<string, CatalogLayer[]> = {};
@@ -351,7 +361,6 @@ export default function Geoportal() {
     layersByCategory[cat].push(layer);
   }
 
-  // Filter by search
   const filteredLayers = (cat: string) => {
     const list = layersByCategory[cat] ?? [];
     if (!search) return list;
@@ -362,36 +371,50 @@ export default function Geoportal() {
     setActiveCategory(key);
     setExpandedCategories((prev) => {
       const next = new Set(prev);
-      if (next.has(key)) {
-        next.delete(key);
-      } else {
-        next.add(key);
-      }
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
 
-  const handleToggle = (id: string) => {
+  // Fetch the latest tile for a layer and add it to the map
+  const loadLayerTile = async (layer: CatalogLayer) => {
+    const map = mapRef?.current;
+    if (!map) return;
+    const cadence = layer.dataset.cadence;
+    try {
+      const { options, max } = await fetchDatasetAvailability({ datasetId: layer.dataset.id, cadence });
+      const dates = options.map((o) => o.value);
+      const def = defaultSelectionFromAvailability(cadence, dates, max);
+      const vizDate = buildVisualizationDate(cadence, def);
+      if (!vizDate) return;
+      const { tileUrl, bounds } = await fetchDatasetVisualization({ datasetId: layer.dataset.id, cadence, date: vizDate });
+      if (!tileUrl) return;
+      const rasterId = `raster-${layer.id}`;
+      add_image_layer(map, tileUrl, rasterId, true, bounds, false);
+      const opacity = (opacityMap[layer.id] ?? layer.ui.opacity ?? 85) / 100;
+      map.setPaintProperty(rasterId, 'raster-opacity', opacity);
+    } catch {}
+  };
+
+  const handleToggle = (layer: CatalogLayer) => {
+    const isCurrentlyActive = activeLayerIds.has(layer.id);
     setActiveLayerIds((prev) => {
       const next = new Set(prev);
-      if (next.has(id)) {
-        next.delete(id);
-        // Remove from map
-        const map = mapRef?.current;
-        if (map) remove_image_layer(map, `raster-${id}`);
-      } else {
-        next.add(id);
-      }
+      if (isCurrentlyActive) next.delete(layer.id);
+      else next.add(layer.id);
       return next;
     });
+    if (isCurrentlyActive) {
+      const map = mapRef?.current;
+      if (map) remove_image_layer(map, `raster-${layer.id}`);
+    } else {
+      loadLayerTile(layer);
+    }
   };
 
   const handleOpacityChange = (layerId: string, opacity: number) => {
     setOpacityMap((prev) => ({ ...prev, [layerId]: opacity }));
-    const map = mapRef?.current;
-    if (map?.getLayer(`raster-${layerId}`)) {
-      map.setPaintProperty(`raster-${layerId}`, 'raster-opacity', opacity / 100);
-    }
   };
 
   return (
@@ -401,7 +424,7 @@ export default function Geoportal() {
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Hazard icon strip */}
         <div className="w-[70px] bg-white border-r border-gray-200 flex flex-col items-center py-3 gap-1 overflow-y-auto shrink-0">
-          {HAZARD_CATEGORIES.map((cat) => (
+          {categories.map((cat) => (
             <button
               key={cat.key}
               onClick={() => handleCategoryClick(cat.key)}
@@ -444,9 +467,20 @@ export default function Geoportal() {
               {loading && (
                 <p className="text-sm text-gray-400 text-center py-6">Loading datasets…</p>
               )}
-              {HAZARD_CATEGORIES.map((cat) => {
+              {layersError && (
+                <div className="p-4 text-center">
+                  <p className="text-sm text-red-500 mb-2">{layersError}</p>
+                  <button
+                    onClick={reload}
+                    className="text-xs font-medium border border-hub-400 text-hub-700 px-3 py-1.5 rounded hover:bg-hub-100"
+                  >
+                    Retry
+                  </button>
+                </div>
+              )}
+              {!loading && !layersError && categories.map((cat) => {
                 const catLayers = filteredLayers(cat.key);
-                if (!loading && catLayers.length === 0 && search) return null;
+                if (catLayers.length === 0 && search) return null;
                 const expanded = expandedCategories.has(cat.key);
                 return (
                   <div key={cat.key} className="mb-1">
@@ -516,9 +550,9 @@ export default function Geoportal() {
           <RightPanel
             layer={selectedLayer}
             onClose={() => setSelectedLayer(null)}
-            activeLayerIds={activeLayerIds}
             onOpacityChange={handleOpacityChange}
             opacityMap={opacityMap}
+            categories={categories}
           />
         )}
       </div>

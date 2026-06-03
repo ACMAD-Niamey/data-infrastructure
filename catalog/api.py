@@ -3,7 +3,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 
-from catalog.models import ProjectPage
+from catalog.models import HazardCategory, ProjectPage
 from catalog.serializers import UILayersResponseSerializer
 from catalog.ui_layers import dataset_to_api_dict, datasets_for_project
 
@@ -56,3 +56,24 @@ class UILayersView(APIView):
 
         out = [dataset_to_api_dict(ds, request) for ds in dataset_qs]
         return Response({"version": "1.0", "project": project_slug, "layers": out})
+
+
+class HazardCategoriesView(APIView):
+    """Returns all hazard categories ordered by their display order."""
+
+    @extend_schema(
+        tags=["catalog"],
+        summary="List hazard categories",
+        description="Returns ordered hazard categories used to group datasets in the multi-hazard geoportal.",
+    )
+    def get(self, request):
+        cats = HazardCategory.objects.all()
+        return Response([
+            {
+                "key": c.key,
+                "label": c.label,
+                "icon_url": request.build_absolute_uri(c.icon.file.url) if c.icon else None,
+                "order": c.order,
+            }
+            for c in cats
+        ])

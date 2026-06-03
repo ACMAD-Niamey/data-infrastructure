@@ -14,6 +14,38 @@ from wagtail.snippets.models import register_snippet
 Image = get_image_model()
 
 
+@register_snippet
+class HazardCategory(models.Model):
+    """Hazard type used to group datasets in the multi-hazard geoportal."""
+
+    key = models.SlugField(unique=True, help_text="Stable slug matching frontend category keys, e.g. drought")
+    label = models.CharField(max_length=100)
+    icon = models.ForeignKey(
+        Image,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="Optional custom icon; frontend falls back to its built-in lucide icon when not set.",
+    )
+    order = models.PositiveIntegerField(default=0)
+
+    panels = [
+        FieldPanel("key"),
+        FieldPanel("label"),
+        FieldPanel("icon"),
+        FieldPanel("order"),
+    ]
+
+    class Meta:
+        ordering = ["order"]
+        verbose_name = "Hazard category"
+        verbose_name_plural = "Hazard categories"
+
+    def __str__(self):
+        return self.label
+
+
 class ProjectPage(Page):
     """A top-level container that groups datasets under one project."""
     intro = RichTextField(blank=True)
@@ -63,13 +95,22 @@ class DatasetPage(Page):
     # controls what shows up in the UI config API
     is_published_for_ui = models.BooleanField(default=False)
 
+    hazard_category = models.ForeignKey(
+        "catalog.HazardCategory",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="datasets",
+        help_text="Hazard type for grouping in the multi-hazard geoportal.",
+    )
+
     icon = models.ForeignKey(
         "catalog.LayerIcon",
         on_delete=models.PROTECT,
         related_name="datasets",
         null=True,
         blank=True,
-        help_text="Toolbar icon for this dataset in the e-safari UI.",
+        help_text="Toolbar icon for this dataset in the UI.",
     )
     sort_order = models.PositiveIntegerField(
         default=0,
@@ -84,6 +125,7 @@ class DatasetPage(Page):
 
     content_panels = Page.content_panels + [
         FieldPanel("description"),
+        FieldPanel("hazard_category"),
         FieldPanel("icon"),
         FieldPanel("sort_order"),
         FieldPanel("color_class"),

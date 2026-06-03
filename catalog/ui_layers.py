@@ -83,6 +83,7 @@ def dataset_to_api_dict(dataset: DatasetPage, request) -> dict:
         "title": dataset.title,
         "type": _layer_type_for_dataset(dataset, style),
         "project": dataset.get_parent().slug if dataset.get_parent() else None,
+        "hazard_category": dataset.hazard_category.key if dataset.hazard_category_id else None,
         "description": dataset_description_payload(dataset),
         "icon": icon,
         "dataset": {
@@ -108,6 +109,7 @@ def datasets_for_project(project_slug: str) -> list[DatasetPage]:
         .filter(is_published_for_ui=True, icon__isnull=False)
         .select_related("icon", "icon__image")
         .select_related("style_config")
+        .select_related("hazard_category")
         .order_by("sort_order", "title")
     )
 
