@@ -257,6 +257,24 @@ services:
       - data_infra_network
 
 
+  mcp:
+    build: ./mcp
+    container_name: geodatamanager_mcp
+    environment:
+      DJANGO_API_URL: http://web:8070
+      STAC_API_URL: http://stac_api:8080
+      TITILER_URL: http://titiler:80
+      TIPG_URL: http://tipg:8080
+      REDIS_URL: redis://redis:6379/1
+      MCP_TRANSPORT: sse
+      MCP_PORT: "8090"
+    depends_on:
+      - web
+      - redis
+    restart: unless-stopped
+    networks:
+      - data_infra_network
+
 volumes:
   # pgdata:
   #   name: ${PGDATA_VOLUME:-geomgr_pgdata}
