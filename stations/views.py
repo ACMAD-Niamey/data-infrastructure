@@ -163,6 +163,33 @@ class CountryBoundsView(APIView):
         return Response(payload)
 
 
+class CountryBoundaryGeoJsonView(APIView):
+    """
+    GET /api/stations/country-boundary/<country_code>/
+
+    Returns the full GeoJSON Feature for a country boundary polygon.
+    Used by the MCP zonal statistics tools for accurate TiTiler masking.
+    """
+
+    def get(self, request, country_code: str):
+        import json
+        from stations.models import CountryBoundary
+
+        boundary = CountryBoundary.objects.filter(
+            country_code__iexact=country_code.strip()
+        ).first()
+        if not boundary:
+            return Response(
+                {"detail": f"Country boundary for '{country_code}' not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response({
+            "type":       "Feature",
+            "properties": {"country_code": boundary.country_code, "country_name": boundary.country_name},
+            "geometry":   json.loads(boundary.geom.geojson),
+        })
+
+
 class StationDetailView(APIView):
     """
     GET /api/stations/<station_code>/
