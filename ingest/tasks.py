@@ -36,6 +36,7 @@ def ensure_collection(collection_id: str, title: Optional[str] = None):
     payload = {
         "id": collection_id,
         "type": "Collection",
+        "stac_version": "1.0.0",
         "title": title or collection_id,
         "description": title or collection_id,
         "links": [],
