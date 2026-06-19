@@ -7,7 +7,7 @@ import { GeocodingControl } from '@maptiler/geocoding-control/react';
 import { createMapLibreGlMapController } from '@maptiler/geocoding-control/maplibregl-controller';
 import maplibregl from 'maplibre-gl';
 import '@maptiler/geocoding-control/style.css';
-import { Menu } from 'lucide-react';
+import { Locate, Menu } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Language } from './types';
 import RightBar from './components/RightBar';
@@ -24,6 +24,7 @@ import {
   fetchDatasetVisualization,
   getFallbackSelectorOptions,
 } from './services/layersApi';
+import type { BoundsObject } from './services/layersApi';
 import type { LayerSelectOption, LayerSelectionValue, SelectorKey } from './types/catalogLayer';
 import { addLegendOnce, renderLegend } from './components/LegendUtils';
 import { useLegendStore } from './components/stores/useLegendStore';
@@ -44,7 +45,7 @@ const Portal = ({ language }: PortalProps) => {
   const [rightBarTab, setRightBarTab] = useState<'Legend' | 'Analysis'>('Legend');
   const [showMobilePanel, setShowMobilePanel] = useState(false);
   const [selectedFeature] = useState<SelectedFeature | null>(null);
-  const [opacity, setOpacity] = useState<number>(85);
+  const [opacities, setOpacities] = useState<Record<string, number>>({});
   const [mapController, setMapController] = useState<ReturnType<typeof createMapLibreGlMapController>>();
   const [countries, setCountries] = useState<CountryOption[]>([]);
   const [selectedCountry, setSelectedCountry] = useState<CountryOption | null>(null);
@@ -54,26 +55,23 @@ const Portal = ({ language }: PortalProps) => {
   const [availabilityCache, setAvailabilityCache] = useState<
     Record<string, { available: string[]; max: string }>
   >({});
-  const loadedRasterIdRef = useRef<string | null>(null);
+  const loadedRasterIdsRef = useRef<Record<string, string>>({});
+  // Flips true after the very first auto-zoom; never resets so only one auto-zoom ever occurs
+  const hasInitialZoomedRef = useRef<boolean>(false);
+  const [layerBounds, setLayerBounds] = useState<Record<string, BoundsObject | null>>({});
 
   const {
     layers,
     loading,
     error,
-    activeLayerId,
-    activeLayer,
-    setActiveLayerId,
+    activeLayerIds,
+    activeLayers,
+    toggleActiveLayer,
     layerSelections,
     setLayerSelections,
   } = useCatalogLayers(language);
 
   const { mapRef } = useMap() ?? { mapRef: { current: null } };
-
-  useEffect(() => {
-    if (activeLayer) {
-      setOpacity(activeLayer.ui?.opacity ?? 85);
-    }
-  }, [activeLayer?.id]);
 
   useEffect(() => {
     fetch('/api/catalog/projects/e-safari/countries/')
@@ -91,11 +89,11 @@ const Portal = ({ language }: PortalProps) => {
     map.fitBounds([[west, south], [east, north]], { padding: 40 });
   };
 
-  const handleOpacityChange = (value: number) => {
-    setOpacity(value);
+  const handleOpacityChange = (layerId: string, value: number) => {
+    setOpacities((prev) => ({ ...prev, [layerId]: value }));
     const map = mapRef?.current;
-    const rasterId = loadedRasterIdRef.current;
-    if (map && rasterId && map.getLayer(rasterId)) {
+    const rasterId = `raster-${layerId}`;
+    if (map && map.getLayer(rasterId)) {
       map.setPaintProperty(rasterId, 'raster-opacity', value / 100);
     }
   };
@@ -124,92 +122,60 @@ const Portal = ({ language }: PortalProps) => {
     });
   };
 
-  // Effect 1: Fetch availability when dataset/cadence changes
+  // Effect 1: Fetch availability for each active layer not yet cached
   useEffect(() => {
-    if (!activeLayer || activeLayer.type !== 'raster') {
-      return;
-    }
+    activeLayers.forEach((layer) => {
+      if (layer.type !== 'raster') return;
+      const cadence = layer.dataset.cadence;
+      const datasetId = layer.dataset.id;
+      const cacheKey = `${datasetId}-${cadence}`;
+      if (availabilityCache[cacheKey]) return;
 
-    const cadence = activeLayer.dataset.cadence;
-    const datasetId = activeLayer.dataset.id;
-    const cacheKey = `${datasetId}-${cadence}`;
-
-    // Skip if already cached
-    if (availabilityCache[cacheKey]) {
-      return;
-    }
-
-    fetchDatasetAvailability({ datasetId, cadence })
-      .then((availability) => {
-        const available = availability.options.map((option) => option.value);
-        setAvailabilityCache((previous) => ({
-          ...previous,
-          [cacheKey]: { available, max: availability.max },
-        }));
-
-        // Set default selection if none exists
-        const defaultSelection = defaultSelectionFromAvailability(
-          cadence,
-          available,
-          availability.max,
-        );
-
-        setLayerSelections((previous) => {
-          const current = previous[activeLayer.id] || {};
-          if (buildVisualizationDate(cadence, current)) {
-            return previous;
-          }
-          return {
+      fetchDatasetAvailability({ datasetId, cadence })
+        .then((availability) => {
+          const available = availability.options.map((option) => option.value);
+          setAvailabilityCache((previous) => ({
             ...previous,
-            [activeLayer.id]: { ...current, ...defaultSelection },
-          };
+            [cacheKey]: { available, max: availability.max ?? '' },
+          }));
+          const defaultSelection = defaultSelectionFromAvailability(cadence, available, availability.max);
+          setLayerSelections((previous) => {
+            const current = previous[layer.id] || {};
+            if (buildVisualizationDate(cadence, current)) return previous;
+            return { ...previous, [layer.id]: { ...current, ...defaultSelection } };
+          });
+        })
+        .catch(() => {
+          setAvailabilityCache((previous) => ({
+            ...previous,
+            [cacheKey]: { available: [], max: '' },
+          }));
         });
-      })
-      .catch(() => {
-        // On error, set empty cache to allow retry
-        setAvailabilityCache((previous) => ({
-          ...previous,
-          [cacheKey]: { available: [], max: '' },
-        }));
-      });
-  }, [activeLayer?.id, activeLayer?.dataset.id, activeLayer?.dataset.cadence, setLayerSelections]);
-
-  // Effect 2: Recompute options whenever active layer selection changes
-  useEffect(() => {
-    if (!activeLayer || activeLayer.type !== 'raster') {
-      return;
-    }
-
-    const cadence = activeLayer.dataset.cadence;
-    const datasetId = activeLayer.dataset.id;
-    const cacheKey = `${datasetId}-${cadence}`;
-    const cached = availabilityCache[cacheKey];
-
-    if (!cached) {
-      return;
-    }
-
-    const currentSelection = layerSelections[activeLayer.id] || {};
-    const nextOptions: Partial<Record<SelectorKey, LayerSelectOption[]>> = {};
-
-    activeLayer.selectors.forEach((selector) => {
-      const fromApi = optionsFromAvailability(
-        cached.available,
-        selector.key,
-        currentSelection,
-        language,
-      );
-      nextOptions[selector.key] =
-        fromApi.length > 0
-          ? fromApi
-          : getFallbackSelectorOptions(selector.key, language);
     });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeLayerIds, layers, availabilityCache]);
 
-    setLayerSelectionOptions((previous) => ({
-      ...previous,
-      [activeLayer.id]: nextOptions,
-    }));
-  }, [activeLayer?.id, activeLayer?.dataset.id, activeLayer?.dataset.cadence, activeLayer?.selectors, layerSelections, availabilityCache, language]);
+  // Effect 2: Recompute selector options for all active layers
+  useEffect(() => {
+    activeLayers.forEach((layer) => {
+      if (layer.type !== 'raster') return;
+      const cacheKey = `${layer.dataset.id}-${layer.dataset.cadence}`;
+      const cached = availabilityCache[cacheKey];
+      if (!cached) return;
+
+      const currentSelection = layerSelections[layer.id] || {};
+      const nextOptions: Partial<Record<SelectorKey, LayerSelectOption[]>> = {};
+
+      layer.selectors.forEach((selector) => {
+        const fromApi = optionsFromAvailability(cached.available, selector.key, currentSelection, language);
+        nextOptions[selector.key] =
+          fromApi.length > 0 ? fromApi : getFallbackSelectorOptions(selector.key, language);
+      });
+
+      setLayerSelectionOptions((previous) => ({ ...previous, [layer.id]: nextOptions }));
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeLayerIds, layers, availabilityCache, layerSelections, language]);
 
   useEffect(() => {
     let cancelled = false;
@@ -239,65 +205,92 @@ const Portal = ({ language }: PortalProps) => {
   }, [mapRef]);
 
   useEffect(() => {
-    const map = mapRef?.current;
-    if (!map) {
-      return;
-    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const map = mapRef?.current as any;
+    if (!map) return;
 
-    const applyRasterLayer = () => {
-      const previousRasterId = loadedRasterIdRef.current;
-      if (previousRasterId) {
-        remove_image_layer(map, previousRasterId);
-        loadedRasterIdRef.current = null;
-      }
+    let cancelled = false;
 
-      if (!activeLayer || activeLayer.type !== 'raster') {
-        useLegendStore.getState().clearLegends();
-        return;
-      }
+    const applyRasterLayers = () => {
+      // Remove rasters whose layers are no longer active
+      Object.entries(loadedRasterIdsRef.current).forEach(([layerId, rasterId]) => {
+        if (!activeLayerIds.includes(layerId)) {
+          remove_image_layer(map, rasterId);
+          delete loadedRasterIdsRef.current[layerId];
+          const title = layers.find((l) => l.id === layerId)?.title;
+          if (title) useLegendStore.getState().removeLegendByTitle(title);
+        }
+      });
 
-      const cadence = activeLayer.dataset.cadence;
-      const selection = layerSelections[activeLayer.id] || {};
-      const vizDate = buildVisualizationDate(cadence, selection);
-      if (!vizDate) {
-        return;
-      }
+      // Add/refresh each active raster layer
+      activeLayers.forEach((layer) => {
+        if (layer.type !== 'raster') return;
+        const cadence = layer.dataset.cadence;
+        const selection = layerSelections[layer.id] || {};
+        const vizDate = buildVisualizationDate(cadence, selection);
+        if (!vizDate) return;
 
-      const rasterLayerId = `raster-${activeLayer.id}`;
+        const rasterId = `raster-${layer.id}`;
 
-      fetchDatasetVisualization({
-        datasetId: activeLayer.dataset.id,
-        cadence,
-        date: vizDate,
-      })
-        .then((payload) => {
-          if (loadedRasterIdRef.current && loadedRasterIdRef.current !== rasterLayerId) {
-            remove_image_layer(map, loadedRasterIdRef.current);
-          }
-          if (!payload.tileUrl) {
-            return;
-          }
-          add_image_layer(map, payload.tileUrl, rasterLayerId, true, payload.bounds, true, opacity / 100);
-          loadedRasterIdRef.current = rasterLayerId;
-
-          useLegendStore.getState().clearLegends();
-          const legendMap = activeLayer.legend;
-          if (legendMap && Object.keys(legendMap).length > 0) {
-            const legendNode = renderLegend(legendMap, activeLayer.title);
-            addLegendOnce(legendNode, activeLayer.title);
-          }
-        })
-        .catch(() => {
-          remove_image_layer(map, rasterLayerId);
-        });
+        fetchDatasetVisualization({ datasetId: layer.dataset.id, cadence, date: vizDate })
+          .then((payload) => {
+            // Discard stale responses: layer may have been toggled off or the
+            // selection/date may have changed since this request was issued.
+            if (cancelled) return;
+            if (!activeLayerIds.includes(layer.id)) return;
+            const currentSelection = layerSelections[layer.id] || {};
+            if (buildVisualizationDate(cadence, currentSelection) !== vizDate) return;
+            if (!payload.tileUrl) return;
+            // Remove stale tile for this layer before adding the refreshed one
+            if (map.getSource(rasterId)) remove_image_layer(map, rasterId);
+            add_image_layer(map, payload.tileUrl, rasterId, true, payload.bounds, false, (opacities[layer.id] ?? layer.ui?.opacity ?? 85) / 100);
+            loadedRasterIdsRef.current[layer.id] = rasterId;
+            // Store bounds for the zoom button
+            setLayerBounds((prev) => ({ ...prev, [layer.id]: payload.bounds }));
+            // Auto-zoom once ever on first layer load
+            if (!hasInitialZoomedRef.current && payload.bounds) {
+              const { minx, miny, maxx, maxy } = payload.bounds;
+              map.fitBounds([[minx, miny], [maxx, maxy]], { padding: 40 });
+              hasInitialZoomedRef.current = true;
+            }
+            const legendMap = layer.legend;
+            if (legendMap && Object.keys(legendMap).length > 0) {
+              addLegendOnce(renderLegend(legendMap, layer.title), layer.title);
+            }
+          })
+          .catch(() => {
+            if (!cancelled) remove_image_layer(map, rasterId);
+          });
+      });
     };
 
     if (map.isStyleLoaded()) {
-      applyRasterLayer();
+      applyRasterLayers();
     } else {
-      map.once('load', applyRasterLayer);
+      map.once('load', applyRasterLayers);
+      return () => {
+        map.off('load', applyRasterLayers);
+      };
     }
-  }, [activeLayer, layerSelections, mapRef]);
+
+    return () => {
+      cancelled = true;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeLayerIds, activeLayers, layerSelections, mapRef]);
+
+  const handleZoomToLayers = () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const map = mapRef?.current as any;
+    if (!map || activeLayerIds.length === 0) return;
+    const bounds = activeLayerIds.map((id) => layerBounds[id]).filter(Boolean) as BoundsObject[];
+    if (bounds.length === 0) return;
+    const minx = Math.min(...bounds.map((b) => b.minx));
+    const miny = Math.min(...bounds.map((b) => b.miny));
+    const maxx = Math.max(...bounds.map((b) => b.maxx));
+    const maxy = Math.max(...bounds.map((b) => b.maxy));
+    map.fitBounds([[minx, miny], [maxx, maxy]], { padding: 40 });
+  };
 
   return (
     <div className="h-full min-h-0 overflow-hidden flex flex-col bg-gray-50">
@@ -329,19 +322,21 @@ const Portal = ({ language }: PortalProps) => {
           <div className="flex-1 overflow-y-auto">
             <LayerControls
               layers={layers}
-              activeLayerId={activeLayerId}
-              onLayerChange={(layerId) => {
-                setActiveLayerId(layerId);
+              activeLayerIds={activeLayerIds}
+              onLayerToggle={(layerId: string) => {
+                toggleActiveLayer(layerId);
                 setRightBarTab('Legend');
+                // Seed opacity from layer config if not yet set
+                const layer = layers.find((l) => l.id === layerId);
+                if (layer) setOpacities((prev) => ({ [layerId]: layer.ui?.opacity ?? 85, ...prev }));
               }}
-              onLayerDeactivate={() => setActiveLayerId(null)}
               language={language}
               selectionValues={layerSelections}
               selectionOptions={layerSelectionOptions}
               onSelectionChange={handleSelectionChange}
               loading={loading}
               error={error}
-              opacity={opacity}
+              opacities={opacities}
               onOpacityChange={handleOpacityChange}
             />
           </div>
@@ -349,8 +344,34 @@ const Portal = ({ language }: PortalProps) => {
 
         <div className="flex-1 min-h-0 relative">
           <Map />
+          {activeLayerIds.length > 0 && (
+            <button
+              type="button"
+              title={language === 'fr' ? 'Zoom sur la couche' : 'Zoom to layer'}
+              aria-label={language === 'fr' ? 'Zoom sur la couche' : 'Zoom to layer'}
+              onClick={handleZoomToLayers}
+              style={{
+                position: 'absolute',
+                top: 115,
+                right: 20,
+                zIndex: 1000,
+                width: 29,
+                height: 29,
+                backgroundColor: 'white',
+                border: 'none',
+                borderRadius: '4px',
+                boxShadow: '0 0 0 2px rgba(0,0,0,.1)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <Locate style={{ width: 15, height: 15, color: '#374151' }} />
+            </button>
+          )}
           <RightBar
-            activeLayer={activeLayer}
+            activeLayer={activeLayers[0] ?? null}
             language={language}
             selectedFeature={selectedFeature}
             activeTab={rightBarTab}
@@ -371,20 +392,21 @@ const Portal = ({ language }: PortalProps) => {
           isOpen={showMobilePanel}
           onClose={() => setShowMobilePanel(false)}
           layers={layers}
-          activeLayerId={activeLayerId}
-          onLayerChange={(layerId) => {
-            setActiveLayerId(layerId);
+          activeLayerIds={activeLayerIds}
+          onLayerToggle={(layerId: string) => {
+            toggleActiveLayer(layerId);
             setRightBarTab('Legend');
+            const layer = layers.find((l) => l.id === layerId);
+            if (layer) setOpacities((prev) => ({ [layerId]: layer.ui?.opacity ?? 85, ...prev }));
           }}
-          onLayerDeactivate={() => setActiveLayerId(null)}
           language={language}
           selectionValues={layerSelections}
           selectionOptions={layerSelectionOptions}
           onSelectionChange={handleSelectionChange}
           loading={loading}
           error={error}
-          activeLayer={activeLayer}
-          opacity={opacity}
+          activeLayer={activeLayers[0] ?? null}
+          opacities={opacities}
           onOpacityChange={handleOpacityChange}
         />
       </div>
