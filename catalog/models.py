@@ -4,6 +4,7 @@ from django.db import models
 from modelcluster.fields import ParentalKey
 from modelcluster.models import ClusterableModel
 from wagtail.admin.panels import FieldPanel, InlinePanel, MultiFieldPanel
+from stations.models import CountryBoundary
 
 from catalog.widgets import HexColorWidget, LegendMapWidget
 from wagtail.fields import RichTextField
@@ -63,10 +64,35 @@ class ProjectPage(Page):
     content_panels = Page.content_panels + [
         FieldPanel("intro"),
         InlinePanel("inclusions", label="Included projects"),
+        InlinePanel("supported_countries", label="Supported Countries"),
     ]
 
     # only allow DatasetPage children
     subpage_types = ["catalog.DatasetPage"]
+
+
+class ProjectCountry(Orderable):
+    """Maps a supported country to a project for the country selector UI."""
+
+    project = ParentalKey(
+        "catalog.ProjectPage",
+        on_delete=models.CASCADE,
+        related_name="supported_countries",
+    )
+    country = models.ForeignKey(
+        CountryBoundary,
+        on_delete=models.CASCADE,
+        related_name="+",
+    )
+
+    panels = [FieldPanel("country")]
+
+    class Meta(Orderable.Meta):
+        verbose_name = "Supported country"
+        verbose_name_plural = "Supported countries"
+
+    def __str__(self):
+        return self.country.country_name
 
 
 class ProjectInclusion(Orderable):
@@ -344,6 +370,10 @@ class Layer(ClusterableModel):
         blank=True,
         help_text="Link to external methodology documentation.",
     )
+    legend_description = models.TextField(
+        blank=True,
+        help_text="Short text shown as 'Legend' in the info panel (separate from the main description).",
+    )
 
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -382,6 +412,7 @@ class Layer(ClusterableModel):
                 FieldPanel("source_organization"),
                 FieldPanel("methodology"),
                 FieldPanel("methodology_url"),
+                FieldPanel("legend_description"),
             ],
             heading="Layer details",
         ),
@@ -592,6 +623,7 @@ class GeoServerLayer(models.Model):
     source_organization = models.CharField(max_length=200, blank=True)
     methodology = RichTextField(blank=True)
     methodology_url = models.URLField(blank=True)
+    legend_description = models.TextField(blank=True)
 
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -631,6 +663,7 @@ class GeoServerLayer(models.Model):
                 FieldPanel("source_organization"),
                 FieldPanel("methodology"),
                 FieldPanel("methodology_url"),
+                FieldPanel("legend_description"),
             ],
             heading="Layer details",
         ),
@@ -700,6 +733,7 @@ class StaticWmsLayer(models.Model):
 
     coverage = models.CharField(max_length=200, blank=True, default="Africa")
     source_organization = models.CharField(max_length=200, blank=True)
+    legend_description = models.TextField(blank=True)
 
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -729,6 +763,7 @@ class StaticWmsLayer(models.Model):
             [
                 FieldPanel("coverage"),
                 FieldPanel("source_organization"),
+                FieldPanel("legend_description"),
             ],
             heading="Layer details",
         ),

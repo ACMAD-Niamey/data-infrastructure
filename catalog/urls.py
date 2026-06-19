@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework import routers
-from .api import HazardCategoriesView, UILayersView
+from .api import HazardCategoriesView, UILayersView, ProjectCountriesView
 from .views import DatasetAvailabilityView, DatasetVisualizationView
 
 router = routers.DefaultRouter()
@@ -16,4 +16,5 @@ urlpatterns = [
          name="dataset-availability"),
     path("datasets/<str:dataset_id>/visualization/", DatasetVisualizationView.as_view(),
          name="dataset-visualization"),
+    path("projects/<slug:slug>/countries/", ProjectCountriesView.as_view(), name="project-countries"),
 ]

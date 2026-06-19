@@ -3,7 +3,10 @@ import Map from './components/map';
 import { DataPanel } from './components/DataPanel';
 import { LayerControls } from './components/LayerControls';
 import { MobileDrawer } from './components/MobileDrawer';
-import { SearchBar } from './components/SearchBar';
+import { GeocodingControl } from '@maptiler/geocoding-control/react';
+import { createMapLibreGlMapController } from '@maptiler/geocoding-control/maplibregl-controller';
+import maplibregl from 'maplibre-gl';
+import '@maptiler/geocoding-control/style.css';
 import { Menu } from 'lucide-react';
 import { Button } from './components/ui/button';
 import { Language } from './types';
@@ -24,6 +27,8 @@ import {
 import type { LayerSelectOption, LayerSelectionValue, SelectorKey } from './types/catalogLayer';
 import { addLegendOnce, renderLegend } from './components/LegendUtils';
 import { useLegendStore } from './components/stores/useLegendStore';
+import { SubHeader } from './components/SubHeader';
+import type { CountryOption } from './components/SubHeader';
 
 export interface SelectedFeature {
   type: string;
@@ -38,9 +43,11 @@ type PortalProps = {
 const Portal = ({ language }: PortalProps) => {
   const [rightBarTab, setRightBarTab] = useState<'Legend' | 'Analysis'>('Legend');
   const [showMobilePanel, setShowMobilePanel] = useState(false);
-  const [selectedFeature, setSelectedFeature] = useState<SelectedFeature | null>(null);
-  const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
+  const [selectedFeature] = useState<SelectedFeature | null>(null);
   const [opacity, setOpacity] = useState<number>(85);
+  const [mapController, setMapController] = useState<ReturnType<typeof createMapLibreGlMapController>>();
+  const [countries, setCountries] = useState<CountryOption[]>([]);
+  const [selectedCountry, setSelectedCountry] = useState<CountryOption | null>(null);
   const [layerSelectionOptions, setLayerSelectionOptions] = useState<
     Record<string, Partial<Record<SelectorKey, LayerSelectOption[]>>>
   >({});
@@ -68,6 +75,22 @@ const Portal = ({ language }: PortalProps) => {
     }
   }, [activeLayer?.id]);
 
+  useEffect(() => {
+    fetch('/api/catalog/projects/e-safari/countries/')
+      .then((r) => r.json())
+      .then((data: CountryOption[]) => setCountries(data))
+      .catch(() => {});
+  }, []);
+
+  const handleCountryChange = (country: CountryOption | null) => {
+    setSelectedCountry(country);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const map = mapRef?.current as any;
+    if (!country || !map) return;
+    const { west, south, east, north } = country.bounds;
+    map.fitBounds([[west, south], [east, north]], { padding: 40 });
+  };
+
   const handleOpacityChange = (value: number) => {
     setOpacity(value);
     const map = mapRef?.current;
@@ -75,10 +98,6 @@ const Portal = ({ language }: PortalProps) => {
     if (map && rasterId && map.getLayer(rasterId)) {
       map.setPaintProperty(rasterId, 'raster-opacity', value / 100);
     }
-  };
-
-  const handleLocationSelect = (location: { name: string; coords: [number, number] }) => {
-    setMapCenter(location.coords);
   };
 
   const handleSelectionChange = (layerId: string, field: SelectorKey, value?: string) => {
@@ -193,6 +212,15 @@ const Portal = ({ language }: PortalProps) => {
   }, [activeLayer?.id, activeLayer?.dataset.id, activeLayer?.dataset.cadence, activeLayer?.selectors, layerSelections, availabilityCache, language]);
 
   useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const map = mapRef?.current as any;
+    if (!map) return;
+    const init = () => setMapController(createMapLibreGlMapController(map, maplibregl));
+    if (map.loaded()) init();
+    else map.once('load', init);
+  }, [mapRef?.current]);
+
+  useEffect(() => {
     const map = mapRef?.current;
     if (!map) {
       return;
@@ -255,10 +283,30 @@ const Portal = ({ language }: PortalProps) => {
 
   return (
     <div className="h-full min-h-0 overflow-hidden flex flex-col bg-gray-50">
+      <SubHeader
+        countries={countries}
+        selectedCountry={selectedCountry}
+        onCountryChange={handleCountryChange}
+        language={language}
+      />
       <div className="flex-1 flex overflow-hidden relative">
-        <div className="hidden lg:flex lg:w-96 flex-col border-r bg-white overflow-hidden">
-          <div className="p-4 border-b flex-shrink-0">
-            <SearchBar language={language} onLocationSelect={handleLocationSelect} />
+        <div className="hidden lg:flex lg:w-80 flex-col border-r bg-white overflow-hidden">
+          <div className="geocoding border-b flex-shrink-0">
+            <GeocodingControl
+              apiKey={import.meta.env.VITE_MAPTILER_KEY}
+              mapController={mapController}
+              language={language}
+              bbox={
+                selectedCountry
+                  ? [
+                      selectedCountry.bounds.west,
+                      selectedCountry.bounds.south,
+                      selectedCountry.bounds.east,
+                      selectedCountry.bounds.north,
+                    ]
+                  : undefined
+              }
+            />
           </div>
           <div className="flex-1 overflow-y-auto">
             <LayerControls
@@ -268,12 +316,15 @@ const Portal = ({ language }: PortalProps) => {
                 setActiveLayerId(layerId);
                 setRightBarTab('Legend');
               }}
+              onLayerDeactivate={() => setActiveLayerId(null as any)}
               language={language}
               selectionValues={layerSelections}
               selectionOptions={layerSelectionOptions}
               onSelectionChange={handleSelectionChange}
               loading={loading}
               error={error}
+              opacity={opacity}
+              onOpacityChange={handleOpacityChange}
             />
           </div>
         </div>
@@ -286,8 +337,6 @@ const Portal = ({ language }: PortalProps) => {
             selectedFeature={selectedFeature}
             activeTab={rightBarTab}
             onTabChange={setRightBarTab}
-            opacity={opacity}
-            onOpacityChange={handleOpacityChange}
           />
 
           <Button
@@ -309,6 +358,7 @@ const Portal = ({ language }: PortalProps) => {
             setActiveLayerId(layerId);
             setRightBarTab('Legend');
           }}
+          onLayerDeactivate={() => setActiveLayerId(null as any)}
           language={language}
           selectionValues={layerSelections}
           selectionOptions={layerSelectionOptions}

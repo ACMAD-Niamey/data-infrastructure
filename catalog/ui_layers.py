@@ -87,6 +87,7 @@ def dataset_to_api_dict(dataset: DatasetPage, request, category_override: str | 
         "source_organization": style.source_organization or "",
         "methodology_html":    expand_db_html(_description_raw_html(style.methodology)),
         "methodology_url":     style.methodology_url or "",
+        "legend_description":  style.legend_description or "",
     } if style else None
 
     return {
