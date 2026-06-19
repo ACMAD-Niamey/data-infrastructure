@@ -215,7 +215,7 @@ export function LayerControls({
                       }
 
                       return (
-                        <div key={`${layer.id}-${field.key}`} style={{ width: 120 }}>
+                        <div key={`${layer.id}-${field.key}`} style={{ width: field.minWidthPx ?? 120 }}>
                           <p className="mb-1 text-gray-600" style={{ fontSize: '11px' }}>
                             {field.label[language]}{displayOption ? `: ${displayOption.label}` : ''}
                           </p>
