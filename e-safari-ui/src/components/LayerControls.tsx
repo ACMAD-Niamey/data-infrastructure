@@ -242,7 +242,7 @@ export function LayerControls({
                   <div className="border-t border-gray-100 pt-2" style={{ maxWidth: '85%' }}>
                     <div className="flex justify-between text-green-700 mb-1.5" style={{ fontSize: '11px' }}>
                       <span>{t.opacity}</span>
-                      <span>{Math.round(opacities[layer.id] ?? 85)}%</span>
+                      <span>{Math.round(opacities[layer.id] ?? layer.ui?.opacity ?? 85)}%</span>
                     </div>
                     <input
                       type="range"
