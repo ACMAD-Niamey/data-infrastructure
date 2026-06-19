@@ -44,7 +44,16 @@ export function YearSlider({ options, value, onChange }: YearSliderProps) {
         return (
           <div
             key={y}
+            role="button"
+            tabIndex={0}
+            aria-label={`Select year ${y}`}
             onClick={() => onChange(String(y))}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onChange(String(y));
+              }
+            }}
             style={{
               position: 'absolute',
               left: `${pct}%`,
