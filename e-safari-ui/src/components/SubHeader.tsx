@@ -1,3 +1,4 @@
+import type React from 'react';
 import type { Language } from '../types';
 
 export interface CountryOption {
