@@ -334,7 +334,7 @@ const Portal = ({ language }: PortalProps) => {
                 setActiveLayerId(layerId);
                 setRightBarTab('Legend');
               }}
-              onLayerDeactivate={() => setActiveLayerId(null as any)}
+              onLayerDeactivate={() => setActiveLayerId(null)}
               language={language}
               selectionValues={layerSelections}
               selectionOptions={layerSelectionOptions}
