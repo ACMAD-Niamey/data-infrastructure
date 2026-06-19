@@ -333,6 +333,7 @@ const Portal = ({ language }: PortalProps) => {
             <button
               type="button"
               title={language === 'fr' ? 'Zoom sur la couche' : 'Zoom to layer'}
+              aria-label={language === 'fr' ? 'Zoom sur la couche' : 'Zoom to layer'}
               onClick={handleZoomToLayers}
               style={{
                 position: 'absolute',
