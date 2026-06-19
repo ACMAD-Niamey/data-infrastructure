@@ -10,7 +10,7 @@
  * @param {Bounds | null} [bounds]
  * @param {boolean} [fitToBounds]
  */
-export const add_image_layer = (map, url, name, active = true, bounds = null, fitToBounds = false) => {
+export const add_image_layer = (map, url, name, active = true, bounds = null, fitToBounds = false, opacity = 1) => {
   if (!map) return;
 
   if (active === false) {
@@ -36,6 +36,7 @@ export const add_image_layer = (map, url, name, active = true, bounds = null, fi
     id: name,
     type: "raster",
     source: name,
+    paint: { 'raster-opacity': opacity },
   });
 
   map.moveLayer(name);

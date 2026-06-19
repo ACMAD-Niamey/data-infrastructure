@@ -40,6 +40,7 @@ const Portal = ({ language }: PortalProps) => {
   const [showMobilePanel, setShowMobilePanel] = useState(false);
   const [selectedFeature, setSelectedFeature] = useState<SelectedFeature | null>(null);
   const [mapCenter, setMapCenter] = useState<[number, number] | null>(null);
+  const [opacity, setOpacity] = useState<number>(85);
   const [layerSelectionOptions, setLayerSelectionOptions] = useState<
     Record<string, Partial<Record<SelectorKey, LayerSelectOption[]>>>
   >({});
@@ -60,6 +61,21 @@ const Portal = ({ language }: PortalProps) => {
   } = useCatalogLayers(language);
 
   const { mapRef } = useMap() ?? { mapRef: { current: null } };
+
+  useEffect(() => {
+    if (activeLayer) {
+      setOpacity(activeLayer.ui?.opacity ?? 85);
+    }
+  }, [activeLayer?.id]);
+
+  const handleOpacityChange = (value: number) => {
+    setOpacity(value);
+    const map = mapRef?.current;
+    const rasterId = loadedRasterIdRef.current;
+    if (map && rasterId && map.getLayer(rasterId)) {
+      map.setPaintProperty(rasterId, 'raster-opacity', value / 100);
+    }
+  };
 
   const handleLocationSelect = (location: { name: string; coords: [number, number] }) => {
     setMapCenter(location.coords);
@@ -215,7 +231,7 @@ const Portal = ({ language }: PortalProps) => {
           if (!payload.tileUrl) {
             return;
           }
-          add_image_layer(map, payload.tileUrl, rasterLayerId, true, payload.bounds, true);
+          add_image_layer(map, payload.tileUrl, rasterLayerId, true, payload.bounds, true, opacity / 100);
           loadedRasterIdRef.current = rasterLayerId;
 
           useLegendStore.getState().clearLegends();
@@ -270,6 +286,8 @@ const Portal = ({ language }: PortalProps) => {
             selectedFeature={selectedFeature}
             activeTab={rightBarTab}
             onTabChange={setRightBarTab}
+            opacity={opacity}
+            onOpacityChange={handleOpacityChange}
           />
 
           <Button
@@ -298,6 +316,8 @@ const Portal = ({ language }: PortalProps) => {
           loading={loading}
           error={error}
           activeLayer={activeLayer}
+          opacity={opacity}
+          onOpacityChange={handleOpacityChange}
         />
       </div>
     </div>

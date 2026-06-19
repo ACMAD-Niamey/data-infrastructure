@@ -3,7 +3,7 @@ import Legend from './Legend';
 import { DataPanel } from './DataPanel';
 import "../styles/rightbar.css"
 
-const RightBar = ({ activeLayer, language, selectedFeature, activeTab, onTabChange }) => {
+const RightBar = ({ activeLayer, language, selectedFeature, activeTab, onTabChange, opacity, onOpacityChange }) => {
     const [active_tab, setActive_tab] = useState(activeTab || "Legend");
 
     useEffect(() => {
@@ -25,6 +25,22 @@ const RightBar = ({ activeLayer, language, selectedFeature, activeTab, onTabChan
                 return (
                     <div>
                       <Legend/>
+                      {activeLayer && (
+                        <div style={{ padding: '8px 12px', borderTop: '1px solid #eee' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#15803d', marginBottom: '4px' }}>
+                            <span>Opacity</span>
+                            <span>{Math.round(opacity)}%</span>
+                          </div>
+                          <input
+                            type="range"
+                            min={0}
+                            max={100}
+                            value={opacity}
+                            onChange={(e) => onOpacityChange(Number(e.target.value))}
+                            style={{ width: '100%', cursor: 'pointer', accentColor: '#15803d' }}
+                          />
+                        </div>
+                      )}
                     </div>
                 );
             case "Analysis":

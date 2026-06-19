@@ -23,6 +23,8 @@ interface MobileDrawerProps {
   onSelectionChange: (layerId: string, field: SelectorKey, value?: string) => void;
   loading?: boolean;
   error?: string | null;
+  opacity?: number;
+  onOpacityChange?: (value: number) => void;
 }
 
 const translations = {
@@ -47,6 +49,8 @@ export function MobileDrawer({
   onSelectionChange,
   loading,
   error,
+  opacity,
+  onOpacityChange,
 }: MobileDrawerProps) {
   const t = translations[language];
 
@@ -72,6 +76,22 @@ export function MobileDrawer({
             error={error}
           />
           <DataPanel activeLayer={activeLayer} language={language} />
+          {activeLayer && opacity !== undefined && onOpacityChange && (
+            <div className="p-4 border-t">
+              <div className="flex justify-between text-xs text-green-700 mb-1">
+                <span>Opacity</span>
+                <span>{Math.round(opacity)}%</span>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={opacity}
+                onChange={(e) => onOpacityChange(Number(e.target.value))}
+                className="w-full cursor-pointer accent-green-700"
+              />
+            </div>
+          )}
         </ScrollArea>
       </SheetContent>
     </Sheet>
