@@ -209,6 +209,8 @@ const Portal = ({ language }: PortalProps) => {
     const map = mapRef?.current as any;
     if (!map) return;
 
+    let cancelled = false;
+
     const applyRasterLayers = () => {
       // Remove rasters whose layers are no longer active
       Object.entries(loadedRasterIdsRef.current).forEach(([layerId, rasterId]) => {
@@ -232,6 +234,12 @@ const Portal = ({ language }: PortalProps) => {
 
         fetchDatasetVisualization({ datasetId: layer.dataset.id, cadence, date: vizDate })
           .then((payload) => {
+            // Discard stale responses: layer may have been toggled off or the
+            // selection/date may have changed since this request was issued.
+            if (cancelled) return;
+            if (!activeLayerIds.includes(layer.id)) return;
+            const currentSelection = layerSelections[layer.id] || {};
+            if (buildVisualizationDate(cadence, currentSelection) !== vizDate) return;
             if (!payload.tileUrl) return;
             // Remove stale tile for this layer before adding the refreshed one
             if (map.getSource(rasterId)) remove_image_layer(map, rasterId);
@@ -251,7 +259,7 @@ const Portal = ({ language }: PortalProps) => {
             }
           })
           .catch(() => {
-            remove_image_layer(map, rasterId);
+            if (!cancelled) remove_image_layer(map, rasterId);
           });
       });
     };
@@ -261,6 +269,10 @@ const Portal = ({ language }: PortalProps) => {
     } else {
       map.once('load', applyRasterLayers);
     }
+
+    return () => {
+      cancelled = true;
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeLayerIds, activeLayers, layerSelections, mapRef]);
 
