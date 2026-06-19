@@ -212,13 +212,31 @@ const Portal = ({ language }: PortalProps) => {
   }, [activeLayer?.id, activeLayer?.dataset.id, activeLayer?.dataset.cadence, activeLayer?.selectors, layerSelections, availabilityCache, language]);
 
   useEffect(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const map = mapRef?.current as any;
-    if (!map) return;
-    const init = () => setMapController(createMapLibreGlMapController(map, maplibregl));
-    if (map.loaded()) init();
-    else map.once('load', init);
-  }, [mapRef?.current]);
+    let cancelled = false;
+
+    const initWhenReady = () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const map = mapRef?.current as any;
+      if (!map) {
+        if (!cancelled) window.setTimeout(initWhenReady, 50);
+        return;
+      }
+
+      const init = () => {
+        if (!cancelled) {
+          setMapController(createMapLibreGlMapController(map, maplibregl));
+        }
+      };
+
+      if (map.loaded()) init();
+      else map.once('load', init);
+    };
+
+    initWhenReady();
+    return () => {
+      cancelled = true;
+    };
+  }, [mapRef]);
 
   useEffect(() => {
     const map = mapRef?.current;
@@ -316,7 +334,7 @@ const Portal = ({ language }: PortalProps) => {
                 setActiveLayerId(layerId);
                 setRightBarTab('Legend');
               }}
-              onLayerDeactivate={() => setActiveLayerId(null as any)}
+              onLayerDeactivate={() => setActiveLayerId(null)}
               language={language}
               selectionValues={layerSelections}
               selectionOptions={layerSelectionOptions}
@@ -358,7 +376,7 @@ const Portal = ({ language }: PortalProps) => {
             setActiveLayerId(layerId);
             setRightBarTab('Legend');
           }}
-          onLayerDeactivate={() => setActiveLayerId(null as any)}
+          onLayerDeactivate={() => setActiveLayerId(null)}
           language={language}
           selectionValues={layerSelections}
           selectionOptions={layerSelectionOptions}

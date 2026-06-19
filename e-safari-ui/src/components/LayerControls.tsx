@@ -149,7 +149,9 @@ export function LayerControls({
 
                 {/* Toggle switch */}
                 <button
+                  type="button"
                   role="switch"
+                  aria-label={layer.labels.title[language]}
                   aria-checked={isActive}
                   onClick={(e) => {
                     e.stopPropagation();

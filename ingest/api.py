@@ -29,7 +29,7 @@ def _json_safe(value):
 def validate_payload_for_cadence(cadence: str, payload: dict):
     """
     Minimal validation so your infra stays versatile.
-    daily/monthly -> require datetime
+    daily/monthly/annual -> require datetime
     dekadal/seasonal -> require start_datetime and end_datetime
     """
     if cadence in ("daily", "monthly", "annual"):
