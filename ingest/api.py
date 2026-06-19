@@ -29,10 +29,10 @@ def _json_safe(value):
 def validate_payload_for_cadence(cadence: str, payload: dict):
     """
     Minimal validation so your infra stays versatile.
-    daily/monthly -> require datetime
+    daily/monthly/annual -> require datetime
     dekadal/seasonal -> require start_datetime and end_datetime
     """
-    if cadence in ("daily", "monthly"):
+    if cadence in ("daily", "monthly", "annual"):
         if not payload.get("datetime"):
             return "Missing required field: datetime"
     elif cadence in ("dekadal", "seasonal"):

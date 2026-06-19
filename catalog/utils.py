@@ -32,12 +32,16 @@ class DatasetVisualization:
         self.legend_dict = None
 
     def _parse_date(self):
-        """Parse date string into year, month, day components."""
+        """Parse date string into year, month, day components. Supports YYYY, YYYY-MM, YYYY-MM-DD."""
         parts = self.date.split("-")
         year = int(parts[0])
-        month = int(parts[1])
+        month = int(parts[1]) if len(parts) > 1 else None
         day = int(parts[2]) if len(parts) == 3 else None
         return year, month, day
+
+    def _get_year_range(self, year):
+        """Get datetime range for entire year."""
+        return (f"{year:04d}-01-01T00:00:00Z", f"{year + 1:04d}-01-01T00:00:00Z")
 
     def _get_month_range(self, year, month):
         """Get datetime range for entire month."""
@@ -62,6 +66,10 @@ class DatasetVisualization:
         if day is None:
             return self._get_month_range(year, month)
         return self._get_day_range(year, month, day)
+
+    def _handle_annual(self, year, month, day):
+        """Handle annual cadence: full year range."""
+        return self._get_year_range(year)
 
     def _handle_daily(self, year, month, day):
         """Handle daily cadence: specific day only."""
@@ -94,6 +102,7 @@ class DatasetVisualization:
             "monthly": self._handle_monthly,
             "dekadal": self._handle_dekadal,
             "daily": self._handle_daily,
+            "annual": self._handle_annual,
         }
 
         handler = cadence_handlers.get(self.cadence, self._handle_monthly)

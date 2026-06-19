@@ -95,6 +95,7 @@ def _make_dataset(dataset_id="spi", project_slug="e-safari", with_style=False):
         mock_style.source_organization = ""
         mock_style.methodology = None
         mock_style.methodology_url = ""
+        mock_style.legend_description = ""
         mock_dataset.style_config = mock_style
     else:
         mock_dataset.style_config = None
@@ -271,6 +272,18 @@ class DatasetAvailabilityViewTests(TestCase):
     def test_invalid_cadence_returns_400(self):
         response = self.client.get("/api/catalog/datasets/spi/availability/?cadence=weekly")
         self.assertEqual(response.status_code, 400)
+
+    @patch("catalog.views.connections")
+    def test_annual_cadence_returns_unique_year_strings(self, mock_conns):
+        # Two dates in 2024 and one in 2025; expect deduplicated YYYY strings
+        dates = [date(2024, 3, 1), date(2024, 9, 15), date(2025, 1, 10)]
+        cur = _make_pgstac_cursor(dates, min_d=date(2024, 3, 1), max_d=date(2025, 1, 10))
+        mock_conns.__getitem__.return_value.cursor.return_value = cur
+
+        response = self.client.get("/api/catalog/datasets/spi/availability/?cadence=annual")
+        self.assertEqual(response.status_code, 200)
+        available = response.data["available"]
+        self.assertEqual(available, ["2024", "2025"])
 
     @patch("catalog.views.connections")
     def test_response_echoes_dataset_id_and_cadence(self, mock_conns):

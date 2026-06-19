@@ -138,8 +138,8 @@ class DatasetAvailabilityView(APIView):
         cadence = (request.query_params.get("cadence") or "daily").lower()
         # If you have cadence in Wagtail, you can fetch it here instead.
         # For now, allow cadence in querystring or default daily.
-        if cadence not in ("daily", "dekadal", "monthly", ""):
-            return Response({"detail": "cadence must be daily|dekadal|monthly"}, status=400)
+        if cadence not in ("daily", "dekadal", "monthly", "annual", ""):
+            return Response({"detail": "cadence must be daily|dekadal|monthly|annual"}, status=400)
         if cadence == "":
             cadence = "daily"
 
@@ -179,6 +179,12 @@ class DatasetAvailabilityView(APIView):
             for d in rows:
                 k = to_dekad_start(d).isoformat()
                 seen[k] = True
+            available = list(seen.keys())
+
+        elif cadence == "annual":
+            seen = OrderedDict()
+            for d in rows:
+                seen[str(d.year)] = True
             available = list(seen.keys())
 
         else:  # monthly
