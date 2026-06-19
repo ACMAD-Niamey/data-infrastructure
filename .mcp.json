@@ -2,11 +2,10 @@
   "mcpServers": {
     "geomgr-local": {
       "command": "docker",
-      "args": ["compose", "run", "--rm", "-T", "--no-deps", "-e", "MCP_TRANSPORT=stdio", "mcp"],
-      "cwd": "/Volumes/Projects/ACMAD/e-safari/geomgr"
+      "args": ["compose", "run", "--rm", "-T", "--no-deps", "-e", "MCP_TRANSPORT=stdio", "mcp"]
     },
     "geomgr-remote": {
-      "url": "https://multi-hazard.acmad.org/mcp/sse"
+      "url": "https://ada.acmad.org/mcp/"
     }
   }
 }

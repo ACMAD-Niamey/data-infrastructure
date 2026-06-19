@@ -1,63 +1,72 @@
 # GeoDataManager
 
-A comprehensive Django-based geospatial data management system for handling vector and raster geospatial data with PostGIS, integrated with Celery for asynchronous task processing, and MinIO for cloud-native object storage.
+A Django-based geospatial data management system for multi-hazard data: weather stations, raster datasets, STAC catalog, and an MCP-powered AI assistant layer that lets LLMs query real data without hallucination.
 
 ## Project Overview
 
-GeoDataManager is built on the Django framework and provides a RESTful API for managing geospatial datasets. It includes:
+GeoDataManager provides the data infrastructure for ACMAD's multi-hazard platform. It includes:
 
-- **Catalog Management**: Organize and manage geospatial layers and datasets
-- **Vector Data Ingestion**: Import and process vector geospatial data
-- **Tile Generation**: OGC-compliant tile services via TiPG
-- **Async Processing**: Background job handling with Celery and Redis
-- **Cloud Storage**: MinIO integration for scalable object storage
-- **API Documentation**: OpenAPI/Swagger documentation with drf-spectacular
-- **Authentication & Permissions**: Role-based access control
+- **Catalog Management**: Wagtail-managed layers (GeoServer WMS, static tiles, STAC rasters) with legend and styling
+- **STAC Raster Catalog**: Ingest and serve Cloud-Optimized GeoTIFFs via pgSTAC + STAC FastAPI + TiTiler
+- **Stations & Observations**: Weather station metadata, timeseries storage, WIS2/MQTT ingestion
+- **Vector Tile Service**: OGC API – Features/Tiles via TiPG over PostGIS
+- **GeoOracle MCP Server**: Model Context Protocol server exposing catalog, STAC, stations, observations, and country-level zonal statistics as AI tools
+- **Async Processing**: Celery + Redis for ingestion jobs and scheduled tasks
+- **Cloud Storage**: MinIO (S3-compatible) for raster assets
+- **Multi-hazard UI**: React/Vite frontend at `multi-hazard.acmad.org`
 
 ## Tech Stack
 
 - **Backend**: Django 5.2+ with Django REST Framework
-- **CMS**: Wagtail 7.2+ (optional content management)
-- **Database**: PostgreSQL with PostGIS extension
-- **Task Queue**: Celery with Redis broker
+- **CMS**: Wagtail 7.2+ — layer config, legend, styling, MCP server registry, LLM provider config
+- **Database**: PostgreSQL + PostGIS (`geodatamanager`) + pgSTAC (separate instance for STAC metadata)
+- **Raster catalog**: STAC FastAPI (pgstac) + TiTiler (COG tile serving)
+- **Vector tiles**: TiPG (OGC API – Tiles from PostGIS)
+- **Task Queue**: Celery + Redis
 - **Object Storage**: MinIO
-- **Tile Service**: TiPG (Tile serving over PostGIS)
+- **MCP server**: GeoOracle — FastMCP 3.x, SSE transport, 17 tools across catalog/STAC/stations/observations/countries/zonal-stats
+- **AI (planned)**: Anthropic Claude via `assistant` Django app — chat endpoint + MCP registry
 - **Web Server**: Gunicorn + Nginx
-- **Containerization**: Docker & Docker Compose
+- **Containerization**: Docker Compose (15 services)
 
 ## Documentation
 
-- **[Architecture and roadmap](docs/README.md)** — current system diagram (Docker, Django, TiPG, frontends) and future multi-hazard / MCP / LLM plans.
+- **[Architecture](docs/architecture.md)** — system diagram, service responsibilities, data-flow principles
+- **[Roadmap](docs/roadmap.md)** — multi-hazard platform evolution, MCP/LLM status
+- **[Ingest & delete API](docs/ingest-delete.md)** — STAC raster ingest pipeline
 
 ## Project Structure
 
 ```
 geomgr/
-├── docs/                    # Architecture & roadmap (see docs/README.md)
-├── catalog/                 # Catalog app for layer management
-├── ingest/                  # Vector data ingestion app
-├── uploads/                 # File uploads handling
-├── vector_ingest/           # Vector data processing
-├── home/                    # Homepage/landing page app
-├── search/                  # Search functionality
-├── geodatamanager/          # Django project settings
-│   ├── settings/
-│   │   ├── base.py         # Base configuration
-│   │   ├── dev.py          # Development settings
-│   │   └── production.py    # Production settings
-│   ├── celery.py           # Celery configuration
-│   ├── urls.py             # Main URL routing
-│   └── wsgi.py             # WSGI application
-├── docker/                  # Docker entrypoints
-├── nginx/                   # Nginx configuration
-├── data/                    # Local data storage
-├── media/                   # User uploads
-├── static/                  # Static files
-├── manage.py               # Django management script
-├── Makefile                # Development commands
-├── requirements.txt        # Python dependencies
-├── docker-compose.yml      # Multi-service orchestration
-└── Dockerfile              # Container image definition
+├── docs/                        # Architecture & roadmap
+├── catalog/                     # Layer catalog (Wagtail snippets, availability, visualization)
+├── ingest/                      # STAC raster ingest/delete API + Celery tasks
+├── stations/                    # Weather station metadata + country boundaries
+├── observations/                # Timeseries observations + aggregation queries
+├── sources/                     # Data source metadata
+├── weather_station_ingestion/   # WIS2/MQTT consumer + cleanup
+├── uploads/                     # File upload presign + status tracking
+├── vector_ingest/               # Vector data ingest jobs
+├── home/                        # Wagtail homepage
+├── search/                      # Wagtail search
+├── assistant/                   # (planned) AI chat endpoint + MCP registry + LLM config
+├── mcp/                         # GeoOracle MCP server (FastMCP, SSE transport)
+│   ├── server.py                #   FastMCP entry point
+│   ├── client.py                #   Shared httpx clients
+│   ├── cache.py                 #   Redis cache for zonal stats
+│   └── tools/                   #   17 tools: catalog, stac, stations, observations, countries, zonal_stats
+├── multi-hazard-ui/             # React/Vite multi-hazard dashboard
+├── afri-met/                    # React/MapLibre station map (Afri-Met)
+├── e-safari-ui/                 # Shared React component library
+├── geodatamanager/              # Django project config
+│   ├── settings/base.py
+│   ├── urls.py
+│   └── celery.py
+├── nginx/                       # Nginx configs (default.conf, default_ssl.conf)
+├── docker-compose.yml           # 15-service orchestration
+├── Makefile                     # Development shortcuts
+└── requirements.txt
 ```
 
 ## Prerequisites
@@ -195,36 +204,106 @@ All service endpoints (Django, TiPG, etc.) are accessed through the Nginx revers
 
 The application runs multiple services in Docker:
 
-### Development Environment
+### Services
 
-| Service | Port | Purpose |
-|---------|------|---------|
-| web | 8000 | Django application (Gunicorn) |
-| nginx | 80 | Reverse proxy & static file serving |
-| db | 5432 | PostgreSQL database (internal) |
-| redis | 6379 | Celery message broker (internal) |
-| tipg | 8082 | OGC tile service |
-| minio | 9000 | Object storage (internal) |
-| worker | - | Celery background worker (internal) |
+All 15 services run on `data_infra_network`. Only nginx exposes public ports (80/443).
 
-### Production Environment
+| Service | Internal | Public path | Purpose |
+|---------|----------|-------------|---------|
+| `web` | 8070 | `/api/` | Django REST API, Wagtail admin |
+| `nginx` | 80, 443 | — | Reverse proxy, TLS, static files |
+| `db` | 5432 | — | PostgreSQL + PostGIS (main app data) |
+| `pgstac` | 5432 | — | PostgreSQL for STAC metadata (separate instance) |
+| `redis` | 6379 | — | Celery broker + cache |
+| `minio` | 9000/9001 | `minio.acmad.org`, `console-minio.acmad.org` | Object storage (rasters, archives) |
+| `worker` | — | — | Celery background worker |
+| `celery-beat` | — | — | Scheduled tasks (WIS2 cleanup, etc.) |
+| `wis2_consumer` | — | — | MQTT broker consumer for live station data |
+| `tipg` | 8080 | `/tipg/` | OGC API – Tiles / vector tiles from PostGIS |
+| `stac_api` | 8080 | `/stac/` | STAC FastAPI (raster catalog, transactions) |
+| `titiler` | 80 | `/titiler/` | COG raster tile serving |
+| `pgstac_migrate` | — | — | One-off pgSTAC schema init |
+| `mcp` | 8090 | `/mcp/` | GeoOracle MCP server (SSE transport) |
+| `certbot` | — | — | Let's Encrypt SSL management |
 
-In production, **only ports 80 and 443** are exposed through Nginx. All internal services communicate via internal Docker network:
+## GeoOracle MCP Server
 
-| Service | Internal Port | Public Access | Purpose |
-|---------|---------------|----------------|---------|
-| web | 8000 | https://yourdomain.com | Django application (via Nginx proxy) |
-| nginx | 80, 443 | Yes | Reverse proxy & static file serving |
-| db | 5432 | No | PostgreSQL database |
-| redis | 6379 | No | Celery message broker |
-| tipg | 8080 | https://yourdomain.com/tiles | OGC tile service (via Nginx proxy) |
-| minio | 9000 | No | Object storage (internal) |
-| worker | - | No | Celery background worker |
+**GeoOracle** is the Model Context Protocol server that exposes GeoDataManager's capabilities as AI tools. It runs as a standalone Python service (`mcp/`) using FastMCP 3.x with SSE transport.
 
-**Note**: API endpoints are accessed through Nginx reverse proxy:
-- Django API: `https://yourdomain.com/api/`
-- TiPG Tiles: `https://yourdomain.com/tiles/`
-- Admin: `https://yourdomain.com/admin/`
+### Tools (17 total)
+
+| Module | Tools |
+|--------|-------|
+| `catalog` | `list_hazard_categories`, `list_catalog_layers`, `get_dataset_availability`, `get_dataset_visualization` |
+| `stac` | `list_stac_collections`, `get_stac_collection`, `search_stac_items` |
+| `stations` | `search_stations`, `get_station_detail`, `get_station_stats`, `get_station_facets` |
+| `observations` | `get_latest_observations`, `get_observation_stats` |
+| `countries` | `resolve_country` (name → ISO alpha-3 code + bounds), `list_countries` |
+| `zonal_stats` | `get_country_raster_stats` (single date), `get_country_raster_timeseries` (date range, Redis-cached) |
+
+### Endpoints
+
+| Transport | URL | Use case |
+|-----------|-----|----------|
+| SSE (deployed) | `https://multi-hazard.acmad.org/mcp/sse` | Remote MCP clients, chatbot backend |
+| SSE (local) | `http://localhost/mcp/sse` | Local development |
+| stdio (dev) | `docker compose run --rm -T --no-deps -e MCP_TRANSPORT=stdio mcp` | Claude Code direct |
+
+### Connecting Claude Code
+
+Add to your Claude Code MCP settings:
+```json
+{
+  "mcpServers": {
+    "geomgr-remote": { "url": "https://multi-hazard.acmad.org/mcp/sse" }
+  }
+}
+```
+
+Or use the project `.mcp.json` at the repo root which includes both local and remote entries.
+
+### Zonal statistics chain
+
+The `get_country_raster_stats` and `get_country_raster_timeseries` tools chain three services:
+```
+1. Django  → GET /api/stations/country-boundary/{code}/   (full GeoJSON polygon)
+2. STAC    → POST /stac/search  (find raster asset for date range)
+3. TiTiler → POST /cog/statistics?url={s3_href}  (compute stats masked by polygon)
+```
+Results are cached in Redis (`zonal:{dataset}:{country}:{date}`, 24h TTL).
+
+### Environment variables (mcp service)
+
+```bash
+DJANGO_API_URL=http://web:8070
+STAC_API_URL=http://stac_api:8080
+TITILER_URL=http://titiler:80
+TIPG_URL=http://tipg:8080
+REDIS_URL=redis://redis:6379/1
+MCP_TRANSPORT=sse          # sse (deployed) or stdio (local dev override)
+MCP_PORT=8090
+```
+
+---
+
+## AI Assistant (planned)
+
+A `POST /api/assistant/chat/` endpoint is planned under the `assistant` Django app. It will:
+
+1. Load the configured LLM provider (Claude or OpenAI) from Wagtail admin → **Snippets → LLM providers**
+2. Load all active MCP servers from Wagtail admin → **Snippets → MCP servers**
+3. Connect to each MCP server, fetch its tool list
+4. Run the agentic tool-calling loop via the Anthropic SDK
+5. Return the grounded text response
+
+External MCP servers (beyond GeoOracle) can be registered in Wagtail admin with URL + optional auth token — no code change needed to extend the assistant's capabilities.
+
+Required environment variables (when implemented):
+```bash
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+---
 
 ## Environment Variables
 
@@ -236,17 +315,23 @@ DEBUG=False
 SECRET_KEY=your-secret-key-here
 ALLOWED_HOSTS=localhost,127.0.0.1
 
-# Database
+# Database (main)
 POSTGRES_USER=geodatamanager
 POSTGRES_PASSWORD=your-password
 POSTGRES_DB=geodatamanager
 POSTGRES_HOST=db
 POSTGRES_PORT=5432
 
+# pgSTAC database (separate instance)
+PG_STAC_POSTGRES_USER=pgstac
+PG_STAC_POSTGRES_PASSWORD=your-pgstac-password
+PG_STAC_POSTGRES_DB=pgstac
+PG_STAC_POSTGRES_HOST=pgstac
+
 # MinIO
 MINIO_ROOT_USER=minioadmin
 MINIO_ROOT_PASSWORD=minioadmin
-MINIO_URL=http://minio:9000
+MINIO_ENDPOINT=minio:9000
 
 # Redis
 REDIS_URL=redis://redis:6379/0
@@ -257,6 +342,13 @@ MEDIA_VOLUME=/app/media
 
 # TiPG
 TIPG_DEBUG=false
+
+# GeoOracle MCP server
+MCP_TRANSPORT=sse
+MCP_PORT=8090
+
+# AI assistant (add when implementing the assistant app)
+ANTHROPIC_API_KEY=sk-ant-...
 ```
 
 ## Development Workflow
@@ -511,11 +603,15 @@ python manage.py test catalog.tests.ModelTests  # Run specific test class
 - [ ] Configure `SECRET_KEY` securely
 - [ ] Set `ALLOWED_HOSTS` properly
 - [ ] Use strong database password
-- [ ] Enable HTTPS/SSL
+- [ ] Enable HTTPS/SSL (certbot + Let's Encrypt)
+- [ ] Set `ANTHROPIC_API_KEY` for AI assistant
+- [ ] Configure `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD`
+- [ ] Set `PG_STAC_POSTGRES_PASSWORD`
 - [ ] Set up proper logging
 - [ ] Configure backup strategy
 - [ ] Run migrations on fresh database
 - [ ] Collect static files
+- [ ] Verify GeoOracle MCP responds at `/mcp/sse`
 - [ ] Set up monitoring & alerts
 
 ### Production Deployment
@@ -750,4 +846,4 @@ This project is part of the ACMAD e-Safari initiative.
 
 ---
 
-**Last Updated**: April 2026
+**Last Updated**: June 2026

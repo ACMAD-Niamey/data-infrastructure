@@ -13,9 +13,9 @@ zonal_stats.register(mcp)
 
 if __name__ == "__main__":
     transport = os.getenv("MCP_TRANSPORT", "stdio")
-    if transport == "sse":
+    if transport in ("sse", "streamable-http"):
         mcp.run(
-            transport="sse",
+            transport=transport,
             host="0.0.0.0",
             port=int(os.getenv("MCP_PORT", "8090")),
         )

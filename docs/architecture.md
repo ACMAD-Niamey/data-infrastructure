@@ -7,8 +7,10 @@ This document describes the **as-deployed** architecture of the GeoDataManager s
 ```mermaid
 flowchart TB
   subgraph Clients["Browser clients"]
-    ESUI["e-safari-ui\n(React)"]
+    MHZ["multi-hazard-ui\n(React / MapLibre)"]
     AFRI["Afri-Met\n(React / MapLibre)"]
+    ESUI["e-safari-ui\n(React)"]
+    CHAT["Chat / assistant UI\n(planned)"]
   end
 
   subgraph Edge["Reverse proxy"]
@@ -17,6 +19,13 @@ flowchart TB
 
   subgraph App["Django application"]
     WEB["Gunicorn / Django\nREST API, auth, catalog, ingest"]
+    ASS["assistant app\n(planned)\nMCP registry + LLM chat"]
+  end
+
+  subgraph MCP["AI / MCP layer"]
+    GEO["GeoOracle\n(FastMCP, SSE :8090)\n17 tools"]
+    EXT["External MCPs\n(registered in Wagtail admin)"]
+    LLM["Claude / LLM\n(Anthropic SDK)"]
   end
 
   subgraph Async["Background work"]
@@ -26,7 +35,7 @@ flowchart TB
   end
 
   subgraph CacheStore["Cache & objects"]
-    REDIS[("Redis")]
+    REDIS[("Redis\n(cache + broker)")]
     MINIO[("MinIO\nobject storage")]
   end
 
@@ -41,16 +50,29 @@ flowchart TB
     PGSTAC[("pgstac\nSTAC metadata")]
   end
 
-  ESUI --> NGX
+  MHZ --> NGX
   AFRI --> NGX
+  ESUI --> NGX
+  CHAT --> NGX
+
   NGX --> WEB
   NGX --> TIPG
   NGX --> STAC
   NGX --> TILI
+  NGX --> GEO
 
   WEB --> PG
   WEB --> REDIS
   WEB --> MINIO
+
+  ASS --> LLM
+  ASS --> GEO
+  ASS --> EXT
+
+  GEO --> WEB
+  GEO --> STAC
+  GEO --> TILI
+  GEO --> REDIS
 
   CEL --> PG
   CEL --> REDIS
@@ -63,7 +85,29 @@ flowchart TB
   TILI --> MINIO
 ```
 
-Service names match `docker-compose.yml` (`web`, `nginx`, `tipg`, `db`, `redis`, `minio`, `worker`, `stac_api`, `titiler`, `pgstac`, etc.). Exact URLs and paths depend on environment (see nginx configuration and `.env`).
+Service names match `docker-compose.yml`. Dashed nodes (CHAT, ASS) are planned but not yet implemented.
+
+## GeoOracle MCP server
+
+GeoOracle (`mcp/`) is a FastMCP 3.x server running inside Docker on port 8090, exposed via nginx at `/mcp/sse`. It acts as a bridge between LLM clients and the data stack — tools call internal HTTP APIs, no direct DB access.
+
+**Tool routing:**
+
+```
+LLM tool call
+  → GeoOracle (SSE)
+      ├── catalog tools    → Django /api/catalog/
+      ├── stac tools       → STAC FastAPI /search /collections
+      ├── station tools    → Django /api/stations/
+      ├── observation tools→ Django /api/observations/
+      ├── country tools    → Django /api/stations/country-bounds/
+      └── zonal stats      → Django boundary + STAC search + TiTiler /cog/statistics
+                             └── Redis cache (24h TTL per country/dataset/date)
+```
+
+**Transports:**
+- `MCP_TRANSPORT=sse` (default in docker-compose) — persistent HTTP server, accessible via nginx
+- `MCP_TRANSPORT=stdio` — spawned on demand for local Claude Code use (`docker compose run --rm -T --no-deps -e MCP_TRANSPORT=stdio mcp`)
 
 ## Responsibility split
 
@@ -73,10 +117,13 @@ Service names match `docker-compose.yml` (`web`, `nginx`, `tipg`, `db`, `redis`,
 |--------|----------------|
 | Business logic, CRUD, permissions | Django apps (`catalog`, `stations`, `observations`, `ingest`, …) |
 | Heavy or transactional APIs | Django REST Framework |
+| Layer config, legend, styling | Wagtail snippets (`GeoServerLayer`, `StaticWmsLayer`, `Layer`) |
 | Async ingestion and jobs | Celery + Redis |
 | User uploads and derivatives | MinIO + media/static volumes |
-| Vector tiles at scale | **TiPG** reading PostGIS (e.g. published collections in configured schema) |
-| Raster / STAC (where enabled) | pgstac + STAC FastAPI + TiTiler |
+| Vector tiles at scale | **TiPG** reading PostGIS |
+| Raster catalog | pgstac + STAC FastAPI + TiTiler |
+| MCP / AI tools | **GeoOracle** (`mcp/`) — 17 tools over SSE |
+| AI chat endpoint + MCP registry | `assistant/` app *(planned)* — LLM provider + external MCP registration in Wagtail admin |
 
 ### Afri-Met (`afri-met/`)
 

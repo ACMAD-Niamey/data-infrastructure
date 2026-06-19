@@ -57,19 +57,41 @@ flowchart TB
 - **Central UI**: inventory of what exists (layers, stations, products), search/filter, deep links into Afri-Met-like maps or other viewers.
 - **Design system alignment**: reuse e-safari-ui tokens and components for a coherent look.
 
-### 3. MCP for maps and statistics
+### 3. MCP for maps and statistics — **IN PROGRESS**
 
-- **MCP servers** expose **tools** such as:
-  - Build or refine **map definitions** (layers, filters, bbox, styles) consumed by MapLibre or server-side renderers.
-  - Run **aggregations** or **time-series** via existing Django endpoints (with auth and rate limits).
-  - Query **catalog** or **STAC** where relevant.
-- **Principle**: MCP does not replace PostGIS; it **orchestrates calls** into services you already operate.
+**GeoOracle** is implemented and deployed. Current state:
 
-### 4. LLM chatbot (generalised Q&A)
+- ✅ 17 tools across catalog, STAC, stations, observations, country resolution, zonal statistics
+- ✅ SSE transport, accessible via nginx at `/mcp/sse` on all domains
+- ✅ Country-level zonal stats chain: Django boundary → STAC search → TiTiler `/cog/statistics`
+- ✅ Redis cache (24h TTL) for zonal stat results
+- ✅ `.mcp.json` for Claude Code integration (local stdio + remote SSE)
+- 🔲 MCP resources (`geomgr://countries`, `geomgr://collections`, `geomgr://hazard-categories`)
+- 🔲 MCP prompt templates (`analyze_country_hazard`, `station_summary`)
 
-- **Tool-calling** LLM uses MCP tools to retrieve facts; **no hallucinated numbers** for quantitative answers unless clearly labeled as estimates.
-- Optional **RAG** over curated docs (methodology, glossary) separate from live numeric queries.
-- **Same auth boundary** as the web app (tokens, roles) when tools hit Django.
+### 4. LLM chatbot (generalised Q&A) — **PLANNED**
+
+Design is complete; implementation is the next milestone. Architecture:
+
+```
+POST /api/assistant/chat/   (new Django assistant app)
+  ↓
+Load LLMProvider from DB (Wagtail admin → Snippets → LLM providers)
+  ↓
+Load active MCPServers from DB (Wagtail admin → Snippets → MCP servers)
+  ↓
+Connect to each MCP server → list tools → agentic loop with Claude
+  ↓
+Return grounded text response
+```
+
+Key design decisions already made:
+- **External MCP registry in Wagtail admin**: add any MCP server (URL + optional auth token) without code changes — the assistant picks it up on the next request
+- **LLM provider config in Wagtail admin**: switch between Claude models or providers without redeploy
+- **Tool name prefixing**: `geooracle__resolve_country`, `weather__get_forecast` — avoids collisions across servers
+- **No hallucinated numbers**: every quantitative claim is backed by a real tool call
+
+Requires: `anthropic>=0.40`, `mcp>=1.0` added to `requirements.txt`.
 
 ### 5. Operations and quality
 
@@ -78,11 +100,11 @@ flowchart TB
 
 ## Near-term vs longer-term
 
-| Horizon | Focus |
-|--------|--------|
-| **Near term** | Harden TiPG + Django split (tiles vs stats), expand metadata for cross-domain discovery, document public APIs. |
-| **Medium term** | Central UI MVP; second domain pilot sharing the same stack. |
-| **Longer term** | MCP tool suite + assistant behind the same auth and data policies. |
+| Horizon | Status | Focus |
+|--------|--------|-------|
+| **Near term** | ✅ Done | Multi-hazard UI, GeoOracle MCP, StaticWmsLayer, zonal stats |
+| **Medium term** | 🔲 Next | `assistant` app — LLM chat endpoint + MCP registry in Wagtail admin |
+| **Longer term** | 🔲 Future | RAG over methodology docs, streaming chat, auth-scoped tool access, Central UI |
 
 ## Dependencies and risks
 

@@ -266,7 +266,7 @@ services:
       TITILER_URL: http://titiler:80
       TIPG_URL: http://tipg:8080
       REDIS_URL: redis://redis:6379/1
-      MCP_TRANSPORT: sse
+      MCP_TRANSPORT: streamable-http
       MCP_PORT: "8090"
     depends_on:
       - web
