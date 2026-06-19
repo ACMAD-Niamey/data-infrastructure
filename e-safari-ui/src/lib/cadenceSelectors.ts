@@ -34,6 +34,8 @@ export function deriveSelectors(cadence: string, language: Language): SelectorCo
         { key: "year", label: L("year"), required: true, minWidthPx: 110 },
         { key: "season", label: L("season"), dependsOn: ["year"], minWidthPx: 140 },
       ];
+    case "annual":
+      return [{ key: "year", label: L("year"), required: true, minWidthPx: 110 }];
     case "monthly":
     default:
       return [{ key: "date", label: L("date"), required: true, minWidthPx: 170 }];
@@ -77,6 +79,8 @@ export function buildVisualizationDate(
     }
     case "seasonal":
       return season ? `${y}-${season}` : null;
+    case "annual":
+      return y;
     default:
       return date ?? null;
   }

@@ -121,6 +121,7 @@ class DatasetPage(Page):
         ("dekadal", "Dekadal"),
         ("monthly", "Monthly"),
         ("seasonal", "Seasonal"),
+        ("annual", "Annual"),
     ]
 
     dataset_id = models.SlugField(
