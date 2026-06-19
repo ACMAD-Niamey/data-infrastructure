@@ -30,6 +30,16 @@ export type CatalogDataset = {
   stac_collection: string;
 };
 
+export type CatalogLayerDetails = {
+  coverage: string;
+  resolution: string;
+  update_frequency: string;
+  source_organization: string;
+  methodology_html: string;
+  methodology_url: string;
+  legend_description: string;
+};
+
 export type CatalogLayer = {
   id: string;
   title: string;
@@ -53,6 +63,7 @@ export type CatalogLayer = {
     maxzoom: number;
     color_class: string;
   };
+  details?: CatalogLayerDetails | null;
   selectors: SelectorConfig[];
   labels: {
     title: LayerLabel;

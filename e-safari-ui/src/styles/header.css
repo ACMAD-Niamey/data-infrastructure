@@ -4,3 +4,8 @@
   padding: 6px;
   box-shadow: 0 4px 10px rgba(0,0,0,0.18);
 }
+
+/* Override Bulma's default blue anchor color inside the header */
+header a {
+  color: inherit;
+}

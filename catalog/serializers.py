@@ -7,9 +7,9 @@ class YearMonthOrDateField(serializers.CharField):
 
     def to_internal_value(self, data):
         value = super().to_internal_value(data)
-        if not re.fullmatch(r"\d{4}-\d{2}(-\d{2})?", value):
+        if not re.fullmatch(r"\d{4}(-\d{2}(-\d{2})?)?", value):
             raise serializers.ValidationError(
-                "Date must be in YYYY-MM or YYYY-MM-DD format."
+                "Date must be in YYYY, YYYY-MM, or YYYY-MM-DD format."
             )
         return value
 
@@ -18,7 +18,7 @@ class DatasetSerializer(serializers.Serializer):
     """Dataset metadata serializer"""
     id = serializers.CharField(max_length=80)
     title = serializers.CharField(max_length=255)
-    cadence = serializers.ChoiceField(choices=["daily", "dekadal", "monthly", "seasonal"])
+    cadence = serializers.ChoiceField(choices=["daily", "dekadal", "monthly", "seasonal", "annual"])
     dataset_type = serializers.ChoiceField(choices=["raster", "vector"])
     stac_collection = serializers.CharField(max_length=120)
 
@@ -50,7 +50,7 @@ class IconSerializer(serializers.Serializer):
 
 class SelectionSerializer(serializers.Serializer):
     cadence = serializers.ChoiceField(
-        choices=["daily", "dekadal", "monthly", "seasonal"]
+        choices=["daily", "dekadal", "monthly", "seasonal", "annual"]
     )
 
 
@@ -80,7 +80,7 @@ class UILayersResponseSerializer(serializers.Serializer):
 class DatasetAvailabilityRequestSerializer(serializers.Serializer):
     """Request serializer for dataset availability"""
     cadence = serializers.ChoiceField(
-        choices=["daily", "dekadal", "monthly"],
+        choices=["daily", "dekadal", "monthly", "annual"],
         required=False,
         default="daily",
         help_text="Temporal cadence to aggregate availability"
@@ -112,7 +112,7 @@ class DatasetVisualizationRequestSerializer(serializers.Serializer):
         help_text="Specific date to visualize (YYYY-MM or YYYY-MM-DD)"
     )
     cadence = serializers.ChoiceField(
-        choices=["daily", "dekadal", "monthly"],
+        choices=["daily", "dekadal", "monthly", "annual"],
         required=True,
         help_text="Temporal cadence for visualization"
     )

@@ -52,6 +52,10 @@ def interval_from_payload(cadence: str, payload: dict) -> tuple[str, str]:
         return day_range(year, month, day)
     if cadence == "monthly":
         return month_range(year, month)
+    if cadence == "annual":
+        start = f"{year:04d}-01-01T00:00:00Z"
+        end = f"{year + 1:04d}-01-01T00:00:00Z"
+        return start, end
 
     # dekadal without start/end: treat as month window from datetime
     return month_range(year, month)

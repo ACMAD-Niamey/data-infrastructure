@@ -22,11 +22,7 @@ const RightBar = ({ activeLayer, language, selectedFeature, activeTab, onTabChan
     const getContent = () => {
         switch (active_tab) {
             case "Legend":
-                return (
-                    <div>
-                      <Legend/>
-                    </div>
-                );
+                return <Legend/>;
             case "Analysis":
                 return (
                     <div>

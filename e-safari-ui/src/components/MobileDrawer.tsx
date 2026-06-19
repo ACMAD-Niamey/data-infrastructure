@@ -17,12 +17,15 @@ interface MobileDrawerProps {
   activeLayerId: string | null;
   activeLayer: CatalogLayer | null;
   onLayerChange: (layerId: string) => void;
+  onLayerDeactivate: () => void;
   language: Language;
   selectionValues: Record<string, LayerSelectionValue>;
   selectionOptions: Record<string, Partial<Record<SelectorKey, LayerSelectOption[]>>>;
   onSelectionChange: (layerId: string, field: SelectorKey, value?: string) => void;
   loading?: boolean;
   error?: string | null;
+  opacity: number;
+  onOpacityChange: (value: number) => void;
 }
 
 const translations = {
@@ -41,12 +44,15 @@ export function MobileDrawer({
   activeLayerId,
   activeLayer,
   onLayerChange,
+  onLayerDeactivate,
   language,
   selectionValues,
   selectionOptions,
   onSelectionChange,
   loading,
   error,
+  opacity,
+  onOpacityChange,
 }: MobileDrawerProps) {
   const t = translations[language];
 
@@ -64,12 +70,18 @@ export function MobileDrawer({
               onLayerChange(layerId);
               onClose();
             }}
+            onLayerDeactivate={() => {
+              onLayerDeactivate();
+              onClose();
+            }}
             language={language}
             selectionValues={selectionValues}
             selectionOptions={selectionOptions}
             onSelectionChange={onSelectionChange}
             loading={loading}
             error={error}
+            opacity={opacity}
+            onOpacityChange={onOpacityChange}
           />
           <DataPanel activeLayer={activeLayer} language={language} />
         </ScrollArea>

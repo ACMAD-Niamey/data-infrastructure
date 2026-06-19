@@ -6,7 +6,7 @@ from drf_spectacular.utils import OpenApiParameter, extend_schema
 from django.utils import timezone
 from wagtail.rich_text import expand_db_html
 
-from catalog.models import GeoServerLayer, StaticWmsLayer, HazardCategory, ProjectPage
+from catalog.models import GeoServerLayer, StaticWmsLayer, HazardCategory, ProjectPage, ProjectCountry
 from catalog.serializers import UILayersResponseSerializer
 from catalog.ui_layers import dataset_entries_for_project, dataset_to_api_dict, _description_raw_html
 
@@ -36,6 +36,7 @@ def geoserver_layer_to_api_dict(layer: GeoServerLayer, request) -> dict:
         "source_organization": layer.source_organization or "",
         "methodology_html":    expand_db_html(_description_raw_html(layer.methodology)),
         "methodology_url":     layer.methodology_url or "",
+        "legend_description":  layer.legend_description or "",
     }
 
     return {
@@ -93,6 +94,7 @@ def static_wms_to_api_dict(layer: StaticWmsLayer, request) -> dict:
         "source_organization": layer.source_organization or "",
         "methodology_html":    "",
         "methodology_url":     "",
+        "legend_description":  layer.legend_description or "",
     }
 
     return {
@@ -192,6 +194,33 @@ class UILayersView(APIView):
         out.extend(static_wms_to_api_dict(sw, request) for sw in sw_qs)
 
         return Response({"version": "1.0", "project": project_slug, "layers": out})
+
+
+class ProjectCountriesView(APIView):
+    """Returns supported countries for a project, for use in the country selector UI."""
+
+    @extend_schema(
+        tags=["catalog"],
+        summary="List supported countries for a project",
+        description="Returns countries linked to the project in Wagtail admin, with map bounds for zoom.",
+    )
+    def get(self, request, slug: str):
+        try:
+            project = ProjectPage.objects.live().get(slug=slug)
+        except ProjectPage.DoesNotExist:
+            return Response({"detail": f"Unknown or unpublished project '{slug}'."}, status=status.HTTP_404_NOT_FOUND)
+
+        out = []
+        for pc in project.supported_countries.select_related("country").all():
+            c = pc.country
+            if not c.country_bounds or not c.country_code:
+                continue
+            out.append({
+                "value": c.country_code,
+                "label": c.country_name,
+                "bounds": c.country_bounds,
+            })
+        return Response(out)
 
 
 class HazardCategoriesView(APIView):

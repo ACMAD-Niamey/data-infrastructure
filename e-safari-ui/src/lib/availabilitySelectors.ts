@@ -61,6 +61,10 @@ export function defaultSelectionFromAvailability(
     return {};
   }
 
+  if (cadence === "annual") {
+    return { year: pick.slice(0, 4) };
+  }
+
   if (cadence === "monthly" || /^\d{4}-\d{2}$/.test(pick)) {
     return { date: pick };
   }
