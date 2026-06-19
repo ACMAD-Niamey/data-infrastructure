@@ -63,7 +63,7 @@ export type CatalogLayer = {
     maxzoom: number;
     color_class: string;
   };
-  details?: CatalogLayerDetails;
+  details?: CatalogLayerDetails | null;
   selectors: SelectorConfig[];
   labels: {
     title: LayerLabel;
