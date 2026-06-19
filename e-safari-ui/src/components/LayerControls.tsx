@@ -248,7 +248,7 @@ export function LayerControls({
                       type="range"
                       min={0}
                       max={100}
-                      value={opacities[layer.id] ?? 85}
+                      value={opacities[layer.id] ?? layer.ui?.opacity ?? 85}
                       onChange={(e) => onOpacityChange(layer.id, Number(e.target.value))}
                       className="layer-slider"
                     />
