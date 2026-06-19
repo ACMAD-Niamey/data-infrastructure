@@ -268,6 +268,9 @@ const Portal = ({ language }: PortalProps) => {
       applyRasterLayers();
     } else {
       map.once('load', applyRasterLayers);
+      return () => {
+        map.off('load', applyRasterLayers);
+      };
     }
 
     return () => {
