@@ -95,6 +95,7 @@ def _make_dataset(dataset_id="spi", project_slug="e-safari", with_style=False):
         mock_style.source_organization = ""
         mock_style.methodology = None
         mock_style.methodology_url = ""
+        mock_style.legend_description = ""
         mock_dataset.style_config = mock_style
     else:
         mock_dataset.style_config = None
