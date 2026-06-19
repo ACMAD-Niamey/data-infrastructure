@@ -8,7 +8,13 @@ export function useCatalogLayers(language: Language) {
   const [layers, setLayers] = useState<CatalogLayer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [activeLayerId, setActiveLayerId] = useState<string | null>(null);
+  const [activeLayerIds, setActiveLayerIds] = useState<string[]>([]);
+
+  const toggleActiveLayer = useCallback((id: string) => {
+    setActiveLayerIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
+  }, []);
 
   const reload = useCallback(async () => {
     setLoading(true);
@@ -28,16 +34,17 @@ export function useCatalogLayers(language: Language) {
         },
       }));
       setLayers(withLang);
-      setActiveLayerId((current) => {
-        if (current && withLang.some((l) => l.id === current)) {
-          return current;
-        }
-        return withLang[0]?.id ?? null;
+      setActiveLayerIds((current) => {
+        // Keep existing active layers that are still present; otherwise default to the first layer.
+        const stillValid = current.filter((id) => withLang.some((l) => l.id === id));
+        if (stillValid.length > 0) return stillValid;
+        const first = withLang[0]?.id;
+        return first ? [first] : [];
       });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load layers");
       setLayers([]);
-      setActiveLayerId(null);
+      setActiveLayerIds([]);
     } finally {
       setLoading(false);
     }
@@ -47,9 +54,9 @@ export function useCatalogLayers(language: Language) {
     reload();
   }, [reload]);
 
-  const activeLayer = useMemo(
-    () => layers.find((layer) => layer.id === activeLayerId) ?? null,
-    [layers, activeLayerId],
+  const activeLayers = useMemo(
+    () => layers.filter((layer) => activeLayerIds.includes(layer.id)),
+    [layers, activeLayerIds],
   );
 
   const [layerSelections, setLayerSelections] = useState<
@@ -72,9 +79,9 @@ export function useCatalogLayers(language: Language) {
     layers,
     loading,
     error,
-    activeLayerId,
-    activeLayer,
-    setActiveLayerId,
+    activeLayerIds,
+    activeLayers,
+    toggleActiveLayer,
     layerSelections,
     setLayerSelections,
     reload,

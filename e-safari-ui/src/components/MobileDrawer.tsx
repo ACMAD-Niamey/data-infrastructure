@@ -14,18 +14,17 @@ interface MobileDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   layers: CatalogLayer[];
-  activeLayerId: string | null;
+  activeLayerIds: string[];
   activeLayer: CatalogLayer | null;
-  onLayerChange: (layerId: string) => void;
-  onLayerDeactivate: () => void;
+  onLayerToggle: (layerId: string) => void;
   language: Language;
   selectionValues: Record<string, LayerSelectionValue>;
   selectionOptions: Record<string, Partial<Record<SelectorKey, LayerSelectOption[]>>>;
   onSelectionChange: (layerId: string, field: SelectorKey, value?: string) => void;
   loading?: boolean;
   error?: string | null;
-  opacity: number;
-  onOpacityChange: (value: number) => void;
+  opacities: Record<string, number>;
+  onOpacityChange: (layerId: string, value: number) => void;
 }
 
 const translations = {
@@ -41,17 +40,16 @@ export function MobileDrawer({
   isOpen,
   onClose,
   layers,
-  activeLayerId,
+  activeLayerIds,
   activeLayer,
-  onLayerChange,
-  onLayerDeactivate,
+  onLayerToggle,
   language,
   selectionValues,
   selectionOptions,
   onSelectionChange,
   loading,
   error,
-  opacity,
+  opacities,
   onOpacityChange,
 }: MobileDrawerProps) {
   const t = translations[language];
@@ -65,13 +63,9 @@ export function MobileDrawer({
         <ScrollArea className="h-[calc(85vh-4rem)] mt-4">
           <LayerControls
             layers={layers}
-            activeLayerId={activeLayerId}
-            onLayerChange={(layerId) => {
-              onLayerChange(layerId);
-              onClose();
-            }}
-            onLayerDeactivate={() => {
-              onLayerDeactivate();
+            activeLayerIds={activeLayerIds}
+            onLayerToggle={(layerId) => {
+              onLayerToggle(layerId);
               onClose();
             }}
             language={language}
@@ -80,7 +74,7 @@ export function MobileDrawer({
             onSelectionChange={onSelectionChange}
             loading={loading}
             error={error}
-            opacity={opacity}
+            opacities={opacities}
             onOpacityChange={onOpacityChange}
           />
           <DataPanel activeLayer={activeLayer} language={language} />
