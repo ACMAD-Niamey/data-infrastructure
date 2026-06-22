@@ -3,10 +3,16 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 
+from django.conf import settings
+from django.core.mail import send_mail
 from django.utils import timezone
 from wagtail.rich_text import expand_db_html
 
-from catalog.models import GeoServerLayer, StaticWmsLayer, HazardCategory, ProjectPage, ProjectCountry
+from catalog.models import (
+    ContactSubmission, FeedbackSubmission,
+    GeoServerLayer, StaticWmsLayer,
+    HazardCategory, ProjectPage, ProjectCountry,
+)
 from catalog.serializers import UILayersResponseSerializer
 from catalog.ui_layers import dataset_entries_for_project, dataset_to_api_dict, _description_raw_html
 
@@ -241,10 +247,36 @@ class ProjectConfigView(APIView):
         if project.hero_image_id and project.hero_image:
             hero_image_url = request.build_absolute_uri(project.hero_image.file.url)
 
+        about_image_url = None
+        if project.about_image_id and project.about_image:
+            about_image_url = request.build_absolute_uri(project.about_image.file.url)
+
         entries = dataset_entries_for_project(project.slug)
         gs_count = GeoServerLayer.objects.filter(project__slug=project.slug, is_published_for_ui=True).count()
         sw_count = StaticWmsLayer.objects.filter(project__slug=project.slug, is_published_for_ui=True).count()
         layer_count = len(entries) + gs_count + sw_count
+
+        features = [
+            {"title": f.title, "description": f.description, "icon_name": f.icon_name}
+            for f in project.features.all()
+        ]
+
+        partners_image_url = None
+        if project.partners_image_id and project.partners_image:
+            partners_image_url = request.build_absolute_uri(project.partners_image.file.url)
+
+        partners = []
+        for p in project.partners.select_related("logo").all():
+            logo_url = None
+            if p.logo_id and p.logo:
+                logo_url = request.build_absolute_uri(p.logo.file.url)
+            partners.append({
+                "role": p.role,
+                "logo_url": logo_url,
+                "name": p.name,
+                "description": p.description,
+                "website_url": p.website_url,
+            })
 
         return Response({
             "slug": project.slug,
@@ -253,6 +285,44 @@ class ProjectConfigView(APIView):
             "subtitle": project.subtitle,
             "cities_count": project.cities_count,
             "layer_count": layer_count,
+            "about_title": project.about_title,
+            "about_intro": project.about_intro,
+            "about_description": project.about_description,
+            "about_image_url": about_image_url,
+            "features": features,
+            "partners_title": project.partners_title,
+            "partners_intro": project.partners_intro,
+            "partners_description": project.partners_description,
+            "partners_image_url": partners_image_url,
+            "partners_cta_label": project.partners_cta_label,
+            "partners_cta_url": project.partners_cta_url,
+            "partners": partners,
+            "contact_form_fields": [
+                {
+                    "label":       f.label,
+                    "field_type":  f.field_type,
+                    "required":    f.required,
+                    "placeholder": f.placeholder,
+                }
+                for f in project.contact_fields.all()
+            ],
+            "feedback_title":       project.feedback_title,
+            "feedback_intro":       project.feedback_intro,
+            "feedback_description": project.feedback_description,
+            "feedback_form_fields": [
+                {
+                    "label":       f.label,
+                    "field_type":  f.field_type,
+                    "required":    f.required,
+                    "placeholder": f.placeholder,
+                    "choices":     [c.strip() for c in f.choices.splitlines() if c.strip()],
+                }
+                for f in project.feedback_fields.all()
+            ],
+            "faqs": [
+                {"question": faq.question, "answer": faq.answer}
+                for faq in project.faqs.all()
+            ],
         })
 
 
@@ -277,3 +347,85 @@ class HazardCategoriesView(APIView):
             }
             for c in cats
         ])
+
+
+class ContactSubmitView(APIView):
+    """Accepts a contact form POST for a project, stores the submission and emails the project contact."""
+
+    @extend_schema(tags=["catalog"], summary="Submit contact form")
+    def post(self, request, slug: str):
+        try:
+            project = ProjectPage.objects.live().get(slug=slug)
+        except ProjectPage.DoesNotExist:
+            return Response({"detail": f"Unknown or unpublished project '{slug}'."}, status=status.HTTP_404_NOT_FOUND)
+
+        fields = list(project.contact_fields.all())
+        if not fields:
+            return Response({"detail": "No contact form is defined for this project."}, status=status.HTTP_400_BAD_REQUEST)
+
+        data = request.data
+        errors: dict = {}
+        clean: dict = {}
+        for f in fields:
+            value = str(data.get(f.label, "")).strip()
+            if f.required and not value:
+                errors[f.label] = "This field is required."
+            clean[f.label] = value
+
+        if errors:
+            return Response({"errors": errors}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+        submission = ContactSubmission.objects.create(project=project, form_data=clean)
+
+        if project.contact_email:
+            body = "\n".join(f"{k}: {v}" for k, v in clean.items())
+            send_mail(
+                subject=f"Contact form submission — {project.title}",
+                message=body,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[project.contact_email],
+                fail_silently=True,
+            )
+
+        return Response({"ok": True, "id": submission.pk}, status=status.HTTP_201_CREATED)
+
+
+class FeedbackSubmitView(APIView):
+    """Accepts a feedback form POST, stores the submission and emails the project feedback address."""
+
+    @extend_schema(tags=["catalog"], summary="Submit feedback form")
+    def post(self, request, slug: str):
+        try:
+            project = ProjectPage.objects.live().get(slug=slug)
+        except ProjectPage.DoesNotExist:
+            return Response({"detail": f"Unknown or unpublished project '{slug}'."}, status=status.HTTP_404_NOT_FOUND)
+
+        fields = list(project.feedback_fields.all())
+        if not fields:
+            return Response({"detail": "No feedback form is defined for this project."}, status=status.HTTP_400_BAD_REQUEST)
+
+        data = request.data
+        errors: dict = {}
+        clean: dict = {}
+        for f in fields:
+            value = str(data.get(f.label, "")).strip()
+            if f.required and not value:
+                errors[f.label] = "This field is required."
+            clean[f.label] = value
+
+        if errors:
+            return Response({"errors": errors}, status=status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+        submission = FeedbackSubmission.objects.create(project=project, form_data=clean)
+
+        if project.feedback_email:
+            body = "\n".join(f"{k}: {v}" for k, v in clean.items())
+            send_mail(
+                subject=f"Feedback submission — {project.title}",
+                message=body,
+                from_email=settings.DEFAULT_FROM_EMAIL,
+                recipient_list=[project.feedback_email],
+                fail_silently=True,
+            )
+
+        return Response({"ok": True, "id": submission.pk}, status=status.HTTP_201_CREATED)

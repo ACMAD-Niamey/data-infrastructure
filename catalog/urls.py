@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework import routers
-from .api import HazardCategoriesView, UILayersView, ProjectCountriesView, ProjectConfigView
+from .api import HazardCategoriesView, UILayersView, ProjectCountriesView, ProjectConfigView, ContactSubmitView, FeedbackSubmitView
 from .views import DatasetAvailabilityView, DatasetVisualizationView
 
 router = routers.DefaultRouter()
@@ -18,4 +18,6 @@ urlpatterns = [
          name="dataset-visualization"),
     path("projects/<slug:slug>/countries/", ProjectCountriesView.as_view(), name="project-countries"),
     path("projects/<slug:slug>/config/", ProjectConfigView.as_view(), name="project-config"),
+    path("projects/<slug:slug>/contact/", ContactSubmitView.as_view(), name="project-contact"),
+    path("projects/<slug:slug>/feedback/", FeedbackSubmitView.as_view(), name="project-feedback"),
 ]
