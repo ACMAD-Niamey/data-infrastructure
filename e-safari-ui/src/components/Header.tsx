@@ -14,7 +14,7 @@ interface HeaderProps {
 
 const navItems = [
   { to: '/home',     labelEn: 'Home',      labelFr: 'Accueil',     icon: Home,          end: false },
-  { to: '/',         labelEn: 'Geoportal', labelFr: 'Géoportail',  icon: Map,           end: true  },
+  { to: '/geoportal', labelEn: 'Geoportal', labelFr: 'Géoportail',  icon: Map,           end: false },
   { to: '/about',    labelEn: 'About',     labelFr: 'À propos',    icon: Info,          end: false },
   { to: '/partners', labelEn: 'Partners',  labelFr: 'Partenaires', icon: Users,         end: false },
   { to: '/feedback', labelEn: 'Feedback',  labelFr: 'Retour',      icon: MessageSquare, end: false },
