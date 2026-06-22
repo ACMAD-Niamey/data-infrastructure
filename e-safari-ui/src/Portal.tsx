@@ -235,9 +235,11 @@ const Portal = ({ language }: PortalProps) => {
 
         const rasterId = `raster-${layer.id}`;
 
-        // Already rendered with this date — skip to preserve layer stacking order.
-        if (loadedRasterIdsRef.current[layer.id] && loadedVizDatesRef.current[layer.id] === vizDate) return;
-
+        // Already rendered with this date and still present on the map — skip to preserve layer stacking order.
+        if (
+          loadedVizDatesRef.current[layer.id] === vizDate &&
+          map.getLayer(rasterId)
+        ) return;
         fetchDatasetVisualization({ datasetId: layer.dataset.id, cadence, date: vizDate })
           .then((payload) => {
             // Discard stale responses: layer may have been toggled off or the
