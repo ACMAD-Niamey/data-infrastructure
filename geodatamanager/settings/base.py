@@ -200,10 +200,11 @@ STATICFILES_DIRS = [
 
 STATIC_URL = "/static/"
 
-STATIC_ROOT =  os.path.join(BASE_DIR, "staticfiles")
+STATIC_ROOT =  os.path.join(BASE_DIR, os.getenv("STATIC_VOLUME", "staticfiles"))
 # STATICFILES_STORAGE is deprecated since Django 4.2 — configure via STORAGES["staticfiles"] instead.
+STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
-MEDIA_ROOT = BASE_DIR / "media"
+MEDIA_ROOT = os.path.join(BASE_DIR, os.getenv("PORTAL_MEDIA_VOLUME", default="media"))
 MEDIA_URL = "/media/"
 
 WIS2_DOWNLOAD_DIR = Path(
