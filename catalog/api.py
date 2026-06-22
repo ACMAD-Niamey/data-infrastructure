@@ -420,16 +420,22 @@ class FeedbackSubmitView(APIView):
         if not fields:
             return Response({"detail": "No feedback form is defined for this project."}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Verify reCAPTCHA token when a secret key is configured for this project.
-        if project.recaptcha_secret_key:
+        # Verify reCAPTCHA token when both keys are configured for this project.
+        if project.recaptcha_site_key and project.recaptcha_secret_key:
             import requests as http_req
             token = (request.data or {}).get("recaptcha_token", "")
-            verify = http_req.post(
-                "https://www.google.com/recaptcha/api/siteverify",
-                data={"secret": project.recaptcha_secret_key, "response": token},
-                timeout=5,
-            )
-            if not verify.json().get("success"):
+            try:
+                verify = http_req.post(
+                    "https://www.google.com/recaptcha/api/siteverify",
+                    data={"secret": project.recaptcha_secret_key, "response": token},
+                    timeout=5,
+                )
+                verify.raise_for_status()
+                success = bool((verify.json() or {}).get("success"))
+            except Exception:
+                success = False
+
+            if not success:
                 return Response(
                     {"detail": "CAPTCHA verification failed. Please try again."},
                     status=status.HTTP_400_BAD_REQUEST,
