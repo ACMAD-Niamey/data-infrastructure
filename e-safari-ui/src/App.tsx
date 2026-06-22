@@ -2,8 +2,10 @@ import { Route, Routes, BrowserRouter, Navigate } from "react-router-dom";
 import { useState } from 'react';
 import Portal from './Portal';
 import { Home } from './Home';
+import { About } from './About';
+import { Partners } from './Partners';
+import { Feedback } from './Feedback';
 import { Header } from './components/Header';
-import { ComingSoon } from './ComingSoon';
 import Unavailable from './Unavailable';
 import { MapProvider } from "./components/MapContext.jsx";
 import { Language } from './types';
@@ -22,9 +24,9 @@ function App() {
               <Route path="/"          element={<Navigate to="/home" replace />} />
               <Route path="/geoportal" element={<Portal language={language} />} />
               <Route path="/home"      element={<Home language={language} />} />
-              <Route path="/about"     element={<ComingSoon language={language} />} />
-              <Route path="/partners"  element={<ComingSoon language={language} />} />
-              <Route path="/feedback"  element={<ComingSoon language={language} />} />
+              <Route path="/about"     element={<About language={language} />} />
+              <Route path="/partners"  element={<Partners language={language} />} />
+              <Route path="/feedback"  element={<Feedback language={language} />} />
               <Route path="*"          element={<Unavailable />} />
             </Routes>
           </div>

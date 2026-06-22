@@ -657,13 +657,39 @@ class ProjectConfigViewTests(TestCase):
 
     def _make_project_mock(self, **kwargs):
         project = MagicMock()
-        project.slug = kwargs.get("slug", "e-safari")
-        project.title = kwargs.get("title", "E-Safari")
-        project.headline = kwargs.get("headline", "Test headline")
-        project.subtitle = kwargs.get("subtitle", "Test subtitle")
-        project.cities_count = kwargs.get("cities_count", "15+")
-        project.hero_image_id = kwargs.get("hero_image_id", None)
-        project.hero_image = kwargs.get("hero_image", None)
+        project.slug             = kwargs.get("slug",         "e-safari")
+        project.title            = kwargs.get("title",        "E-Safari")
+        project.headline         = kwargs.get("headline",     "Test headline")
+        project.subtitle         = kwargs.get("subtitle",     "Test subtitle")
+        project.cities_count     = kwargs.get("cities_count", "15+")
+        # Images — default to no image so URL is None
+        project.hero_image_id    = kwargs.get("hero_image_id",    None)
+        project.hero_image       = kwargs.get("hero_image",       None)
+        project.about_image_id   = kwargs.get("about_image_id",   None)
+        project.about_image      = kwargs.get("about_image",      None)
+        project.partners_image_id = kwargs.get("partners_image_id", None)
+        project.partners_image   = kwargs.get("partners_image",   None)
+        # About fields
+        project.about_title       = kwargs.get("about_title",       "")
+        project.about_intro       = kwargs.get("about_intro",       "")
+        project.about_description = kwargs.get("about_description", "")
+        # Partners fields
+        project.partners_title       = kwargs.get("partners_title",       "")
+        project.partners_intro       = kwargs.get("partners_intro",       "")
+        project.partners_description = kwargs.get("partners_description", "")
+        project.partners_cta_label   = kwargs.get("partners_cta_label",   "")
+        project.partners_cta_url     = kwargs.get("partners_cta_url",     "")
+        # Feedback fields
+        project.feedback_title       = kwargs.get("feedback_title",       "")
+        project.feedback_intro       = kwargs.get("feedback_intro",       "")
+        project.feedback_description = kwargs.get("feedback_description", "")
+        # Relational managers — must return explicit empty lists to prevent
+        # infinite iteration (MagicMock.__next__ doesn't raise StopIteration).
+        project.features.all.return_value           = []
+        project.partners.select_related.return_value.all.return_value = []
+        project.contact_fields.all.return_value     = []
+        project.feedback_fields.all.return_value    = []
+        project.faqs.all.return_value               = []
         return project
 
     @patch("catalog.api.ProjectPage")
@@ -685,7 +711,16 @@ class ProjectConfigViewTests(TestCase):
         mock_sw.objects.filter.return_value.count.return_value = 0
         response = self.client.get("/api/catalog/projects/e-safari/config/")
         self.assertEqual(response.status_code, 200)
-        for key in ("slug", "hero_image_url", "headline", "subtitle", "cities_count", "layer_count"):
+        for key in (
+            "slug", "hero_image_url", "headline", "subtitle", "cities_count", "layer_count",
+            "about_title", "about_intro", "about_description", "about_image_url",
+            "features",
+            "partners_title", "partners_intro", "partners_description",
+            "partners_image_url", "partners_cta_label", "partners_cta_url", "partners",
+            "contact_form_fields",
+            "feedback_title", "feedback_intro", "feedback_description",
+            "feedback_form_fields", "faqs",
+        ):
             self.assertIn(key, response.data)
 
     @patch("catalog.api.StaticWmsLayer")
