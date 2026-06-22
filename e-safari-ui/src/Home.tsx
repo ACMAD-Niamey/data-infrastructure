@@ -112,6 +112,7 @@ export function Home({ language }: HomeProps) {
           {/* Country selector + CTA */}
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 48 }}>
             <select
+              aria-label={t.selectCountry}
               value={selectedCountry}
               onChange={(e) => setSelectedCountry(e.target.value)}
               style={{
