@@ -4,8 +4,9 @@ from rest_framework.views import APIView
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
-from django.utils import timezone
+from django.core.validators import validate_email
 from wagtail.rich_text import expand_db_html
 
 from catalog.models import (
