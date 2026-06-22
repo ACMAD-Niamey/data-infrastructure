@@ -201,7 +201,7 @@ STATICFILES_DIRS = [
 STATIC_URL = "/static/"
 
 STATIC_ROOT =  os.path.join(BASE_DIR, "staticfiles")
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
+# STATICFILES_STORAGE is deprecated since Django 4.2 — configure via STORAGES["staticfiles"] instead.
 
 MEDIA_ROOT = BASE_DIR / "media"
 MEDIA_URL = "/media/"

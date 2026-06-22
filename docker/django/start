@@ -2,6 +2,15 @@
 set -o errexit
 set -o nounset
 
+# Set the Django settings module to match what wsgi.py will use,
+# so that manage.py commands (migrate, collectstatic) run with the
+# same storage backend and configuration as gunicorn.
+if [ "${DEBUG:-False}" == "True" ]; then
+    export DJANGO_SETTINGS_MODULE=geodatamanager.settings.dev
+else
+    export DJANGO_SETTINGS_MODULE=geodatamanager.settings.production
+fi
+
 echo "Running migrations..."
 python3 manage.py migrate --noinput
 
