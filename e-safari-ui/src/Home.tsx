@@ -191,7 +191,12 @@ export function Home({ language }: HomeProps) {
                 role="button"
                 tabIndex={0}
                 onClick={() => navigate('/geoportal')}
-                onKeyDown={(e) => e.key === 'Enter' && navigate('/geoportal')}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    navigate('/geoportal');
+                  }
+                }}
                 style={{
                   backgroundColor: 'white',
                   border: '1px solid #e5e7eb',
