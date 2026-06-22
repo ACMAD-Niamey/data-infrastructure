@@ -82,13 +82,116 @@ class ProjectPage(Page):
         related_name='+',
         help_text="Background image shown on the project homepage.",
     )
+    about_title = models.CharField(
+        max_length=300,
+        blank=True,
+        help_text="Heading for the About section, e.g. 'About e-SAFARI'.",
+    )
+    about_intro = models.CharField(
+        max_length=500,
+        blank=True,
+        help_text="Green tagline below the title, e.g. 'Climate evidence for cooler, greener cities'.",
+    )
+    about_description = models.TextField(
+        blank=True,
+        help_text="Body paragraph describing the project on the About page.",
+    )
+    about_image = models.ForeignKey(
+        Image,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='+',
+        help_text="Image shown on the right side of the About hero section.",
+    )
+    partners_title = models.CharField(
+        max_length=300,
+        blank=True,
+        help_text="Heading for the Partners page, e.g. 'Partners'.",
+    )
+    partners_intro = models.CharField(
+        max_length=500,
+        blank=True,
+        help_text="Green tagline, e.g. 'Built through climate, data and planning collaboration'.",
+    )
+    partners_description = models.TextField(
+        blank=True,
+        help_text="Body paragraph for the Partners hero section.",
+    )
+    partners_image = models.ForeignKey(
+        Image,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='+',
+        help_text="Image shown on the right side of the Partners hero.",
+    )
+    partners_cta_label = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="CTA button label, e.g. 'Contact ACMAD'.",
+    )
+    partners_cta_url = models.URLField(
+        blank=True,
+        help_text="External URL for the CTA button (mailto: or https://).",
+    )
+    contact_email = models.EmailField(
+        blank=True,
+        help_text="Email address that receives contact form submissions from the Partners page.",
+    )
+    feedback_title = models.CharField(
+        max_length=300,
+        blank=True,
+        help_text="Feedback page title, e.g. 'Feedback'.",
+    )
+    feedback_intro = models.CharField(
+        max_length=500,
+        blank=True,
+        help_text="Bold subtitle, e.g. 'Help improve e-SAFARI'.",
+    )
+    feedback_description = models.TextField(
+        blank=True,
+        help_text="Short description shown below the subtitle.",
+    )
+    feedback_email = models.EmailField(
+        blank=True,
+        help_text="Email address that receives feedback form submissions.",
+    )
 
     content_panels = Page.content_panels + [
         FieldPanel("intro"),
-        FieldPanel("headline"),
-        FieldPanel("subtitle"),
-        FieldPanel("cities_count"),
-        FieldPanel("hero_image"),
+        MultiFieldPanel([
+            FieldPanel("headline"),
+            FieldPanel("subtitle"),
+            FieldPanel("cities_count"),
+            FieldPanel("hero_image"),
+        ], heading="Homepage"),
+        MultiFieldPanel([
+            FieldPanel("about_title"),
+            FieldPanel("about_intro"),
+            FieldPanel("about_description"),
+            FieldPanel("about_image"),
+        ], heading="About page"),
+        InlinePanel("features", label="Features (What e-SAFARI provides)"),
+        MultiFieldPanel([
+            FieldPanel("partners_title"),
+            FieldPanel("partners_intro"),
+            FieldPanel("partners_description"),
+            FieldPanel("partners_image"),
+            FieldPanel("partners_cta_label"),
+            FieldPanel("partners_cta_url"),
+            FieldPanel("contact_email"),
+        ], heading="Partners page"),
+        InlinePanel("partners", label="Partner network"),
+        InlinePanel("contact_fields", label="Contact form fields"),
+        MultiFieldPanel([
+            FieldPanel("feedback_title"),
+            FieldPanel("feedback_intro"),
+            FieldPanel("feedback_description"),
+            FieldPanel("feedback_email"),
+        ], heading="Feedback page"),
+        InlinePanel("feedback_fields", label="Feedback form fields"),
+        InlinePanel("faqs", label="FAQs"),
         InlinePanel("inclusions", label="Included projects"),
         InlinePanel("supported_countries", label="Supported Countries"),
     ]
@@ -154,6 +257,224 @@ class ProjectInclusion(Orderable):
 
     def __str__(self):
         return f"{self.source_project} → {self.project}"
+
+
+class ProjectFeature(Orderable):
+    """One feature card in the 'What e-SAFARI provides' section on the About page."""
+
+    project = ParentalKey(
+        "catalog.ProjectPage",
+        on_delete=models.CASCADE,
+        related_name="features",
+    )
+    title = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    icon_name = models.CharField(
+        max_length=50,
+        blank=True,
+        help_text="Lucide icon slug, e.g. 'thermometer', 'leaf', 'building-2', 'users'.",
+    )
+
+    panels = [
+        FieldPanel("title"),
+        FieldPanel("description"),
+        FieldPanel("icon_name"),
+    ]
+
+    class Meta(Orderable.Meta):
+        verbose_name = "Feature"
+        verbose_name_plural = "Features"
+
+    def __str__(self):
+        return self.title
+
+
+class ProjectPartner(Orderable):
+    """One partner card in the 'Partner network' section on the Partners page."""
+
+    project = ParentalKey(
+        "catalog.ProjectPage",
+        on_delete=models.CASCADE,
+        related_name="partners",
+    )
+    role = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Role label shown in green, e.g. 'Regional coordination'.",
+    )
+    logo = models.ForeignKey(
+        Image,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='+',
+        help_text="Partner logo image.",
+    )
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+    website_url = models.URLField(blank=True, help_text="Partner website URL.")
+
+    panels = [
+        FieldPanel("role"),
+        FieldPanel("logo"),
+        FieldPanel("name"),
+        FieldPanel("description"),
+        FieldPanel("website_url"),
+    ]
+
+    class Meta(Orderable.Meta):
+        verbose_name = "Partner"
+        verbose_name_plural = "Partners"
+
+    def __str__(self):
+        return self.name
+
+
+class ProjectContactField(Orderable):
+    """One field definition for the Partners page contact form."""
+
+    FIELD_TYPES = [
+        ("text",     "Short text"),
+        ("email",    "Email address"),
+        ("textarea", "Long text"),
+    ]
+
+    project = ParentalKey(
+        "catalog.ProjectPage",
+        on_delete=models.CASCADE,
+        related_name="contact_fields",
+    )
+    label       = models.CharField(max_length=200)
+    field_type  = models.CharField(max_length=20, choices=FIELD_TYPES, default="text")
+    required    = models.BooleanField(default=True)
+    placeholder = models.CharField(max_length=200, blank=True)
+
+    panels = [
+        FieldPanel("label"),
+        FieldPanel("field_type"),
+        FieldPanel("required"),
+        FieldPanel("placeholder"),
+    ]
+
+    class Meta(Orderable.Meta):
+        verbose_name = "Contact form field"
+        verbose_name_plural = "Contact form fields"
+
+    def __str__(self) -> str:
+        return f"{self.label} ({self.field_type})"
+
+
+class ContactSubmission(models.Model):
+    """Stores a submitted Partners page contact form entry."""
+
+    project      = models.ForeignKey(
+        "catalog.ProjectPage",
+        on_delete=models.CASCADE,
+        related_name="contact_submissions",
+    )
+    form_data    = models.JSONField()
+    submitted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-submitted_at"]
+        verbose_name = "Contact submission"
+        verbose_name_plural = "Contact submissions"
+
+    def __str__(self) -> str:
+        return f"Submission for {self.project} at {self.submitted_at:%Y-%m-%d %H:%M}"
+
+    @property
+    def data_summary(self) -> str:
+        return "  |  ".join(f"{k}: {v}" for k, v in (self.form_data or {}).items())
+
+
+class ProjectFeedbackField(Orderable):
+    """One field definition for the Feedback page form."""
+
+    FIELD_TYPES = [
+        ("text",           "Short text"),
+        ("email",          "Email address"),
+        ("textarea",       "Long text"),
+        ("country_select", "Country dropdown (from project countries)"),
+        ("topic_select",   "Topic dropdown (define choices below)"),
+    ]
+
+    project     = ParentalKey(
+        "catalog.ProjectPage",
+        on_delete=models.CASCADE,
+        related_name="feedback_fields",
+    )
+    label       = models.CharField(max_length=200)
+    field_type  = models.CharField(max_length=20, choices=FIELD_TYPES, default="text")
+    required    = models.BooleanField(default=True)
+    placeholder = models.CharField(max_length=200, blank=True)
+    choices     = models.TextField(
+        blank=True,
+        help_text="For 'topic_select' only: one option per line.",
+    )
+
+    panels = [
+        FieldPanel("label"),
+        FieldPanel("field_type"),
+        FieldPanel("required"),
+        FieldPanel("placeholder"),
+        FieldPanel("choices"),
+    ]
+
+    class Meta(Orderable.Meta):
+        verbose_name = "Feedback form field"
+        verbose_name_plural = "Feedback form fields"
+
+    def __str__(self) -> str:
+        return f"{self.label} ({self.field_type})"
+
+
+class ProjectFAQ(Orderable):
+    """One FAQ item shown on the Feedback page."""
+
+    project  = ParentalKey(
+        "catalog.ProjectPage",
+        on_delete=models.CASCADE,
+        related_name="faqs",
+    )
+    question = models.CharField(max_length=400)
+    answer   = models.TextField()
+
+    panels = [
+        FieldPanel("question"),
+        FieldPanel("answer"),
+    ]
+
+    class Meta(Orderable.Meta):
+        verbose_name = "FAQ"
+        verbose_name_plural = "FAQs"
+
+    def __str__(self) -> str:
+        return self.question
+
+
+class FeedbackSubmission(models.Model):
+    """Stores a submitted Feedback page form entry."""
+
+    project      = models.ForeignKey(
+        "catalog.ProjectPage",
+        on_delete=models.CASCADE,
+        related_name="feedback_submissions",
+    )
+    form_data    = models.JSONField()
+    submitted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-submitted_at"]
+        verbose_name = "Feedback submission"
+        verbose_name_plural = "Feedback submissions"
+
+    def __str__(self) -> str:
+        return f"Feedback for {self.project} at {self.submitted_at:%Y-%m-%d %H:%M}"
+
+    @property
+    def data_summary(self) -> str:
+        return "  |  ".join(f"{k}: {v}" for k, v in (self.form_data or {}).items())
 
 
 class DatasetPage(Page):
