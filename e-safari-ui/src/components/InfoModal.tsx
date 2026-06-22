@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { Language } from '../App';
+import type { Language } from '../types';
 import { Dialog, DialogClose, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Info, ArrowRight } from 'lucide-react';
 import { Button } from './ui/button';
