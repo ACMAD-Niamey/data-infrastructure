@@ -4,8 +4,9 @@ from rest_framework.views import APIView
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 
 from django.conf import settings
+from django.core.exceptions import ValidationError
 from django.core.mail import send_mail
-from django.utils import timezone
+from django.core.validators import validate_email
 from wagtail.rich_text import expand_db_html
 
 from catalog.models import (
@@ -363,13 +364,19 @@ class ContactSubmitView(APIView):
         if not fields:
             return Response({"detail": "No contact form is defined for this project."}, status=status.HTTP_400_BAD_REQUEST)
 
-        data = request.data
-        errors: dict = {}
-        clean: dict = {}
+        data = request.data or {}
+        errors: dict[str, str] = {}
+        clean: dict[str, str] = {}
         for f in fields:
-            value = str(data.get(f.label, "")).strip()
+            raw = data.get(f.label, "")
+            value = "" if raw is None else str(raw).strip()
             if f.required and not value:
                 errors[f.label] = "This field is required."
+            elif f.field_type == "email" and value:
+                try:
+                    validate_email(value)
+                except ValidationError:
+                    errors[f.label] = "Enter a valid email address."
             clean[f.label] = value
 
         if errors:
