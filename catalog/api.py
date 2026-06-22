@@ -310,6 +310,7 @@ class ProjectConfigView(APIView):
             "feedback_title":       project.feedback_title,
             "feedback_intro":       project.feedback_intro,
             "feedback_description": project.feedback_description,
+            "recaptcha_site_key":   project.recaptcha_site_key if (project.recaptcha_site_key and project.recaptcha_secret_key) else "",
             "feedback_form_fields": [
                 {
                     "label":       f.label,
@@ -418,6 +419,27 @@ class FeedbackSubmitView(APIView):
         fields = list(project.feedback_fields.all())
         if not fields:
             return Response({"detail": "No feedback form is defined for this project."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Verify reCAPTCHA token when both keys are configured for this project.
+        if project.recaptcha_site_key and project.recaptcha_secret_key:
+            import requests as http_req
+            token = (request.data or {}).get("recaptcha_token", "")
+            try:
+                verify = http_req.post(
+                    "https://www.google.com/recaptcha/api/siteverify",
+                    data={"secret": project.recaptcha_secret_key, "response": token},
+                    timeout=5,
+                )
+                verify.raise_for_status()
+                success = bool((verify.json() or {}).get("success"))
+            except Exception:
+                success = False
+
+            if not success:
+                return Response(
+                    {"detail": "CAPTCHA verification failed. Please try again."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         data = request.data
         errors: dict = {}

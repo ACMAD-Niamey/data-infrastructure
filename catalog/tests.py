@@ -683,6 +683,9 @@ class ProjectConfigViewTests(TestCase):
         project.feedback_title       = kwargs.get("feedback_title",       "")
         project.feedback_intro       = kwargs.get("feedback_intro",       "")
         project.feedback_description = kwargs.get("feedback_description", "")
+        # reCAPTCHA — empty by default so verification is skipped in tests
+        project.recaptcha_site_key   = kwargs.get("recaptcha_site_key",   "")
+        project.recaptcha_secret_key = kwargs.get("recaptcha_secret_key", "")
         # Relational managers — must return explicit empty lists to prevent
         # infinite iteration (MagicMock.__next__ doesn't raise StopIteration).
         project.features.all.return_value           = []
@@ -719,7 +722,7 @@ class ProjectConfigViewTests(TestCase):
             "partners_image_url", "partners_cta_label", "partners_cta_url", "partners",
             "contact_form_fields",
             "feedback_title", "feedback_intro", "feedback_description",
-            "feedback_form_fields", "faqs",
+            "feedback_form_fields", "faqs", "recaptcha_site_key",
         ):
             self.assertIn(key, response.data)
 

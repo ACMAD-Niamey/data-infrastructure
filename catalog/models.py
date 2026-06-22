@@ -157,6 +157,16 @@ class ProjectPage(Page):
         blank=True,
         help_text="Email address that receives feedback form submissions.",
     )
+    recaptcha_site_key = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Google reCAPTCHA v2 site key (public). Leave blank to disable CAPTCHA on the feedback form.",
+    )
+    recaptcha_secret_key = models.CharField(
+        max_length=200,
+        blank=True,
+        help_text="Google reCAPTCHA v2 secret key (private, never exposed in API). Used server-side to verify tokens.",
+    )
 
     content_panels = Page.content_panels + [
         FieldPanel("intro"),
@@ -189,6 +199,8 @@ class ProjectPage(Page):
             FieldPanel("feedback_intro"),
             FieldPanel("feedback_description"),
             FieldPanel("feedback_email"),
+            FieldPanel("recaptcha_site_key"),
+            FieldPanel("recaptcha_secret_key"),
         ], heading="Feedback page"),
         InlinePanel("feedback_fields", label="Feedback form fields"),
         InlinePanel("faqs", label="FAQs"),

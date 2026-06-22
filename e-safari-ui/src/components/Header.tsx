@@ -20,9 +20,25 @@ const navItems = [
   { to: '/feedback', labelEn: 'Feedback',  labelFr: 'Retour',      icon: MessageSquare, end: false },
 ] as const;
 
+function applyGoogleTranslate(lang: Language) {
+  const select = document.querySelector<HTMLSelectElement>('.goog-te-combo');
+  if (!select) return;
+  select.value = lang === 'fr' ? 'fr' : '';
+  select.dispatchEvent(new Event('change'));
+}
+
 export function Header({ language, onLanguageChange }: HeaderProps) {
+  function handleLanguageToggle() {
+    const next: Language = language === 'en' ? 'fr' : 'en';
+    onLanguageChange(next);
+    applyGoogleTranslate(next);
+  }
+
   return (
     <header className="bg-gradient-to-r from-green-700 to-green-600 text-white shadow-lg">
+      {/* Hidden GT init container — off-screen so the widget initialises but is invisible */}
+      <div id="google_translate_element" className="gt-hidden-init" />
+
       <div className="px-4 py-2 lg:px-6 lg:py-2 flex items-center justify-between gap-4">
 
         {/* Left — branding */}
@@ -66,7 +82,7 @@ export function Header({ language, onLanguageChange }: HeaderProps) {
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => onLanguageChange(language === 'en' ? 'fr' : 'en')}
+            onClick={handleLanguageToggle}
             className="text-white hover:bg-white/10"
           >
             <Globe className="size-4 mr-1" />
