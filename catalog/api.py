@@ -223,6 +223,39 @@ class ProjectCountriesView(APIView):
         return Response(out)
 
 
+class ProjectConfigView(APIView):
+    """Returns project-level configuration including the hero image URL for the homepage."""
+
+    @extend_schema(
+        tags=["catalog"],
+        summary="Get project configuration",
+        description="Returns project metadata including the hero background image URL.",
+    )
+    def get(self, request, slug: str):
+        try:
+            project = ProjectPage.objects.live().get(slug=slug)
+        except ProjectPage.DoesNotExist:
+            return Response({"detail": f"Unknown or unpublished project '{slug}'."}, status=status.HTTP_404_NOT_FOUND)
+
+        hero_image_url = None
+        if project.hero_image_id and project.hero_image:
+            hero_image_url = request.build_absolute_uri(project.hero_image.file.url)
+
+        entries = dataset_entries_for_project(project.slug)
+        gs_count = GeoServerLayer.objects.filter(project__slug=project.slug, is_published_for_ui=True).count()
+        sw_count = StaticWmsLayer.objects.filter(project__slug=project.slug, is_published_for_ui=True).count()
+        layer_count = len(entries) + gs_count + sw_count
+
+        return Response({
+            "slug": project.slug,
+            "hero_image_url": hero_image_url,
+            "headline": project.headline or project.title,
+            "subtitle": project.subtitle,
+            "cities_count": project.cities_count,
+            "layer_count": layer_count,
+        })
+
+
 class HazardCategoriesView(APIView):
     """Returns all hazard categories ordered by their display order."""
 

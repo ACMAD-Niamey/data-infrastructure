@@ -1,6 +1,7 @@
-import { Route, Routes, BrowserRouter } from "react-router-dom";
+import { Route, Routes, BrowserRouter, Navigate } from "react-router-dom";
 import { useState } from 'react';
 import Portal from './Portal';
+import { Home } from './Home';
 import { Header } from './components/Header';
 import { ComingSoon } from './ComingSoon';
 import Unavailable from './Unavailable';
@@ -18,9 +19,9 @@ function App() {
           <Header language={language} onLanguageChange={setLanguage} />
           <div className="flex-1 min-h-0 overflow-hidden">
             <Routes>
-              <Route path="/"          element={<Portal language={language} />} />
+              <Route path="/"          element={<Navigate to="/home" replace />} />
               <Route path="/geoportal" element={<Portal language={language} />} />
-              <Route path="/home"      element={<ComingSoon language={language} />} />
+              <Route path="/home"      element={<Home language={language} />} />
               <Route path="/about"     element={<ComingSoon language={language} />} />
               <Route path="/partners"  element={<ComingSoon language={language} />} />
               <Route path="/feedback"  element={<ComingSoon language={language} />} />
