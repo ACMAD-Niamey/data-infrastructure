@@ -310,7 +310,7 @@ class ProjectConfigView(APIView):
             "feedback_title":       project.feedback_title,
             "feedback_intro":       project.feedback_intro,
             "feedback_description": project.feedback_description,
-            "recaptcha_site_key":   project.recaptcha_site_key,
+            "recaptcha_site_key":   project.recaptcha_site_key if (project.recaptcha_site_key and project.recaptcha_secret_key) else "",
             "feedback_form_fields": [
                 {
                     "label":       f.label,
