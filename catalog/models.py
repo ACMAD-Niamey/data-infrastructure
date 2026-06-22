@@ -60,9 +60,35 @@ class HazardCategory(models.Model):
 class ProjectPage(Page):
     """A top-level container that groups datasets under one project."""
     intro = RichTextField(blank=True)
+    headline = models.CharField(
+        max_length=300,
+        blank=True,
+        help_text="Hero heading shown on the project homepage.",
+    )
+    subtitle = models.TextField(
+        blank=True,
+        help_text="Short paragraph below the headline on the homepage.",
+    )
+    cities_count = models.CharField(
+        max_length=20,
+        blank=True,
+        help_text="Cities stat on the homepage, e.g. '15+'.",
+    )
+    hero_image = models.ForeignKey(
+        Image,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='+',
+        help_text="Background image shown on the project homepage.",
+    )
 
     content_panels = Page.content_panels + [
         FieldPanel("intro"),
+        FieldPanel("headline"),
+        FieldPanel("subtitle"),
+        FieldPanel("cities_count"),
+        FieldPanel("hero_image"),
         InlinePanel("inclusions", label="Included projects"),
         InlinePanel("supported_countries", label="Supported Countries"),
     ]
