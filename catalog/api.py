@@ -363,13 +363,19 @@ class ContactSubmitView(APIView):
         if not fields:
             return Response({"detail": "No contact form is defined for this project."}, status=status.HTTP_400_BAD_REQUEST)
 
-        data = request.data
-        errors: dict = {}
-        clean: dict = {}
+        data = request.data or {}
+        errors: dict[str, str] = {}
+        clean: dict[str, str] = {}
         for f in fields:
-            value = str(data.get(f.label, "")).strip()
+            raw = data.get(f.label, "")
+            value = "" if raw is None else str(raw).strip()
             if f.required and not value:
                 errors[f.label] = "This field is required."
+            elif f.field_type == "email" and value:
+                try:
+                    validate_email(value)
+                except ValidationError:
+                    errors[f.label] = "Enter a valid email address."
             clean[f.label] = value
 
         if errors:
