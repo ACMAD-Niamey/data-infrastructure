@@ -11,9 +11,9 @@ interface HomeProps {
 
 const translations = {
   en: {
-    selectCountry: 'Select country',
     openGeoportal: 'Open Geoportal',
     citiesLabel: 'Cities',
+    countriesLabel: 'Countries',
     layersLabel: 'Data layers',
     scenarioLabel: 'Scenario analysis',
     evidenceLabel: 'Evidence for resilient planning',
@@ -26,9 +26,9 @@ const translations = {
     ],
   },
   fr: {
-    selectCountry: 'Sélectionner un pays',
     openGeoportal: 'Ouvrir le Géoportail',
     citiesLabel: 'Villes',
+    countriesLabel: 'Pays',
     layersLabel: 'Couches de données',
     scenarioLabel: 'Analyse de scénarios',
     evidenceLabel: 'Données pour la planification résiliente',
@@ -60,7 +60,6 @@ export function Home({ language }: HomeProps) {
   const [citiesCount, setCitiesCount] = useState('');
   const [layerCount, setLayerCount] = useState<number | null>(null);
   const [countries, setCountries] = useState<CountryOption[]>([]);
-  const [selectedCountry, setSelectedCountry] = useState('');
 
   useEffect(() => {
     fetch(`/api/catalog/projects/${slug}/config/`)
@@ -109,28 +108,8 @@ export function Home({ language }: HomeProps) {
             </p>
           )}
 
-          {/* Country selector + CTA */}
+          {/* CTA */}
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 48 }}>
-            <select
-              value={selectedCountry}
-              onChange={(e) => setSelectedCountry(e.target.value)}
-              style={{
-                padding: '10px 16px',
-                borderRadius: 8,
-                border: '1.5px solid rgba(255,255,255,0.3)',
-                backgroundColor: 'rgba(255,255,255,0.95)',
-                fontSize: 14,
-                color: '#111',
-                minWidth: 190,
-                cursor: 'pointer',
-              }}
-            >
-              <option value="">{t.selectCountry}</option>
-              {countries.map((c) => (
-                <option key={c.value} value={c.value}>{c.label}</option>
-              ))}
-            </select>
-
             <button
               type="button"
               onClick={() => navigate('/geoportal')}
@@ -158,6 +137,7 @@ export function Home({ language }: HomeProps) {
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center' }}>
             {[
               { value: citiesCount, label: t.citiesLabel },
+              { value: countries.length > 0 ? String(countries.length) : '', label: t.countriesLabel },
               { value: layerCount !== null ? String(layerCount) : '', label: t.layersLabel },
               { value: '', label: t.scenarioLabel },
               { value: '', label: t.evidenceLabel },

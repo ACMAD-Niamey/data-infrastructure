@@ -646,6 +646,106 @@ class ParseQmlSldTests(unittest.TestCase):
         self.assertEqual(len(d["values"]), 3)
 
 
+# ---------------------------------------------------------------------------
+# ProjectConfigView  GET /api/catalog/projects/<slug>/config/
+# ---------------------------------------------------------------------------
+
+
+class ProjectConfigViewTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+    def _make_project_mock(self, **kwargs):
+        project = MagicMock()
+        project.slug = kwargs.get("slug", "e-safari")
+        project.title = kwargs.get("title", "E-Safari")
+        project.headline = kwargs.get("headline", "Test headline")
+        project.subtitle = kwargs.get("subtitle", "Test subtitle")
+        project.cities_count = kwargs.get("cities_count", "15+")
+        project.hero_image_id = kwargs.get("hero_image_id", None)
+        project.hero_image = kwargs.get("hero_image", None)
+        return project
+
+    @patch("catalog.api.ProjectPage")
+    def test_returns_404_for_unknown_slug(self, mock_pp):
+        from catalog.models import ProjectPage as _Real
+        mock_pp.DoesNotExist = _Real.DoesNotExist
+        mock_pp.objects.live.return_value.get.side_effect = _Real.DoesNotExist
+        response = self.client.get("/api/catalog/projects/missing/config/")
+        self.assertEqual(response.status_code, 404)
+
+    @patch("catalog.api.StaticWmsLayer")
+    @patch("catalog.api.GeoServerLayer")
+    @patch("catalog.api.dataset_entries_for_project")
+    @patch("catalog.api.ProjectPage")
+    def test_response_contains_all_expected_keys(self, mock_pp, mock_entries, mock_gs, mock_sw):
+        mock_pp.objects.live.return_value.get.return_value = self._make_project_mock()
+        mock_entries.return_value = []
+        mock_gs.objects.filter.return_value.count.return_value = 0
+        mock_sw.objects.filter.return_value.count.return_value = 0
+        response = self.client.get("/api/catalog/projects/e-safari/config/")
+        self.assertEqual(response.status_code, 200)
+        for key in ("slug", "hero_image_url", "headline", "subtitle", "cities_count", "layer_count"):
+            self.assertIn(key, response.data)
+
+    @patch("catalog.api.StaticWmsLayer")
+    @patch("catalog.api.GeoServerLayer")
+    @patch("catalog.api.dataset_entries_for_project")
+    @patch("catalog.api.ProjectPage")
+    def test_headline_falls_back_to_page_title_when_blank(self, mock_pp, mock_entries, mock_gs, mock_sw):
+        mock_pp.objects.live.return_value.get.return_value = self._make_project_mock(
+            headline="", title="E-Safari Fallback"
+        )
+        mock_entries.return_value = []
+        mock_gs.objects.filter.return_value.count.return_value = 0
+        mock_sw.objects.filter.return_value.count.return_value = 0
+        response = self.client.get("/api/catalog/projects/e-safari/config/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["headline"], "E-Safari Fallback")
+
+    @patch("catalog.api.StaticWmsLayer")
+    @patch("catalog.api.GeoServerLayer")
+    @patch("catalog.api.dataset_entries_for_project")
+    @patch("catalog.api.ProjectPage")
+    def test_hero_image_url_is_none_when_no_image_set(self, mock_pp, mock_entries, mock_gs, mock_sw):
+        mock_pp.objects.live.return_value.get.return_value = self._make_project_mock(hero_image_id=None)
+        mock_entries.return_value = []
+        mock_gs.objects.filter.return_value.count.return_value = 0
+        mock_sw.objects.filter.return_value.count.return_value = 0
+        response = self.client.get("/api/catalog/projects/e-safari/config/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(response.data["hero_image_url"])
+
+    @patch("catalog.api.StaticWmsLayer")
+    @patch("catalog.api.GeoServerLayer")
+    @patch("catalog.api.dataset_entries_for_project")
+    @patch("catalog.api.ProjectPage")
+    def test_layer_count_sums_raster_geoserver_and_static_wms(self, mock_pp, mock_entries, mock_gs, mock_sw):
+        mock_pp.objects.live.return_value.get.return_value = self._make_project_mock()
+        mock_entries.return_value = [MagicMock(), MagicMock()]  # 2 raster datasets
+        mock_gs.objects.filter.return_value.count.return_value = 3
+        mock_sw.objects.filter.return_value.count.return_value = 1
+        response = self.client.get("/api/catalog/projects/e-safari/config/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["layer_count"], 6)  # 2 + 3 + 1
+
+    @patch("catalog.api.StaticWmsLayer")
+    @patch("catalog.api.GeoServerLayer")
+    @patch("catalog.api.dataset_entries_for_project")
+    @patch("catalog.api.ProjectPage")
+    def test_returns_slug_cities_count_and_subtitle_from_project(self, mock_pp, mock_entries, mock_gs, mock_sw):
+        mock_pp.objects.live.return_value.get.return_value = self._make_project_mock(
+            slug="e-safari", cities_count="20+", subtitle="Climate planning for African cities"
+        )
+        mock_entries.return_value = []
+        mock_gs.objects.filter.return_value.count.return_value = 0
+        mock_sw.objects.filter.return_value.count.return_value = 0
+        response = self.client.get("/api/catalog/projects/e-safari/config/")
+        self.assertEqual(response.data["slug"], "e-safari")
+        self.assertEqual(response.data["cities_count"], "20+")
+        self.assertEqual(response.data["subtitle"], "Climate planning for African cities")
+
+
 class TitilerComposeTests(unittest.TestCase):
     def test_compose_uses_colormap_param(self):
         params = compose_titiler_tilejson_params(
