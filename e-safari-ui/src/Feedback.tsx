@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import ReCAPTCHA from 'react-google-recaptcha';
 import {
   MessageSquare, HelpCircle, ChevronDown, ChevronUp,
   Send, Lock, Mail, ExternalLink, CheckCircle, Headphones,
@@ -40,6 +41,7 @@ const translations = {
     required: '*',
     selectDefault: '— Select —',
     submitError: 'Submission failed. Please try again.',
+    captchaRequired: 'Please complete the CAPTCHA before submitting.',
   },
   fr: {
     sendFeedback: 'Envoyer des commentaires',
@@ -56,6 +58,7 @@ const translations = {
     required: '*',
     selectDefault: '— Sélectionner —',
     submitError: 'Échec de l\'envoi. Veuillez réessayer.',
+    captchaRequired: 'Veuillez compléter le CAPTCHA avant de soumettre.',
   },
 };
 
@@ -84,12 +87,16 @@ export function Feedback({ language }: FeedbackProps) {
   const [ctaUrl, setCtaUrl]                     = useState('');
   const [countries, setCountries]               = useState<CountryOption[]>([]);
 
-  const [formValues, setFormValues]   = useState<Record<string, string>>({});
-  const [formErrors, setFormErrors]   = useState<Record<string, string>>({});
-  const [submitError, setSubmitError] = useState('');
-  const [submitting, setSubmitting]   = useState(false);
-  const [submitted, setSubmitted]     = useState(false);
-  const [openFaq, setOpenFaq]         = useState<number | null>(null);
+  const [recaptchaSiteKey, setRecaptchaSiteKey] = useState('');
+  const recaptchaRef = useRef<ReCAPTCHA>(null);
+
+  const [formValues, setFormValues]     = useState<Record<string, string>>({});
+  const [formErrors, setFormErrors]     = useState<Record<string, string>>({});
+  const [captchaError, setCaptchaError] = useState('');
+  const [submitError, setSubmitError]   = useState('');
+  const [submitting, setSubmitting]     = useState(false);
+  const [submitted, setSubmitted]       = useState(false);
+  const [openFaq, setOpenFaq]           = useState<number | null>(null);
 
   useEffect(() => {
     fetch(`/api/catalog/projects/${slug}/config/`)
@@ -98,6 +105,7 @@ export function Feedback({ language }: FeedbackProps) {
         setFeedbackTitle(data.feedback_title ?? '');
         setFeedbackIntro(data.feedback_intro ?? '');
         setFeedbackDesc(data.feedback_description ?? '');
+        setRecaptchaSiteKey(data.recaptcha_site_key ?? '');
         setCtaLabel(data.partners_cta_label ?? '');
         setCtaUrl(data.partners_cta_url ?? '');
         setFaqs(data.faqs ?? []);
@@ -119,23 +127,38 @@ export function Feedback({ language }: FeedbackProps) {
     e.preventDefault();
     setFormErrors({});
     setSubmitError('');
+    setCaptchaError('');
+
+    if (recaptchaSiteKey && !recaptchaRef.current?.getValue()) {
+      setCaptchaError(t.captchaRequired);
+      return;
+    }
+
     setSubmitting(true);
     try {
+      const payload = {
+        ...formValues,
+        ...(recaptchaSiteKey ? { recaptcha_token: recaptchaRef.current?.getValue() ?? '' } : {}),
+      };
       const res = await fetch(`/api/catalog/projects/${slug}/feedback/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formValues),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (res.ok) {
         setSubmitted(true);
+        recaptchaRef.current?.reset();
       } else if (data.errors) {
         setFormErrors(data.errors);
+        recaptchaRef.current?.reset();
       } else {
         setSubmitError(data.detail ?? t.submitError);
+        recaptchaRef.current?.reset();
       }
     } catch {
       setSubmitError(t.submitError);
+      recaptchaRef.current?.reset();
     }
     setSubmitting(false);
   }
@@ -289,6 +312,15 @@ export function Feedback({ language }: FeedbackProps) {
                   ))}
                 </div>
               ))}
+
+              {recaptchaSiteKey && (
+                <div style={{ marginBottom: 12 }}>
+                  <ReCAPTCHA ref={recaptchaRef} sitekey={recaptchaSiteKey} theme="light" />
+                  {captchaError && (
+                    <p style={{ color: '#dc2626', fontSize: 12, marginTop: 6 }}>{captchaError}</p>
+                  )}
+                </div>
+              )}
 
               <button
                 type="submit"
