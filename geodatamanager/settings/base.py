@@ -201,8 +201,6 @@ STATICFILES_DIRS = [
 STATIC_URL = "/static/"
 
 STATIC_ROOT =  os.path.join(BASE_DIR, os.getenv("STATIC_VOLUME", "staticfiles"))
-# STATICFILES_STORAGE is deprecated since Django 4.2 — configure via STORAGES["staticfiles"] instead.
-STATICFILES_STORAGE = "whitenoise.storage.CompressedManifestStaticFilesStorage"
 
 MEDIA_ROOT = os.path.join(BASE_DIR, os.getenv("PORTAL_MEDIA_VOLUME","media"))
 MEDIA_URL = "/media/"
