@@ -56,6 +56,8 @@ const Portal = ({ language }: PortalProps) => {
     Record<string, { available: string[]; max: string }>
   >({});
   const loadedRasterIdsRef = useRef<Record<string, string>>({});
+  // Tracks which vizDate is currently rendered for each layer — skip re-fetch when unchanged.
+  const loadedVizDatesRef = useRef<Record<string, string>>({});
   // Flips true after the very first auto-zoom; never resets so only one auto-zoom ever occurs
   const hasInitialZoomedRef = useRef<boolean>(false);
   const [layerBounds, setLayerBounds] = useState<Record<string, BoundsObject | null>>({});
@@ -217,6 +219,7 @@ const Portal = ({ language }: PortalProps) => {
         if (!activeLayerIds.includes(layerId)) {
           remove_image_layer(map, rasterId);
           delete loadedRasterIdsRef.current[layerId];
+          delete loadedVizDatesRef.current[layerId];
           const title = layers.find((l) => l.id === layerId)?.title;
           if (title) useLegendStore.getState().removeLegendByTitle(title);
         }
@@ -232,6 +235,9 @@ const Portal = ({ language }: PortalProps) => {
 
         const rasterId = `raster-${layer.id}`;
 
+        // Already rendered with this date — skip to preserve layer stacking order.
+        if (loadedRasterIdsRef.current[layer.id] && loadedVizDatesRef.current[layer.id] === vizDate) return;
+
         fetchDatasetVisualization({ datasetId: layer.dataset.id, cadence, date: vizDate })
           .then((payload) => {
             // Discard stale responses: layer may have been toggled off or the
@@ -245,6 +251,7 @@ const Portal = ({ language }: PortalProps) => {
             if (map.getSource(rasterId)) remove_image_layer(map, rasterId);
             add_image_layer(map, payload.tileUrl, rasterId, true, payload.bounds, false, (opacities[layer.id] ?? layer.ui?.opacity ?? 85) / 100);
             loadedRasterIdsRef.current[layer.id] = rasterId;
+            loadedVizDatesRef.current[layer.id] = vizDate;
             // Store bounds for the zoom button
             setLayerBounds((prev) => ({ ...prev, [layer.id]: payload.bounds }));
             // Auto-zoom once ever on first layer load
