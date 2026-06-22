@@ -353,6 +353,10 @@ class HazardCategoriesView(APIView):
 class ContactSubmitView(APIView):
     """Accepts a contact form POST for a project, stores the submission and emails the project contact."""
 
+    # Public endpoint — no session auth so CSRF is never enforced.
+    authentication_classes: list = []
+    permission_classes: list = []
+
     @extend_schema(tags=["catalog"], summary="Submit contact form")
     def post(self, request, slug: str):
         try:
@@ -399,6 +403,10 @@ class ContactSubmitView(APIView):
 
 class FeedbackSubmitView(APIView):
     """Accepts a feedback form POST, stores the submission and emails the project feedback address."""
+
+    # Public endpoint — no session auth so CSRF is never enforced.
+    authentication_classes: list = []
+    permission_classes: list = []
 
     @extend_schema(tags=["catalog"], summary="Submit feedback form")
     def post(self, request, slug: str):

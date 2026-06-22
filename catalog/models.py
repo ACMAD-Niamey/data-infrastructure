@@ -383,6 +383,10 @@ class ContactSubmission(models.Model):
     def __str__(self) -> str:
         return f"Submission for {self.project} at {self.submitted_at:%Y-%m-%d %H:%M}"
 
+    @property
+    def data_summary(self) -> str:
+        return "  |  ".join(f"{k}: {v}" for k, v in (self.form_data or {}).items())
+
 
 class ProjectFeedbackField(Orderable):
     """One field definition for the Feedback page form."""
@@ -467,6 +471,10 @@ class FeedbackSubmission(models.Model):
 
     def __str__(self) -> str:
         return f"Feedback for {self.project} at {self.submitted_at:%Y-%m-%d %H:%M}"
+
+    @property
+    def data_summary(self) -> str:
+        return "  |  ".join(f"{k}: {v}" for k, v in (self.form_data or {}).items())
 
 
 class DatasetPage(Page):

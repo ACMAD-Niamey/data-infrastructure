@@ -39,6 +39,7 @@ const translations = {
     contactFallback: 'Contact us',
     required: '*',
     selectDefault: '— Select —',
+    submitError: 'Submission failed. Please try again.',
   },
   fr: {
     sendFeedback: 'Envoyer des commentaires',
@@ -54,6 +55,7 @@ const translations = {
     contactFallback: 'Nous contacter',
     required: '*',
     selectDefault: '— Sélectionner —',
+    submitError: 'Échec de l\'envoi. Veuillez réessayer.',
   },
 };
 
@@ -84,6 +86,7 @@ export function Feedback({ language }: FeedbackProps) {
 
   const [formValues, setFormValues]   = useState<Record<string, string>>({});
   const [formErrors, setFormErrors]   = useState<Record<string, string>>({});
+  const [submitError, setSubmitError] = useState('');
   const [submitting, setSubmitting]   = useState(false);
   const [submitted, setSubmitted]     = useState(false);
   const [openFaq, setOpenFaq]         = useState<number | null>(null);
@@ -112,9 +115,10 @@ export function Feedback({ language }: FeedbackProps) {
       .catch(() => {});
   }, [slug]);
 
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
     setFormErrors({});
+    setSubmitError('');
     setSubmitting(true);
     try {
       const res = await fetch(`/api/catalog/projects/${slug}/feedback/`, {
@@ -125,11 +129,13 @@ export function Feedback({ language }: FeedbackProps) {
       const data = await res.json();
       if (res.ok) {
         setSubmitted(true);
+      } else if (data.errors) {
+        setFormErrors(data.errors);
       } else {
-        setFormErrors(data.errors ?? {});
+        setSubmitError(data.detail ?? t.submitError);
       }
     } catch {
-      // network error — form stays open for retry
+      setSubmitError(t.submitError);
     }
     setSubmitting(false);
   }
@@ -308,6 +314,12 @@ export function Feedback({ language }: FeedbackProps) {
                 <Send style={{ width: 15, height: 15 }} />
                 {submitting ? t.submitting : t.submit}
               </button>
+
+              {submitError && (
+                <p style={{ fontSize: 12, color: '#dc2626', marginTop: 10, padding: '8px 12px', background: '#fef2f2', borderRadius: 6 }}>
+                  {submitError}
+                </p>
+              )}
 
               <p style={{ fontSize: 11, color: '#9ca3af', marginTop: 12, display: 'flex', alignItems: 'center', gap: 6 }}>
                 <Lock style={{ width: 11, height: 11 }} />
