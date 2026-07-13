@@ -3,6 +3,7 @@ import {
   Cloud, ShieldCheck, Handshake,
 } from 'lucide-react';
 import type { LucideProps } from 'lucide-react';
+import type { ComponentType } from 'react';
 
 export interface Feature {
   title: string;
@@ -11,7 +12,7 @@ export interface Feature {
   layer_id?: string | null;
 }
 
-export type IconComponent = React.ComponentType<LucideProps>;
+export type IconComponent = ComponentType<LucideProps>;
 
 export const featureIconMap: Record<string, IconComponent> = {
   thermometer: Thermometer,
