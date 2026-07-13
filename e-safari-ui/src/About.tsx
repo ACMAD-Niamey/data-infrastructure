@@ -2,35 +2,16 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Map, ArrowRight,
-  Thermometer, Leaf, Building2, Users, Globe, Layers, CalendarDays, BarChart3,
-  Cloud, ShieldCheck, Handshake,
+  Building2, Cloud, ShieldCheck, Handshake, Globe, Leaf,
 } from 'lucide-react';
 import type { Language } from './types';
 import { getProjectSlug } from './services/catalogLayersApi';
-import type { LucideProps } from 'lucide-react';
+import { featureIconMap, featureIconColors, featureIconBgs } from './lib/featureIcons';
+import type { Feature, IconComponent } from './lib/featureIcons';
 
 interface AboutProps {
   language: Language;
 }
-
-type IconComponent = React.ComponentType<LucideProps>;
-
-const iconMap: Record<string, IconComponent> = {
-  thermometer: Thermometer,
-  leaf: Leaf,
-  'building-2': Building2,
-  users: Users,
-  globe: Globe,
-  layers: Layers,
-  'calendar-days': CalendarDays,
-  'bar-chart-3': BarChart3,
-  cloud: Cloud,
-  'shield-check': ShieldCheck,
-  handshake: Handshake,
-};
-
-const iconColors = ['#ea580c', '#16803d', '#ea580c', '#16803d', '#2563eb', '#16803d', '#ea580c', '#2563eb'];
-const iconBgs   = ['#fff7ed', '#f0fdf4', '#fff7ed', '#f0fdf4', '#eff6ff', '#f0fdf4', '#fff7ed', '#eff6ff'];
 
 const translations = {
   en: {
@@ -70,8 +51,6 @@ const translations = {
     ],
   },
 };
-
-interface Feature { title: string; description: string; icon_name: string; }
 
 export function About({ language }: AboutProps) {
   const t = translations[language];
@@ -161,9 +140,9 @@ export function About({ language }: AboutProps) {
           <h2 style={{ fontSize: 18, fontWeight: 700, color: '#111827', marginBottom: 28 }}>{t.provides}</h2>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 16 }}>
             {features.map((f, i) => {
-              const Icon: IconComponent = iconMap[f.icon_name] ?? Leaf;
-              const color = iconColors[i % iconColors.length];
-              const bg    = iconBgs[i % iconBgs.length];
+              const Icon: IconComponent = featureIconMap[f.icon_name] ?? Leaf;
+              const color = featureIconColors[i % featureIconColors.length];
+              const bg    = featureIconBgs[i % featureIconBgs.length];
               return (
                 <div key={i} style={{ backgroundColor: 'white', border: '1px solid #e5e7eb', borderRadius: 12, padding: '20px 18px' }}>
                   <div style={{ width: 44, height: 44, borderRadius: '50%', backgroundColor: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>

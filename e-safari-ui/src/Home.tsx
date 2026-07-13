@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Thermometer, Leaf, Building2, CalendarDays, ArrowRight, Map } from 'lucide-react';
+import { Leaf, ArrowRight, Map } from 'lucide-react';
 import type { Language } from './types';
 import type { CountryOption } from './components/SubHeader';
 import { getProjectSlug } from './services/catalogLayersApi';
+import { featureIconMap, featureIconColors, featureIconBgs } from './lib/featureIcons';
+import type { Feature, IconComponent } from './lib/featureIcons';
 
 interface HomeProps {
   language: Language;
@@ -18,12 +20,6 @@ const translations = {
     scenarioLabel: 'Scenario analysis',
     evidenceLabel: 'Evidence for resilient planning',
     explore: 'What you can explore',
-    cards: [
-      { title: 'Heat stress', description: 'Map current and future heat stress intensity across urban areas.' },
-      { title: 'Green cover', description: 'Assess vegetation and green spaces to identify cooling opportunities.' },
-      { title: 'Urban growth', description: 'Visualize building density and urban expansion over time.' },
-      { title: 'Scenario years', description: 'Compare scenarios for multiple years to support planning.' },
-    ],
   },
   fr: {
     openGeoportal: 'Ouvrir le Géoportail',
@@ -33,21 +29,8 @@ const translations = {
     scenarioLabel: 'Analyse de scénarios',
     evidenceLabel: 'Données pour la planification résiliente',
     explore: 'Ce que vous pouvez explorer',
-    cards: [
-      { title: 'Stress thermique', description: "Cartographier l'intensité du stress thermique actuel et futur dans les zones urbaines." },
-      { title: 'Couverture verte', description: 'Évaluer la végétation et les espaces verts pour identifier les opportunités de rafraîchissement.' },
-      { title: 'Croissance urbaine', description: "Visualiser la densité des bâtiments et l'expansion urbaine au fil du temps." },
-      { title: 'Années de scénario', description: 'Comparer des scénarios pour plusieurs années pour soutenir la planification.' },
-    ],
   },
 };
-
-const cardIcons = [
-  { Icon: Thermometer, color: '#ea580c', bg: '#fff7ed' },
-  { Icon: Leaf,        color: '#16803d', bg: '#f0fdf4' },
-  { Icon: Building2,   color: '#ea580c', bg: '#fff7ed' },
-  { Icon: CalendarDays,color: '#16803d', bg: '#f0fdf4' },
-];
 
 export function Home({ language }: HomeProps) {
   const t = translations[language];
@@ -60,6 +43,7 @@ export function Home({ language }: HomeProps) {
   const [citiesCount, setCitiesCount] = useState('');
   const [layerCount, setLayerCount] = useState<number | null>(null);
   const [countries, setCountries] = useState<CountryOption[]>([]);
+  const [features, setFeatures] = useState<Feature[]>([]);
 
   useEffect(() => {
     fetch(`/api/catalog/projects/${slug}/config/`)
@@ -70,6 +54,7 @@ export function Home({ language }: HomeProps) {
         setSubtitle(data.subtitle ?? '');
         setCitiesCount(data.cities_count ?? '');
         setLayerCount(data.layer_count ?? null);
+        setFeatures(data.features ?? []);
       })
       .catch(() => {});
 
@@ -159,44 +144,49 @@ export function Home({ language }: HomeProps) {
       </div>
 
       {/* Feature cards */}
-      <div style={{ backgroundColor: '#f9fafb', padding: '52px 40px' }}>
-        <h2 style={{ fontSize: 20, fontWeight: 700, color: '#111827', marginBottom: 28 }}>{t.explore}</h2>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 18 }}>
-          {t.cards.map((card, i) => {
-            const { Icon, color, bg } = cardIcons[i];
-            return (
-              <div
-                key={i}
-                role="button"
-                tabIndex={0}
-                onClick={() => navigate('/geoportal')}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    navigate('/geoportal');
-                  }
-                }}
-                style={{
-                  backgroundColor: 'white',
-                  border: '1px solid #e5e7eb',
-                  borderRadius: 12,
-                  padding: '24px 20px',
-                  cursor: 'pointer',
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.boxShadow = 'none'; }}
-              >
-                <div style={{ width: 44, height: 44, borderRadius: '50%', backgroundColor: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
-                  <Icon style={{ width: 22, height: 22, color }} />
+      {features.length > 0 && (
+        <div style={{ backgroundColor: '#f9fafb', padding: '52px 40px' }}>
+          <h2 style={{ fontSize: 20, fontWeight: 700, color: '#111827', marginBottom: 28 }}>{t.explore}</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: 18 }}>
+            {features.map((card, i) => {
+              const Icon: IconComponent = featureIconMap[card.icon_name] ?? Leaf;
+              const color = featureIconColors[i % featureIconColors.length];
+              const bg    = featureIconBgs[i % featureIconBgs.length];
+              const target = card.layer_id ? `/geoportal?layer=${encodeURIComponent(card.layer_id)}` : '/geoportal';
+              return (
+                <div
+                  key={i}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => navigate(target)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      navigate(target);
+                    }
+                  }}
+                  style={{
+                    backgroundColor: 'white',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: 12,
+                    padding: '24px 20px',
+                    cursor: 'pointer',
+                  }}
+                  onMouseEnter={(e) => { e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.08)'; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.boxShadow = 'none'; }}
+                >
+                  <div style={{ width: 44, height: 44, borderRadius: '50%', backgroundColor: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
+                    <Icon style={{ width: 22, height: 22, color }} />
+                  </div>
+                  <h3 style={{ fontSize: 15, fontWeight: 700, color: '#111827', marginBottom: 8 }}>{card.title}</h3>
+                  <p style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.55, marginBottom: 16 }}>{card.description}</p>
+                  <ArrowRight style={{ width: 16, height: 16, color: '#9ca3af' }} />
                 </div>
-                <h3 style={{ fontSize: 15, fontWeight: 700, color: '#111827', marginBottom: 8 }}>{card.title}</h3>
-                <p style={{ fontSize: 13, color: '#6b7280', lineHeight: 1.55, marginBottom: 16 }}>{card.description}</p>
-                <ArrowRight style={{ width: 16, height: 16, color: '#9ca3af' }} />
-              </div>
-            );
-          })}
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

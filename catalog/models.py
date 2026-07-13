@@ -272,7 +272,8 @@ class ProjectInclusion(Orderable):
 
 
 class ProjectFeature(Orderable):
-    """One feature card in the 'What e-SAFARI provides' section on the About page."""
+    """One feature card, shared by the 'What e-SAFARI provides' section on the About
+    page and the 'What you can explore' section on the homepage."""
 
     project = ParentalKey(
         "catalog.ProjectPage",
@@ -286,11 +287,21 @@ class ProjectFeature(Orderable):
         blank=True,
         help_text="Lucide icon slug, e.g. 'thermometer', 'leaf', 'building-2', 'users'.",
     )
+    linked_layer_id = models.SlugField(
+        max_length=80,
+        blank=True,
+        help_text=(
+            "dataset_id of the layer to preselect on the geoportal when this card is "
+            "clicked (matches the 'id' field returned by /api/catalog/ui/layers), "
+            "e.g. 'heat_stress'. Leave blank to open the geoportal with its default layer."
+        ),
+    )
 
     panels = [
         FieldPanel("title"),
         FieldPanel("description"),
         FieldPanel("icon_name"),
+        FieldPanel("linked_layer_id"),
     ]
 
     class Meta(Orderable.Meta):

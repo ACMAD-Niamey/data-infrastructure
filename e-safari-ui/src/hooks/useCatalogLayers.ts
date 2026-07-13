@@ -1,16 +1,20 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Language } from "../types";
 import type { CatalogLayer, LayerSelectionValue } from "../types/catalogLayer";
 import { deriveSelectors } from "../lib/cadenceSelectors";
 import { fetchProjectLayers, getProjectSlug } from "../services/catalogLayersApi";
 
-export function useCatalogLayers(language: Language) {
+export function useCatalogLayers(language: Language, preselectLayerId?: string) {
   const [layers, setLayers] = useState<CatalogLayer[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeLayerIds, setActiveLayerIds] = useState<string[]>([]);
+  // Once the user manually toggles a layer, stop re-imposing preselectLayerId on reload
+  // (e.g. a later reload from a language change shouldn't undo their manual choice).
+  const hasUserInteractedRef = useRef(false);
 
   const toggleActiveLayer = useCallback((id: string) => {
+    hasUserInteractedRef.current = true;
     setActiveLayerIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
     );
@@ -35,6 +39,13 @@ export function useCatalogLayers(language: Language) {
       }));
       setLayers(withLang);
       setActiveLayerIds((current) => {
+        if (
+          !hasUserInteractedRef.current &&
+          preselectLayerId &&
+          withLang.some((l) => l.id === preselectLayerId)
+        ) {
+          return [preselectLayerId];
+        }
         // Keep existing active layers that are still present; otherwise default to the first layer.
         const stillValid = current.filter((id) => withLang.some((l) => l.id === id));
         if (stillValid.length > 0) return stillValid;
@@ -48,7 +59,7 @@ export function useCatalogLayers(language: Language) {
     } finally {
       setLoading(false);
     }
-  }, [language]);
+  }, [language, preselectLayerId]);
 
   useEffect(() => {
     reload();
