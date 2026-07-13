@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import Map from './components/map';
 import { DataPanel } from './components/DataPanel';
 import { LayerControls } from './components/LayerControls';
@@ -61,6 +62,8 @@ const Portal = ({ language }: PortalProps) => {
   // Flips true after the very first auto-zoom; never resets so only one auto-zoom ever occurs
   const hasInitialZoomedRef = useRef<boolean>(false);
   const [layerBounds, setLayerBounds] = useState<Record<string, BoundsObject | null>>({});
+  const [searchParams] = useSearchParams();
+  const preselectLayerId = searchParams.get('layer') ?? undefined;
 
   const {
     layers,
@@ -71,9 +74,16 @@ const Portal = ({ language }: PortalProps) => {
     toggleActiveLayer,
     layerSelections,
     setLayerSelections,
-  } = useCatalogLayers(language);
+  } = useCatalogLayers(language, preselectLayerId);
 
   const { mapRef } = useMap() ?? { mapRef: { current: null } };
+
+  // The legend store is a module-level singleton that outlives this component's mount
+  // (e.g. Home -> Geoportal -> Home -> Geoportal with a different layer), so without this
+  // a legend added during a previous visit lingers even though its raster is long gone.
+  useEffect(() => {
+    useLegendStore.getState().clearLegends();
+  }, []);
 
   useEffect(() => {
     fetch('/api/catalog/projects/e-safari/countries/')
