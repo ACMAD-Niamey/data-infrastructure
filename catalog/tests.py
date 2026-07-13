@@ -771,6 +771,32 @@ class ProjectConfigViewTests(TestCase):
     @patch("catalog.api.GeoServerLayer")
     @patch("catalog.api.dataset_entries_for_project")
     @patch("catalog.api.ProjectPage")
+    def test_feature_layer_id_reflects_linked_layer_id_or_none(self, mock_pp, mock_entries, mock_gs, mock_sw):
+        project = self._make_project_mock()
+        linked_feature = MagicMock()
+        linked_feature.title = "Heat stress"
+        linked_feature.description = "Map heat stress intensity."
+        linked_feature.icon_name = "thermometer"
+        linked_feature.linked_layer_id = "heat_stress"
+        unlinked_feature = MagicMock()
+        unlinked_feature.title = "Green cover"
+        unlinked_feature.description = "Assess vegetation."
+        unlinked_feature.icon_name = "leaf"
+        unlinked_feature.linked_layer_id = ""
+        project.features.all.return_value = [linked_feature, unlinked_feature]
+        mock_pp.objects.live.return_value.get.return_value = project
+        mock_entries.return_value = []
+        mock_gs.objects.filter.return_value.count.return_value = 0
+        mock_sw.objects.filter.return_value.count.return_value = 0
+        response = self.client.get("/api/catalog/projects/e-safari/config/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["features"][0]["layer_id"], "heat_stress")
+        self.assertIsNone(response.data["features"][1]["layer_id"])
+
+    @patch("catalog.api.StaticWmsLayer")
+    @patch("catalog.api.GeoServerLayer")
+    @patch("catalog.api.dataset_entries_for_project")
+    @patch("catalog.api.ProjectPage")
     def test_returns_slug_cities_count_and_subtitle_from_project(self, mock_pp, mock_entries, mock_gs, mock_sw):
         mock_pp.objects.live.return_value.get.return_value = self._make_project_mock(
             slug="e-safari", cities_count="20+", subtitle="Climate planning for African cities"

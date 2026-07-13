@@ -258,7 +258,12 @@ class ProjectConfigView(APIView):
         layer_count = len(entries) + gs_count + sw_count
 
         features = [
-            {"title": f.title, "description": f.description, "icon_name": f.icon_name}
+            {
+                "title": f.title,
+                "description": f.description,
+                "icon_name": f.icon_name,
+                "layer_id": f.linked_layer_id or None,
+            }
             for f in project.features.all()
         ]
 

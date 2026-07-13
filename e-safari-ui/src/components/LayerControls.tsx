@@ -121,6 +121,9 @@ export function LayerControls({
       <div className="space-y-1.5">
         {layers.map((layer) => {
           const isActive = activeLayerIds.includes(layer.id);
+          // activeLayerIds preserves activation order (toggling on appends to the end), and the
+          // map paints newly-activated layers on top — so the last id is the one currently on top.
+          const isTopmost = isActive && activeLayerIds[activeLayerIds.length - 1] === layer.id;
           const showInfo = infoLayerId === layer.id;
 
           return (
@@ -173,7 +176,10 @@ export function LayerControls({
                     onLayerToggle(layer.id);
                   }}
                   className="relative inline-flex h-4 w-8 items-center rounded-full transition-colors shrink-0 focus:outline-none"
-                  style={{ backgroundColor: isActive ? '#16803d' : '#d1d5db' }}
+                  style={{
+                    backgroundColor: isActive ? '#16803d' : '#d1d5db',
+                    opacity: isActive && !isTopmost ? 0.55 : 1,
+                  }}
                 >
                   <span
                     className={`inline-block h-3 w-3 transform rounded-full bg-white shadow transition-transform ${
