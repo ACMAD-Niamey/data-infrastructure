@@ -8,6 +8,8 @@ build:
 	docker compose up --build -d --remove-orphans
 up:
 	docker compose up -d
+up-prod:
+	docker compose --profile prod up -d
 down:
 	docker compose down
 logs:
