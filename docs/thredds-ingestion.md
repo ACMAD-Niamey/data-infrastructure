@@ -1,0 +1,122 @@
+# THREDDS download & ingestion (`thredds_ingestion`)
+
+Automates pulling daily GeoTIFF forecast products from an ACMAD THREDDS file server and pushing them through the existing upload/ingest pipeline, so new dated STAC items keep appearing under datasets that are still created and styled the normal, manual way.
+
+**What stays manual**: creating the `DatasetPage` and its `Layer` style snippet in Wagtail admin. This app never creates or edits either — it only references an existing `dataset_id`.
+
+**What's automated**: resolving the dated THREDDS URL for a product, checking it exists, downloading it, uploading to MinIO, and calling the ingest pipeline (COG conversion, bbox/geometry extraction, STAC item creation) — all reused as-is from `uploads`/`ingest`, not duplicated.
+
+## Prerequisites
+
+Before configuring a workflow:
+
+1. The target `DatasetPage` already exists (`catalog` app), with a stable `dataset_id`.
+2. Its `Layer` style snippet already exists — styling is per-dataset, not per-item, so it applies automatically to every item this app ingests.
+
+## Data model
+
+One workflow represents one THREDDS **source** (shared base URL + dated-folder pattern + schedule); it can hold many product mappings, since a single ACMAD ensemble folder typically serves 20+ unrelated products under the same base URL.
+
+| Model | Purpose | Key fields |
+|---|---|---|
+| `DownloadWorkflow` | One THREDDS source | `source_base_url`, `folder_pattern`, `schedule_hour_utc`/`schedule_minute_utc`, `retry_interval_minutes`, `retry_until_hour_utc`, `catch_up_days` |
+| `DownloadWorkflowFile` | One dataset + filename pattern mapped into a workflow (many per workflow) | `dataset` (FK to `catalog.DatasetPage`), `filename_pattern`, `lead_hours_csv`, `threshold_label`, `item_id_pattern`, `overwrite_existing` |
+| `DownloadRun` | One execution of a workflow for one `run_date` | `status` (`pending`/`running`/`completed`/`partial`/`failed`), per-run counters |
+| `DownloadRunItem` | One resolved `(workflow_file, lead_hours)` file within a run | `source_url`, `item_id`, `status`, `ingestion_run_id` |
+
+`lead_hours` uses `0` as a sentinel for "no lead-hour dimension" (single-file-per-day products like a 5-day mean) rather than `NULL`, since Postgres unique constraints treat `NULL != NULL` and would silently allow duplicates otherwise.
+
+## Admin
+
+Plain Django admin (not Wagtail) at `/api/django-admin/thredds_ingestion/` — these are operational config records, the same category as `ingest.IngestionRun`, not versioned page content.
+
+Editing a `DownloadWorkflow` shows an inline formset of `DownloadWorkflowFile` rows underneath, so adding a new product from an already-configured source is just one more inline row, no new workflow.
+
+### Example: adding a product to an existing source
+
+Assume `ACMAD weather forecast` already exists as a workflow pointing at `.../ensemble5`, and a `5-day-cumulative-ukmo` `DatasetPage` + `Layer` already exist.
+
+**Single-file-per-day product** (no lead hours):
+
+| Field | Value |
+|---|---|
+| `dataset` | `5-day-cumulative-ukmo` |
+| `filename_pattern` | `5daymean_{run_date:%Y%m%d}.tif` |
+| `lead_hours_csv` | *(blank)* |
+
+**Lead-hour product**:
+
+| Field | Value |
+|---|---|
+| `dataset` | `mix6` |
+| `filename_pattern` | `mix{run_date:%Y%m%d}_{lead_hours}.tif` |
+| `lead_hours_csv` | `24,48,72,96,120,144` |
+
+**Threshold + lead-hour product** (threshold is a literal, not a modeled variable — one workflow row per threshold):
+
+| Field | Value |
+|---|---|
+| `dataset` | `wwfd_pop_50mm` |
+| `filename_pattern` | `pop{run_date:%Y%m%d}_{threshold}_{lead_hours}.tif` |
+| `threshold_label` | `50mm` |
+| `lead_hours_csv` | `24,48,72,96,120,144` |
+
+## Idempotency and retries
+
+There is no dedup anywhere downstream — `ingest.tasks.post_item` does a bare POST with no existence check, so calling it twice with the same STAC item id either fails or silently overwrites depending on the STAC backend. This app owns 100% of the skip/retry logic itself, in this order, before any network call:
+
+1. **DB fast path** — an existing `COMPLETED` item, not overwriting → skip.
+2. **STAC reconciliation** — the item already exists in STAC (a prior run succeeded downstream but crashed before recording it locally) → skip.
+3. **THREDDS existence check** — not published yet → `not_yet_available`. This is a normal, retriable state, not a failure (upstream files land in a daily batch, not instantly).
+4. **Download → MinIO → ingest.**
+5. **Downstream 409 reconciled as success** — if the ingest call fails with a duplicate-item-id conflict but the item is confirmed present in STAC, the item is marked completed rather than failed.
+
+`item_id` is rendered per `(dataset, run_date, lead_hours)` and enforced globally unique at the DB level, so a misconfigured `item_id_pattern` (e.g. missing `{lead_hours}`) fails loudly at write time instead of surfacing as a STAC conflict days later.
+
+## Running manually
+
+```bash
+# One workflow, one date
+python manage.py run_download_workflow --workflow-name "ACMAD weather forecast" --run-date 2026-08-05
+
+# Dry run - pattern rendering + THREDDS existence check only, no download/ingest
+python manage.py run_download_workflow --workflow-id 3 --run-date 2026-08-05 --dry-run
+
+# Force re-ingest even if already completed, for this invocation only
+python manage.py run_download_workflow --workflow-id 3 --run-date 2026-08-05 --force
+```
+
+Reruns are always safe — already-completed items are skipped per the idempotency rules above, so a range can be re-run freely without duplicating work.
+
+### Backfill
+
+```bash
+# Inclusive date range
+python manage.py run_download_workflow --workflow-id 3 --run-date-range 2026-07-01:2026-08-05 --dispatch-celery
+
+# Convenience: last N days through today
+python manage.py run_download_workflow --all-enabled --days-back 14
+```
+
+Use `--dispatch-celery` for anything spanning more than a few dates - it fans out one task per `(workflow, run_date)` so workers process the backlog in parallel instead of downloading/converting/ingesting one date at a time inline.
+
+## Scheduling (Celery Beat)
+
+One static Beat entry (`run-due-thredds-download-workflows`, every 15 min) rather than one entry per workflow — adding a new THREDDS source is an admin DB row, not a settings.py redeploy.
+
+Each tick, for every enabled workflow:
+
+- **Today** is dispatched only inside `[schedule_hour_utc:schedule_minute_utc, retry_until_hour_utc]` UTC.
+- The previous `catch_up_days` days are also re-checked and retried if not yet `completed` — **not** gated by time of day (a past day has no "time of day" left to wait for), only throttled by `retry_interval_minutes`.
+
+This makes ongoing operation self-healing: if Beat/a worker was down for a day, or a file published late, the backlog clears automatically on the next tick with no operator action. `catch_up_days` defaults to 3 and is meant for short gaps — for a deep historical backfill (e.g. onboarding a product against a year of history), use the management command instead of raising it.
+
+## Known infra quirk: ACMAD TLS
+
+`sgbd.acmad.org` serves TLS with a Diffie-Hellman key considered too small by OpenSSL's default security policy (`DH_KEY_TOO_SMALL`). This is a server-side legacy TLS config, not something fixable on our end. `thredds_client.py` handles it transparently: a normal request is always tried first, and only on that specific SSL error does it retry once with a relaxed cipher policy (`SECLEVEL=1`) scoped to that single request — other hosts are unaffected and keep the stricter default.
+
+## Related
+
+- `docs/ingest-delete.md` — the upload/ingest pipeline this app calls into (reused, not duplicated).
+- `ingest.tasks.process_ingestion_run` — COG conversion, bbox/geometry extraction, STAC item creation.
+- `weather_station_ingestion` — the closest existing analog (a different external download pipeline, MQTT-based).

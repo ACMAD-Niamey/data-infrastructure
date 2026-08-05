@@ -33,6 +33,7 @@ LOCAL_APPS = [ "home",
                 "uploads",
                 "vector_ingest",
                 "weather_station_ingestion",
+                "thredds_ingestion",
                 "observations",
                 "sources",
                 "stations",
@@ -213,6 +214,12 @@ WIS2_KEEP_DOWNLOADED_FILES = True
 WIS2_MAX_PAYLOAD_PREVIEW_CHARS = 2000
 WIS2_DOWNLOAD_RETENTION_DAYS = int(os.getenv("WIS2_DOWNLOAD_RETENTION_DAYS", "1"))
 
+THREDDS_DOWNLOAD_DIR = Path(
+    os.getenv("THREDDS_DOWNLOAD_DIR", str(BASE_DIR / "data" / "thredds_downloads"))
+)
+THREDDS_KEEP_DOWNLOADED_FILES = os.getenv("THREDDS_KEEP_DOWNLOADED_FILES", "0") == "1"
+THREDDS_DOWNLOAD_RETENTION_DAYS = int(os.getenv("THREDDS_DOWNLOAD_RETENTION_DAYS", "3"))
+
 
 # Celery settings
 CELERY_BROKER_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
@@ -221,6 +228,10 @@ CELERY_BEAT_SCHEDULE = {
     "cleanup-wis2-downloads-daily": {
         "task": "weather_station_ingestion.tasks.cleanup_wis2_downloads_task",
         "schedule": crontab(hour=int(os.getenv("CELERY_BEAT_CLEANUP_WIS2_DOWNLOADS_SCHEDULE_HOUR", "21")), minute=int(os.getenv("CELERY_BEAT_CLEANUP_WIS2_DOWNLOADS_SCHEDULE_MINUTE", "20"))),
+    },
+    "run-due-thredds-download-workflows": {
+        "task": "thredds_ingestion.tasks.run_due_download_workflows",
+        "schedule": crontab(minute="*/15"),
     },
 }
 
