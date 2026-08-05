@@ -1,0 +1,73 @@
+"""Bridge into the existing upload/ingest pipeline, without going over HTTP.
+
+DirectUpFileUploadView requires interactive session/basic auth and exists for
+browser/API clients; everything it does under auto_ingest=True (MinIO put +
+IngestionRun create + process_ingestion_run) is directly importable Python
+from within the same process. A Celery task in this app calls those pieces
+directly instead of round-tripping through DRF and faking auth for no reason.
+"""
+
+from __future__ import annotations
+
+import logging
+import os
+from datetime import date, datetime
+
+import botocore.exceptions
+
+from ingest.storage import set_bucket_public
+from uploads.storage.minio import minio_client
+
+log = logging.getLogger(__name__)
+
+DEFAULT_BUCKET = os.getenv("MINIO_DEFAULT_BUCKET", "geodata")
+
+
+def build_minio_key(dataset_id: str, run_date: date, filename: str) -> str:
+    """Deterministic key, no UUID - a retry overwrites the same object instead
+    of creating an orphaned duplicate blob, since filename is already unique
+    per (workflow_file, run_date, lead_hours) by construction."""
+    return f"{dataset_id}/{run_date:%Y/%m}/{filename}"
+
+
+def upload_file(local_path: str, *, bucket: str = DEFAULT_BUCKET, key: str, content_type: str = "image/tiff") -> str:
+    """Put local_path to MinIO at bucket/key, creating the bucket if missing. Returns the s3:// href."""
+    client = minio_client()
+    try:
+        client.head_bucket(Bucket=bucket)
+    except botocore.exceptions.ClientError as e:
+        code = e.response.get("Error", {}).get("Code", "")
+        if code in ("404", "NoSuchBucket", "NotFound"):
+            client.create_bucket(Bucket=bucket)
+            set_bucket_public(client, bucket)
+        else:
+            raise
+
+    with open(local_path, "rb") as fh:
+        client.put_object(Bucket=bucket, Key=key, Body=fh, ContentType=content_type)
+    return f"s3://{bucket}/{key}"
+
+
+def push_to_ingest(*, dataset, href: str, item_id: str, valid_datetime: datetime):
+    """Create an IngestionRun for href and run it synchronously (not .delay()),
+    so the final status is known immediately with no polling. Reuses
+    ingest.tasks.process_ingestion_run, which already does COG conversion and
+    bbox/geometry extraction internally - nothing here duplicates that.
+    """
+    from ingest.models import IngestionRun
+    from ingest.tasks import process_ingestion_run
+
+    payload = {
+        "item_id": item_id,
+        "datetime": valid_datetime.isoformat(),
+        "asset": {"href": href},
+    }
+    run = IngestionRun.objects.create(
+        dataset_id=dataset.dataset_id,
+        cadence=dataset.cadence,
+        status="accepted",
+        payload=payload,
+    )
+    process_ingestion_run(run.id)
+    run.refresh_from_db()
+    return run
