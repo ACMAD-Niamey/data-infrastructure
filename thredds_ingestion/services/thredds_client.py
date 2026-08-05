@@ -56,7 +56,12 @@ def exists(url: str, *, timeout: int) -> bool:
     # streamed GET and close without reading the body.
     r2 = _request("GET", url, timeout=timeout, stream=True)
     try:
-        return r2.status_code == 200
+        if r2.status_code == 200:
+            return True
+        if r2.status_code == 404:
+            return False
+        r2.raise_for_status()
+        return False
     finally:
         r2.close()
 
