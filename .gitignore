@@ -18,3 +18,5 @@ stations_export.ndjson
 celerybeat-schedule
 !catalog/static/
 !catalog/static/**
+tmp/
+output/
