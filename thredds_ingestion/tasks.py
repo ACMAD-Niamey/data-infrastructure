@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 
 
 def _is_due(run: DownloadRun, workflow: DownloadWorkflow, now: datetime.datetime) -> bool:
-    if run.status == DownloadRun.Status.COMPLETED:
+    if run.status in (DownloadRun.Status.COMPLETED, DownloadRun.Status.RUNNING):
         return False
     if run.last_attempted_at and (now - run.last_attempted_at).total_seconds() < workflow.retry_interval_minutes * 60:
         return False
