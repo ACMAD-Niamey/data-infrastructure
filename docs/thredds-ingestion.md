@@ -71,6 +71,21 @@ Assume `ACMAD weather forecast` already exists as a workflow pointing at `.../en
 
 `{valid_date}` is always available in any pattern — it's `run_date + lead_hours`, formatted as a date rather than a bare integer. It defaults to `run_date` itself when a mapping has no lead hours at all, so it's safe to use even on single-file-per-day products. Note `0` is a legitimate lead value here (a same-day/"day 0" forecast) and is treated as a real lead, not confused with "no lead-hour dimension" — that sentinel only applies when `lead_hours_csv` is left blank entirely.
 
+## How `lead_hours_csv` drives the pattern
+
+`lead_hours_csv` only ever holds hour offsets (`0,24,48,72,96,120`) — nothing date-shaped goes in that field. At run time, for **every** value in the list, the app automatically computes `lead_hours` hours added to whatever `run_date` it's currently processing, and substitutes both `{lead_hours}` and `{valid_date}` into `filename_pattern` (and `item_id_pattern`, if customized). One `DownloadRunItem` is resolved per `(workflow_file, lead_hours)` pair each run.
+
+You never type out a resulting date or filename yourself — the same config produces the correct output for any `run_date`, including ones from a backfill:
+
+| `run_date` | `lead_hours` | `{valid_date}` | resolved filename |
+|---|---|---|---|
+| 2026-08-06 | 0 | 2026-08-06 | `heat_index_20260806_20260806.tif` |
+| 2026-08-06 | 24 | 2026-08-07 | `heat_index_20260806_20260807.tif` |
+| 2026-08-06 | 72 | 2026-08-09 | `heat_index_20260806_20260809.tif` |
+| 2026-08-07 | 72 | 2026-08-10 | `heat_index_20260807_20260810.tif` |
+
+This is what makes a workflow keep working unattended day after day (and over an arbitrary backfill range) without ever touching its config again: `run_date` changes every day, `lead_hours_csv` stays fixed, and every placeholder that depends on either one is re-derived automatically for each run.
+
 ## Idempotency and retries
 
 There is no dedup anywhere downstream — `ingest.tasks.post_item` does a bare POST with no existence check, so calling it twice with the same STAC item id either fails or silently overwrites depending on the STAC backend. This app owns 100% of the skip/retry logic itself, in this order, before any network call:
