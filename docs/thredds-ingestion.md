@@ -69,7 +69,7 @@ Assume `ACMAD weather forecast` already exists as a workflow pointing at `.../en
 | `filename_pattern` | `heat_index_{run_date:%Y%m%d}_{valid_date:%Y%m%d}.tif` |
 | `lead_hours_csv` | `0,24,48,72,96,120` |
 
-`{valid_date}` is always available in any pattern — it's `run_date + lead_hours`, formatted as a date rather than a bare integer. It defaults to `run_date` itself when a mapping has no lead hours at all, so it's safe to use even on single-file-per-day products. Note `0` is a legitimate lead value here (a same-day/"day 0" forecast) and is treated as a real lead, not confused with "no lead-hour dimension" — that sentinel only applies when `lead_hours_csv` is left blank entirely.
+`{valid_date}` is always available in any pattern — it's `run_date + lead_hours hours`, formatted as a date rather than a bare integer. It defaults to `run_date` itself when a mapping has no lead hours at all, so it's safe to use even on single-file-per-day products. Note `0` is a legitimate lead value here (a same-day/"day 0" forecast) and is treated as a real lead, not confused with "no lead-hour dimension" — that sentinel only applies when `lead_hours_csv` is left blank entirely.
 
 ## How `lead_hours_csv` drives the pattern
 
