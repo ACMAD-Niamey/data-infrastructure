@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   Layers, Search, ChevronDown, ChevronUp,
   Info, X, ChevronLeft, ChevronRight,
@@ -135,7 +135,7 @@ function RightPanel({ layer, isActive, onClose, onToggle, onOpacityChange, opaci
   };
 
   return (
-    <div className="w-80 bg-white border-l border-gray-200 flex flex-col overflow-hidden shrink-0">
+    <div className="flex flex-col">
       {/* Tabs */}
       <div className="flex items-center border-b border-gray-200">
         <button
@@ -159,7 +159,7 @@ function RightPanel({ layer, isActive, onClose, onToggle, onOpacityChange, opaci
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 space-y-5">
+      <div className="p-4 space-y-5">
         {tab === 'details' ? (
           <>
             {/* Title */}
@@ -648,14 +648,18 @@ function FullDetailsDialog({
 type LayerCardProps = {
   layer: CatalogLayer;
   isActive: boolean;
-  isSelected: boolean;
   onToggle: (layer: CatalogLayer) => void;
-  onSelect: (layer: CatalogLayer) => void;
 };
 
-function LayerCard({ layer, isActive, isSelected, onToggle, onSelect }: LayerCardProps) {
+function LayerCard({ layer, isActive, onToggle }: LayerCardProps) {
+  // Info/View Layer/Full Details all just ensure the layer is active — that's what
+  // makes its details card appear in the stacked right panel. Only the pill can turn it off.
+  const activate = () => {
+    if (!isActive) onToggle(layer);
+  };
+
   return (
-    <div className={`rounded-lg border p-3 mb-2 transition-all ${isSelected ? 'border-hub-400 bg-hub-100/40' : 'border-gray-200 bg-white'}`}>
+    <div className={`rounded-lg border p-3 mb-2 transition-all ${isActive ? 'border-hub-400 bg-hub-100/40' : 'border-gray-200 bg-white'}`}>
       <div className="flex items-start gap-2">
         {/* Pill toggle */}
         <button
@@ -672,7 +676,7 @@ function LayerCard({ layer, isActive, isSelected, onToggle, onSelect }: LayerCar
           <div className="flex items-start justify-between gap-1">
             <span className="text-sm font-semibold text-gray-800 leading-snug">{layer.title}</span>
             <button
-              onClick={() => onSelect(layer)}
+              onClick={activate}
               className="text-gray-400 hover:text-gray-700 shrink-0"
               title="Layer details"
             >
@@ -687,18 +691,14 @@ function LayerCard({ layer, isActive, isSelected, onToggle, onSelect }: LayerCar
 
       <div className="flex gap-2 mt-2.5">
         <button
-          onClick={() => {
-            // Always activate (never deactivate) — use the pill toggle to turn off
-            if (!isActive) onToggle(layer);
-            onSelect(layer);
-          }}
+          onClick={activate}
           className="flex items-center gap-1.5 bg-hub-800 hover:bg-hub-700 text-white text-xs font-medium px-3 py-1.5 rounded transition-colors"
         >
           <Layers className="size-3" />
           View Layer
         </button>
         <button
-          onClick={() => onSelect(layer)}
+          onClick={activate}
           className="text-xs font-medium border border-gray-300 hover:border-hub-400 text-gray-600 hover:text-hub-700 px-3 py-1.5 rounded transition-colors"
         >
           Full Details
@@ -715,8 +715,9 @@ function LayerCard({ layer, isActive, isSelected, onToggle, onSelect }: LayerCar
 export default function Geoportal() {
   const [activeCategory, setActiveCategory] = useState<string>('drought');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['drought']));
-  const [activeLayerIds, setActiveLayerIds] = useState<Set<string>>(new Set());
-  const [selectedLayer, setSelectedLayer] = useState<CatalogLayer | null>(null);
+  // Ordered newest-first: toggling a layer on prepends its id, so the stacked
+  // details panel below can render `activeLayerIds` in order to get "newest on top" for free.
+  const [activeLayerIds, setActiveLayerIds] = useState<string[]>([]);
   const [opacityMap, setOpacityMap] = useState<Record<string, number>>({});
   const [boundsMap, setBoundsMap] = useState<Record<string, BoundsObject>>({});
   const [showDatasets, setShowDatasets] = useState(true);
@@ -785,14 +786,26 @@ export default function Geoportal() {
     }
   };
 
+  // Seed activeLayerIds from ui.default_visible once, the first time layers finish loading —
+  // so a layer marked default-visible in the CMS comes up toggled on and rendered, unprompted.
+  const hasSeededDefaultsRef = useRef(false);
+  useEffect(() => {
+    if (hasSeededDefaultsRef.current || loading || layers.length === 0) return;
+    hasSeededDefaultsRef.current = true;
+    const defaults = layers.filter((l) => l.ui?.default_visible);
+    if (defaults.length === 0) return;
+    setActiveLayerIds((prev) => [
+      ...defaults.map((l) => l.id).filter((id) => !prev.includes(id)),
+      ...prev,
+    ]);
+    defaults.forEach((layer) => loadLayerTile(layer));
+  }, [layers, loading]);
+
   const handleToggle = (layer: CatalogLayer) => {
-    const isCurrentlyActive = activeLayerIds.has(layer.id);
-    setActiveLayerIds((prev) => {
-      const next = new Set(prev);
-      if (isCurrentlyActive) next.delete(layer.id);
-      else next.add(layer.id);
-      return next;
-    });
+    const isCurrentlyActive = activeLayerIds.includes(layer.id);
+    setActiveLayerIds((prev) =>
+      isCurrentlyActive ? prev.filter((id) => id !== layer.id) : [layer.id, ...prev],
+    );
     if (isCurrentlyActive) {
       const map = mapRef?.current;
       if (map) remove_image_layer(map, `raster-${layer.id}`);
@@ -892,10 +905,8 @@ export default function Geoportal() {
                             <LayerCard
                               key={layer.id}
                               layer={layer}
-                              isActive={activeLayerIds.has(layer.id)}
-                              isSelected={selectedLayer?.id === layer.id}
+                              isActive={activeLayerIds.includes(layer.id)}
                               onToggle={handleToggle}
-                              onSelect={setSelectedLayer}
                             />
                           ))
                         )}
@@ -932,11 +943,11 @@ export default function Geoportal() {
             </button>
           </div>
 
-          {/* Zoom to layer — appears below the north arrow when selected layer has bounds */}
-          {selectedLayer && boundsMap[selectedLayer.id] && (
+          {/* Zoom to layer — appears below the north arrow when the topmost active layer has bounds */}
+          {activeLayerIds[0] && boundsMap[activeLayerIds[0]] && (
             <button
               onClick={() => {
-                const b = boundsMap[selectedLayer.id];
+                const b = boundsMap[activeLayerIds[0]];
                 const map = mapRef?.current as any;
                 if (map && b) map.fitBounds([[b.minx, b.miny], [b.maxx, b.maxy]], { padding: 40, duration: 800 });
               }}
@@ -948,17 +959,28 @@ export default function Geoportal() {
           )}
         </div>
 
-        {/* Right panel */}
-        {selectedLayer && (
-          <RightPanel
-            layer={selectedLayer}
-            isActive={activeLayerIds.has(selectedLayer.id)}
-            onClose={() => setSelectedLayer(null)}
-            onToggle={handleToggle}
-            onOpacityChange={handleOpacityChange}
-            opacityMap={opacityMap}
-            categories={categories}
-          />
+        {/* Right panel — stacked details for every active layer, newest on top, one scroll region */}
+        {activeLayerIds.length > 0 && (
+          <div className="w-80 bg-white border-l border-gray-200 flex flex-col overflow-hidden shrink-0">
+            <div className="flex-1 overflow-y-auto divide-y divide-gray-200">
+              {activeLayerIds.map((id) => {
+                const layer = layers.find((l) => l.id === id);
+                if (!layer) return null;
+                return (
+                  <RightPanel
+                    key={id}
+                    layer={layer}
+                    isActive
+                    onClose={() => handleToggle(layer)}
+                    onToggle={handleToggle}
+                    onOpacityChange={handleOpacityChange}
+                    opacityMap={opacityMap}
+                    categories={categories}
+                  />
+                );
+              })}
+            </div>
+          </div>
         )}
       </div>
     </div>
