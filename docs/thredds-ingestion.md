@@ -20,7 +20,7 @@ One workflow represents one THREDDS **source** (shared base URL + dated-folder p
 | Model | Purpose | Key fields |
 |---|---|---|
 | `DownloadWorkflow` | One THREDDS source | `source_base_url`, `folder_pattern`, `schedule_hour_utc`/`schedule_minute_utc`, `retry_interval_minutes`, `retry_until_hour_utc`, `catch_up_days` |
-| `DownloadWorkflowFile` | One dataset + filename pattern mapped into a workflow (many per workflow) | `dataset` (FK to `catalog.DatasetPage`), `filename_pattern`, `lead_hours_csv`, `threshold_label`, `item_id_pattern`, `overwrite_existing` |
+| `DownloadWorkflowFile` | One dataset + filename pattern mapped into a workflow (many per workflow) | `dataset` (FK to `catalog.DatasetPage`), `filename_pattern`, `lead_hours_csv`, `threshold_label`, `item_id_pattern`, `overwrite_existing`, `datetime_from_run_date` |
 | `DownloadRun` | One execution of a workflow for one `run_date` | `status` (`pending`/`running`/`completed`/`partial`/`failed`), per-run counters |
 | `DownloadRunItem` | One resolved `(workflow_file, lead_hours)` file within a run | `source_url`, `item_id`, `status`, `ingestion_run_id` |
 
@@ -85,6 +85,10 @@ You never type out a resulting date or filename yourself — the same config pro
 | 2026-08-07 | 72 | 2026-08-10 | `heat_index_20260807_20260810.tif` |
 
 This is what makes a workflow keep working unattended day after day (and over an arbitrary backfill range) without ever touching its config again: `run_date` changes every day, `lead_hours_csv` stays fixed, and every placeholder that depends on either one is re-derived automatically for each run.
+
+### STAC datetime vs. filename lead: `datetime_from_run_date`
+
+By default, a resolved item's STAC `datetime` (and `DownloadRunItem.valid_datetime`) is `run_date + lead_hours` — the date the forecast is *valid for*. For some products you instead want it queryable by the date the forecast was *issued* (e.g. "today's heat index outlook"), regardless of lead. Check `datetime_from_run_date` on the `DownloadWorkflowFile` row to pin the STAC datetime to `run_date` alone — `filename_pattern`/`item_id_pattern` are unaffected and still resolve using the real lead, so the file/item id stay correct and unique; only the STAC-queryable date changes.
 
 ## Idempotency and retries
 

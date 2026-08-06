@@ -122,6 +122,16 @@ class DownloadWorkflowFile(models.Model):
         default=False,
         help_text="If true, re-download/re-ingest even when a DownloadRunItem already succeeded.",
     )
+    datetime_from_run_date = models.BooleanField(
+        default=False,
+        help_text=(
+            "If true, this item's STAC datetime (and valid_datetime) is run_date alone, "
+            "ignoring lead_hours - use when the forecast issue date should be what's "
+            "queryable/displayed (e.g. 'today's heat index outlook'), not the date the "
+            "forecast is valid for. filename_pattern/item_id_pattern are unaffected - "
+            "{valid_date}/{lead_hours} there still reflect the real lead."
+        ),
+    )
     enabled = models.BooleanField(default=True)
     sort_order = models.PositiveIntegerField(default=0)
 

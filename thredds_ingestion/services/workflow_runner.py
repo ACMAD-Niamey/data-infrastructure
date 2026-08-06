@@ -68,7 +68,10 @@ def process_item(
 
     source_url, filename = render_source_url(workflow, workflow_file, run.run_date, lh)
     item_id = render_item_id(workflow_file, dataset.dataset_id, run.run_date, lh)
-    valid_dt = render_valid_datetime(run.run_date, lh)
+    # filename/item_id always reflect the real lead (via lh above) - only the
+    # STAC/valid_datetime can be pinned to the issue date instead, per
+    # workflow_file.datetime_from_run_date.
+    valid_dt = render_valid_datetime(run.run_date, None if workflow_file.datetime_from_run_date else lh)
 
     item, created = DownloadRunItem.objects.get_or_create(
         run=run,

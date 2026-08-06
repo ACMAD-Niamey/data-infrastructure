@@ -179,6 +179,33 @@ class RealLeadHoursZeroTests(WorkflowRunnerTestCase):
         self.assertEqual(item_24.filename, "heat_index_20260805_20260806.tif")
 
 
+class DatetimeFromRunDateTests(WorkflowRunnerTestCase):
+    """datetime_from_run_date pins the STAC/valid_datetime to the issue date,
+    even though filename/item_id still reflect the real lead - e.g. heat
+    index should be queryable by "today's outlook" (run_date), not by the
+    date the forecast is valid for.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.workflow_file.filename_pattern = "heat_index_{run_date:%Y%m%d}_{valid_date:%Y%m%d}.tif"
+        self.workflow_file.lead_hours_csv = "72"
+        self.workflow_file.datetime_from_run_date = True
+        self.workflow_file.save()
+
+    @patch("thredds_ingestion.services.workflow_runner._stac_item_exists", return_value=True)
+    def test_valid_datetime_is_run_date_despite_lead_hours(self, _mock_stac):
+        item = workflow_runner.process_item(self.run, self.workflow_file, 72)
+
+        self.assertEqual(item.valid_datetime.date(), RUN_DATE)
+
+    @patch("thredds_ingestion.services.workflow_runner._stac_item_exists", return_value=True)
+    def test_filename_still_reflects_the_real_lead(self, _mock_stac):
+        item = workflow_runner.process_item(self.run, self.workflow_file, 72)
+
+        self.assertEqual(item.filename, "heat_index_20260805_20260808.tif")
+
+
 class ExecuteAggregationTests(WorkflowRunnerTestCase):
     @patch("thredds_ingestion.services.workflow_runner._stac_item_exists", return_value=True)
     def test_execute_marks_run_completed_when_all_items_reconciled(self, _mock_stac):
