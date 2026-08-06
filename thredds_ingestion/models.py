@@ -82,7 +82,7 @@ class DownloadWorkflowFile(models.Model):
         max_length=300,
         help_text=(
             "Rendered against run_date[, lead_hours, valid_date, threshold]. valid_date "
-            "is run_date + lead_hours, always available even without lead_hours_csv set. "
+            "is run_date + lead_hours hours (as a date), and defaults to run_date when lead_hours is unset. "
             "Examples: "
             "'5daymean_{run_date:%Y%m%d}.tif', "
             "'mix{run_date:%Y%m%d}_{lead_hours}.tif', "
