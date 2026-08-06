@@ -61,6 +61,16 @@ Assume `ACMAD weather forecast` already exists as a workflow pointing at `.../en
 | `threshold_label` | `50mm` |
 | `lead_hours_csv` | `24,48,72,96,120,144` |
 
+**Day-granularity product with the lead expressed as a second date**, not an hour count (e.g. `heat_index_20260806_20260809.tif` — same shape as the real `F_24hrPrecip_{run_date}_{valid_date}.nc` files on this THREDDS source):
+
+| Field | Value |
+|---|---|
+| `dataset` | `heat_index` |
+| `filename_pattern` | `heat_index_{run_date:%Y%m%d}_{valid_date:%Y%m%d}.tif` |
+| `lead_hours_csv` | `0,24,48,72,96,120` |
+
+`{valid_date}` is always available in any pattern — it's `run_date + lead_hours`, formatted as a date rather than a bare integer. It defaults to `run_date` itself when a mapping has no lead hours at all, so it's safe to use even on single-file-per-day products. Note `0` is a legitimate lead value here (a same-day/"day 0" forecast) and is treated as a real lead, not confused with "no lead-hour dimension" — that sentinel only applies when `lead_hours_csv` is left blank entirely.
+
 ## Idempotency and retries
 
 There is no dedup anywhere downstream — `ingest.tasks.post_item` does a bare POST with no existence check, so calling it twice with the same STAC item id either fails or silently overwrites depending on the STAC backend. This app owns 100% of the skip/retry logic itself, in this order, before any network call:
@@ -99,6 +109,28 @@ python manage.py run_download_workflow --all-enabled --days-back 14
 ```
 
 Use `--dispatch-celery` for anything spanning more than a few dates - it fans out one task per `(workflow, run_date)` so workers process the backlog in parallel instead of downloading/converting/ingesting one date at a time inline.
+
+## Running in production (Docker)
+
+Production runs everything through Docker Compose, so `manage.py` commands go through the `web` container rather than a bare `python` invocation. `schedule_hour_utc` only gates the **Celery Beat** task (`run_due_download_workflows`) — it has no effect on the management command, so there's no need to touch a workflow's schedule to test it immediately instead of waiting for its scheduled hour.
+
+SSH into the host first, then either form works (`docker compose exec` if your shell's `pwd` is the compose project directory; plain `docker exec <container_name>` otherwise — the container is named `geodatamanager_web` per `docker-compose.yml`):
+
+```bash
+# Dry run - confirm it resolves and the file is published, no side effects
+docker exec geodatamanager_web python manage.py run_download_workflow \
+  --workflow-name "<workflow name>" --run-date $(date -u +%Y-%m-%d) --dry-run
+
+# Real run
+docker exec geodatamanager_web python manage.py run_download_workflow \
+  --workflow-name "<workflow name>" --run-date $(date -u +%Y-%m-%d)
+
+# Backfill, dispatched to Celery workers
+docker exec geodatamanager_web python manage.py run_download_workflow \
+  --workflow-name "<workflow name>" --run-date-range 2026-07-01:2026-08-05 --dispatch-celery
+```
+
+Confirm results in admin at `/api/django-admin/thredds_ingestion/downloadrunitem/`, or `docker compose logs -f worker` while a `--dispatch-celery` backfill runs (a long historical range means real download/COG-conversion load on the worker).
 
 ## Scheduling (Celery Beat)
 

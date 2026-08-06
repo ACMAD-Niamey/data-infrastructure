@@ -58,7 +58,13 @@ def process_item(
 ) -> DownloadRunItem:
     workflow = run.workflow
     dataset = workflow_file.dataset
-    lh = lead_hours or None  # sentinel 0 -> omit {lead_hours} from rendered context
+    # lead_hours=0 is ambiguous on its own: it's both the sentinel for "this
+    # workflow_file has no lead-hour dimension" (execute() passes 0 when
+    # lead_hours_list() is empty) AND a legitimate configured lead (e.g. a
+    # "day 0" forecast in an explicit "0,24,48,..." series). Disambiguate by
+    # checking whether the workflow_file actually configures any lead hours,
+    # not by checking the truthiness of the value itself.
+    lh = lead_hours if workflow_file.lead_hours_list() else None
 
     source_url, filename = render_source_url(workflow, workflow_file, run.run_date, lh)
     item_id = render_item_id(workflow_file, dataset.dataset_id, run.run_date, lh)
