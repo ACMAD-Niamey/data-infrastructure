@@ -122,6 +122,28 @@ class DownloadWorkflowFile(models.Model):
         default=False,
         help_text="If true, re-download/re-ingest even when a DownloadRunItem already succeeded.",
     )
+    datetime_from_run_date = models.BooleanField(
+        default=False,
+        help_text=(
+            "If true, this item's STAC datetime (and valid_datetime) is run_date alone, "
+            "ignoring lead_hours - use when the forecast issue date should be what's "
+            "queryable/displayed (e.g. 'today's heat index outlook'), not the date the "
+            "forecast is valid for. filename_pattern/item_id_pattern are unaffected - "
+            "{valid_date}/{lead_hours} there still reflect the real lead. Also controls "
+            "the start of the window below when validity_hours is set."
+        ),
+    )
+    validity_hours = models.PositiveIntegerField(
+        null=True,
+        blank=True,
+        help_text=(
+            "If set, this item covers a window rather than an instant - it's ingested "
+            "with start_datetime/end_datetime instead of a single datetime, e.g. 120 for "
+            "a 5-day mean. The window starts at the same anchor datetime_from_run_date "
+            "controls (run_date, or run_date + lead_hours) and ends validity_hours later. "
+            "Leave blank for point-in-time products (the common case)."
+        ),
+    )
     enabled = models.BooleanField(default=True)
     sort_order = models.PositiveIntegerField(default=0)
 
@@ -218,7 +240,15 @@ class DownloadRunItem(models.Model):
         ),
     )
     valid_datetime = models.DateTimeField(
-        help_text="run_date + lead_hours (or run_date midnight UTC when lead_hours=0).",
+        help_text=(
+            "Window start (or the single instant, when workflow_file.validity_hours is "
+            "unset): run_date + lead_hours, or run_date alone if datetime_from_run_date."
+        ),
+    )
+    valid_end_datetime = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Window end (valid_datetime + workflow_file.validity_hours); blank for point-in-time items.",
     )
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.PENDING)
     attempt_count = models.PositiveIntegerField(default=0)

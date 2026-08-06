@@ -48,20 +48,35 @@ def upload_file(local_path: str, *, bucket: str = DEFAULT_BUCKET, key: str, cont
     return f"s3://{bucket}/{key}"
 
 
-def push_to_ingest(*, dataset, href: str, item_id: str, valid_datetime: datetime):
+def push_to_ingest(
+    *,
+    dataset,
+    href: str,
+    item_id: str,
+    valid_datetime: datetime,
+    valid_end_datetime: datetime | None = None,
+):
     """Create an IngestionRun for href and run it synchronously (not .delay()),
     so the final status is known immediately with no polling. Reuses
     ingest.tasks.process_ingestion_run, which already does COG conversion and
     bbox/geometry extraction internally - nothing here duplicates that.
+
+    valid_end_datetime is None for point-in-time items (the common case) -
+    ingest.tasks.build_item is told a single `datetime`. When set (a
+    workflow_file with validity_hours configured), it's a window instead -
+    build_item is told `start_datetime`/`end_datetime`, matching how
+    dekadal/seasonal cadence items are already expressed by the ingest API.
     """
     from ingest.models import IngestionRun
     from ingest.tasks import process_ingestion_run
 
-    payload = {
-        "item_id": item_id,
-        "datetime": valid_datetime.isoformat(),
-        "asset": {"href": href},
-    }
+    payload = {"item_id": item_id, "asset": {"href": href}}
+    if valid_end_datetime is not None:
+        payload["start_datetime"] = valid_datetime.isoformat()
+        payload["end_datetime"] = valid_end_datetime.isoformat()
+    else:
+        payload["datetime"] = valid_datetime.isoformat()
+
     run = IngestionRun.objects.create(
         dataset_id=dataset.dataset_id,
         cadence=dataset.cadence,

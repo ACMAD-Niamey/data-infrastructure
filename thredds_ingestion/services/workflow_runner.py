@@ -18,6 +18,7 @@ here, in this order, before any network call:
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 from pathlib import Path
 
 from django.conf import settings
@@ -68,7 +69,13 @@ def process_item(
 
     source_url, filename = render_source_url(workflow, workflow_file, run.run_date, lh)
     item_id = render_item_id(workflow_file, dataset.dataset_id, run.run_date, lh)
-    valid_dt = render_valid_datetime(run.run_date, lh)
+    # filename/item_id always reflect the real lead (via lh above) - only the
+    # STAC/valid_datetime can be pinned to the issue date instead, per
+    # workflow_file.datetime_from_run_date.
+    valid_dt = render_valid_datetime(run.run_date, None if workflow_file.datetime_from_run_date else lh)
+    # A window (start_datetime/end_datetime) instead of a point-in-time
+    # instant, for products like a 5-day mean - None for the common case.
+    valid_end_dt = valid_dt + timedelta(hours=workflow_file.validity_hours) if workflow_file.validity_hours else None
 
     item, created = DownloadRunItem.objects.get_or_create(
         run=run,
@@ -79,6 +86,7 @@ def process_item(
             "source_url": source_url,
             "item_id": item_id,
             "valid_datetime": valid_dt,
+            "valid_end_datetime": valid_end_dt,
         },
     )
     overwrite = force or workflow_file.overwrite_existing
@@ -91,6 +99,7 @@ def process_item(
     item.source_url = source_url
     item.item_id = item_id
     item.valid_datetime = valid_dt
+    item.valid_end_datetime = valid_end_dt
 
     # 2. STAC reconciliation fast path.
     if not overwrite and _stac_item_exists(dataset, item_id):
@@ -135,7 +144,7 @@ def process_item(
 
         # 4. Download -> MinIO put -> ingest (above), synchronous ingest call below.
         ingestion_run = ingest_bridge.push_to_ingest(
-            dataset=dataset, href=href, item_id=item_id, valid_datetime=valid_dt
+            dataset=dataset, href=href, item_id=item_id, valid_datetime=valid_dt, valid_end_datetime=valid_end_dt
         )
         item.ingestion_run_id = ingestion_run.id
 

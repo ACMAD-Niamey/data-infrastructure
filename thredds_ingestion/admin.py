@@ -13,6 +13,8 @@ class DownloadWorkflowFileInline(admin.TabularInline):
         "lead_hours_csv",
         "threshold_label",
         "item_id_pattern",
+        "datetime_from_run_date",
+        "validity_hours",
         "overwrite_existing",
         "enabled",
         "sort_order",
@@ -31,7 +33,17 @@ class DownloadWorkflowAdmin(admin.ModelAdmin):
 class DownloadRunItemInline(admin.TabularInline):
     model = DownloadRunItem
     extra = 0
-    fields = ("workflow_file", "lead_hours", "filename", "status", "attempt_count", "item_id", "error_message")
+    fields = (
+        "workflow_file",
+        "lead_hours",
+        "filename",
+        "status",
+        "attempt_count",
+        "item_id",
+        "valid_datetime",
+        "valid_end_datetime",
+        "error_message",
+    )
     readonly_fields = fields
     can_delete = False
 
