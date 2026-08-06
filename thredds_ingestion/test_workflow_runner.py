@@ -152,6 +152,33 @@ class NoLeadHoursMappingTests(WorkflowRunnerTestCase):
         self.assertNotIn("None", item.item_id)
 
 
+class RealLeadHoursZeroTests(WorkflowRunnerTestCase):
+    """lead_hours=0 must behave as a real configured lead (e.g. heat_index's
+    day-0 forecast in a "0,24,48,72" series), not be conflated with the
+    sentinel used for workflow_files that have no lead-hour dimension at all.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.workflow_file.filename_pattern = "heat_index_{run_date:%Y%m%d}_{valid_date:%Y%m%d}.tif"
+        self.workflow_file.lead_hours_csv = "0,24,48"
+        self.workflow_file.save()
+
+    @patch("thredds_ingestion.services.workflow_runner._stac_item_exists", return_value=True)
+    def test_lead_hours_zero_renders_valid_date_equal_to_run_date(self, _mock_stac):
+        item = workflow_runner.process_item(self.run, self.workflow_file, 0)
+
+        self.assertEqual(item.filename, "heat_index_20260805_20260805.tif")
+
+    @patch("thredds_ingestion.services.workflow_runner._stac_item_exists", return_value=True)
+    def test_lead_hours_zero_and_24_produce_distinct_items(self, _mock_stac):
+        item_0 = workflow_runner.process_item(self.run, self.workflow_file, 0)
+        item_24 = workflow_runner.process_item(self.run, self.workflow_file, 24)
+
+        self.assertNotEqual(item_0.item_id, item_24.item_id)
+        self.assertEqual(item_24.filename, "heat_index_20260805_20260806.tif")
+
+
 class ExecuteAggregationTests(WorkflowRunnerTestCase):
     @patch("thredds_ingestion.services.workflow_runner._stac_item_exists", return_value=True)
     def test_execute_marks_run_completed_when_all_items_reconciled(self, _mock_stac):

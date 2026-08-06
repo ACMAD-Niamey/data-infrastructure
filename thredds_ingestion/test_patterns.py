@@ -72,6 +72,41 @@ class RenderSourceUrlTests(SimpleTestCase):
         with self.assertRaises(PatternRenderError):
             render_source_url(workflow, wff, RUN_DATE, None)
 
+    def test_valid_date_placeholder_for_day_granularity_products(self):
+        # heat_index_20260806_20260809.tif: second date is run_date + lead
+        # days, not a bare hour count - matches the real
+        # F_24hrPrecip_{run_date}_{valid_date}.nc shape found on THREDDS.
+        workflow = _workflow()
+        wff = _workflow_file(
+            "heat_index_{run_date:%Y%m%d}_{valid_date:%Y%m%d}.tif", lead_hours_csv="0,24,48,72"
+        )
+
+        _, filename_0 = render_source_url(workflow, wff, RUN_DATE, 0)
+        _, filename_3d = render_source_url(workflow, wff, RUN_DATE, 72)
+
+        self.assertEqual(filename_0, "heat_index_20260805_20260805.tif")
+        self.assertEqual(filename_3d, "heat_index_20260805_20260808.tif")
+
+    def test_valid_date_defaults_to_run_date_with_no_lead_hours(self):
+        workflow = _workflow()
+        wff = _workflow_file("5daymean_{run_date:%Y%m%d}_{valid_date:%Y%m%d}.tif")
+
+        _, filename = render_source_url(workflow, wff, RUN_DATE, None)
+
+        self.assertEqual(filename, "5daymean_20260805_20260805.tif")
+
+    def test_real_lead_hours_zero_is_distinct_from_sentinel(self):
+        # A pattern that references bare {lead_hours} must render "0" for a
+        # real, configured lead_hours=0 (e.g. a "day 0" forecast in an
+        # explicit "0,24,48" series) - it must not be silently dropped the
+        # way an unconfigured/sentinel lead_hours is.
+        workflow = _workflow()
+        wff = _workflow_file("mix{run_date:%Y%m%d}_{lead_hours}.tif", lead_hours_csv="0,24")
+
+        _, filename = render_source_url(workflow, wff, RUN_DATE, 0)
+
+        self.assertEqual(filename, "mix20260805_0.tif")
+
 
 class RenderItemIdTests(SimpleTestCase):
     def test_item_id_differs_across_lead_hours(self):
@@ -89,6 +124,13 @@ class RenderItemIdTests(SimpleTestCase):
         item_id = render_item_id(wff, "5daymean", RUN_DATE, None)
 
         self.assertEqual(item_id, "5daymean_20260805")
+
+    def test_real_lead_hours_zero_gets_hour_suffix_like_any_other_lead(self):
+        wff = _workflow_file("mix{run_date:%Y%m%d}_{lead_hours}.tif", lead_hours_csv="0,24")
+
+        item_id = render_item_id(wff, "mix6", RUN_DATE, 0)
+
+        self.assertEqual(item_id, "mix6_20260805_0h")
 
     def test_explicit_item_id_pattern_is_used_when_set(self):
         wff = _workflow_file(
