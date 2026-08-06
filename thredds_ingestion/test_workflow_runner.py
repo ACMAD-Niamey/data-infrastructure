@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from unittest.mock import patch
 
 from django.test import TestCase
@@ -204,6 +204,50 @@ class DatetimeFromRunDateTests(WorkflowRunnerTestCase):
         item = workflow_runner.process_item(self.run, self.workflow_file, 72)
 
         self.assertEqual(item.filename, "heat_index_20260805_20260808.tif")
+
+
+class ValidityWindowTests(WorkflowRunnerTestCase):
+    """validity_hours turns a point-in-time item into a start/end window,
+    e.g. a 5-day mean covering run_date through run_date + 120h."""
+
+    def setUp(self):
+        super().setUp()
+        self.workflow_file.validity_hours = 120
+        self.workflow_file.save()
+
+    @patch("thredds_ingestion.services.workflow_runner._stac_item_exists", return_value=True)
+    def test_valid_end_datetime_is_start_plus_validity_hours(self, _mock_stac):
+        item = workflow_runner.process_item(self.run, self.workflow_file, 0)
+
+        self.assertEqual(item.valid_datetime, datetime(2026, 8, 5, tzinfo=timezone.utc))
+        self.assertEqual(item.valid_end_datetime, datetime(2026, 8, 10, tzinfo=timezone.utc))
+
+    @patch("thredds_ingestion.services.workflow_runner._stac_item_exists", return_value=False)
+    @patch("thredds_ingestion.services.workflow_runner.ingest_bridge.push_to_ingest")
+    @patch("thredds_ingestion.services.workflow_runner.ingest_bridge.upload_file", return_value="s3://geodata/x.tif")
+    @patch("thredds_ingestion.services.workflow_runner.thredds_client.download_to_path")
+    @patch("thredds_ingestion.services.workflow_runner.thredds_client.exists", return_value=True)
+    def test_push_to_ingest_receives_the_window(
+        self, mock_thredds_exists, mock_download, mock_upload, mock_push, mock_stac
+    ):
+        mock_push.return_value = IngestionRun.objects.create(
+            dataset_id=self.dataset.dataset_id, cadence="daily", status="completed"
+        )
+
+        workflow_runner.process_item(self.run, self.workflow_file, 0)
+
+        mock_push.assert_called_once()
+        self.assertEqual(
+            mock_push.call_args.kwargs["valid_end_datetime"], datetime(2026, 8, 10, tzinfo=timezone.utc)
+        )
+
+    def test_no_validity_hours_means_no_window(self):
+        self.workflow_file.validity_hours = None
+        self.workflow_file.save()
+        with patch("thredds_ingestion.services.workflow_runner._stac_item_exists", return_value=True):
+            item = workflow_runner.process_item(self.run, self.workflow_file, 0)
+
+        self.assertIsNone(item.valid_end_datetime)
 
 
 class ExecuteAggregationTests(WorkflowRunnerTestCase):

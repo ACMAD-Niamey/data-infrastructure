@@ -20,7 +20,7 @@ One workflow represents one THREDDS **source** (shared base URL + dated-folder p
 | Model | Purpose | Key fields |
 |---|---|---|
 | `DownloadWorkflow` | One THREDDS source | `source_base_url`, `folder_pattern`, `schedule_hour_utc`/`schedule_minute_utc`, `retry_interval_minutes`, `retry_until_hour_utc`, `catch_up_days` |
-| `DownloadWorkflowFile` | One dataset + filename pattern mapped into a workflow (many per workflow) | `dataset` (FK to `catalog.DatasetPage`), `filename_pattern`, `lead_hours_csv`, `threshold_label`, `item_id_pattern`, `overwrite_existing`, `datetime_from_run_date` |
+| `DownloadWorkflowFile` | One dataset + filename pattern mapped into a workflow (many per workflow) | `dataset` (FK to `catalog.DatasetPage`), `filename_pattern`, `lead_hours_csv`, `threshold_label`, `item_id_pattern`, `overwrite_existing`, `datetime_from_run_date`, `validity_hours` |
 | `DownloadRun` | One execution of a workflow for one `run_date` | `status` (`pending`/`running`/`completed`/`partial`/`failed`), per-run counters |
 | `DownloadRunItem` | One resolved `(workflow_file, lead_hours)` file within a run | `source_url`, `item_id`, `status`, `ingestion_run_id` |
 
@@ -89,6 +89,12 @@ This is what makes a workflow keep working unattended day after day (and over an
 ### STAC datetime vs. filename lead: `datetime_from_run_date`
 
 By default, a resolved item's STAC `datetime` (and `DownloadRunItem.valid_datetime`) is `run_date + lead_hours` — the date the forecast is *valid for*. For some products you instead want it queryable by the date the forecast was *issued* (e.g. "today's heat index outlook"), regardless of lead. Check `datetime_from_run_date` on the `DownloadWorkflowFile` row to pin the STAC datetime to `run_date` alone — `filename_pattern`/`item_id_pattern` are unaffected and still resolve using the real lead, so the file/item id stay correct and unique; only the STAC-queryable date changes.
+
+### Products with a validity window: `validity_hours`
+
+Some products don't represent an instant at all — a 5-day mean covers a period, not a point in time. Set `validity_hours` on the `DownloadWorkflowFile` row (e.g. `120` for 5 days) and the item is ingested with `start_datetime`/`end_datetime` instead of a single `datetime` — reusing the same fields the `ingest` API already uses for dekadal/seasonal cadence products (`ingest.tasks.build_item`). The window starts at whatever `valid_datetime` already resolves to (`run_date + lead_hours`, or `run_date` alone if `datetime_from_run_date` is also set) and ends `validity_hours` later. `DownloadRunItem.valid_end_datetime` records the window end for reference; it's blank for the common point-in-time case (`validity_hours` unset).
+
+Example: a 5-day mean issued `2026-08-05`, `datetime_from_run_date=True`, `validity_hours=120` → STAC window `2026-08-05T00:00:00Z` to `2026-08-10T00:00:00Z`.
 
 ## Idempotency and retries
 
