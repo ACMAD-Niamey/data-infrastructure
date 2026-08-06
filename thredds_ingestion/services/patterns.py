@@ -15,11 +15,22 @@ class PatternRenderError(ValueError):
 
 
 def _context(*, run_date: date, lead_hours: int | None, threshold_label: str, dataset_id: str) -> dict:
-    ctx: dict = {"run_date": run_date, "dataset_id": dataset_id}
-    # Omit lead_hours/threshold entirely when unset, rather than passing None/"",
-    # so a pattern referencing {lead_hours} on a mapping with none configured
-    # raises loudly instead of silently rendering "...None.tif".
-    if lead_hours:
+    ctx: dict = {
+        "run_date": run_date,
+        "dataset_id": dataset_id,
+        # Always present, unlike lead_hours/threshold below: valid_date is
+        # well-defined from run_date alone (defaults to run_date itself when
+        # there's no lead dimension), for products whose filename embeds a
+        # second *date* rather than a bare hour count, e.g.
+        # heat_index_{run_date:%Y%m%d}_{valid_date:%Y%m%d}.tif.
+        "valid_date": render_valid_datetime(run_date, lead_hours).date(),
+    }
+    # Omit lead_hours/threshold entirely when unset (lead_hours is None, not
+    # merely falsy - 0 is a legitimate configured lead, e.g. a "day 0"
+    # forecast in a 0/24/48h series), so a pattern referencing {lead_hours}
+    # on a mapping with none configured raises loudly instead of silently
+    # rendering "...None.tif".
+    if lead_hours is not None:
         ctx["lead_hours"] = lead_hours
     if threshold_label:
         ctx["threshold"] = threshold_label
@@ -75,7 +86,7 @@ def render_item_id(
             threshold_label=workflow_file.threshold_label,
             dataset_id=dataset_id,
         )
-    if lead_hours:
+    if lead_hours is not None:
         return f"{dataset_id}_{run_date:%Y%m%d}_{lead_hours}h"
     return f"{dataset_id}_{run_date:%Y%m%d}"
 

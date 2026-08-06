@@ -81,10 +81,14 @@ class DownloadWorkflowFile(models.Model):
     filename_pattern = models.CharField(
         max_length=300,
         help_text=(
-            "Rendered against run_date[, lead_hours, threshold]. Examples: "
+            "Rendered against run_date[, lead_hours, valid_date, threshold]. valid_date "
+            "is run_date + lead_hours hours (as a date), and defaults to run_date when lead_hours is unset. "
+            "Examples: "
             "'5daymean_{run_date:%Y%m%d}.tif', "
             "'mix{run_date:%Y%m%d}_{lead_hours}.tif', "
-            "'pop{run_date:%Y%m%d}_{threshold}_{lead_hours}.tif'."
+            "'pop{run_date:%Y%m%d}_{threshold}_{lead_hours}.tif', "
+            "'heat_index_{run_date:%Y%m%d}_{valid_date:%Y%m%d}.tif' (lead_hours_csv in "
+            "multiples of 24 for a day-granularity product like this one)."
         ),
     )
     lead_hours_csv = models.CharField(
@@ -92,8 +96,9 @@ class DownloadWorkflowFile(models.Model):
         blank=True,
         default="",
         help_text=(
-            "Comma-separated lead hours, e.g. '24,96,144'. Leave blank for "
-            "single-file-per-day products with no {lead_hours} placeholder."
+            "Comma-separated lead hours, e.g. '24,96,144'. '0' is a valid lead (e.g. a "
+            "same-day forecast in a '0,24,48' series) - leave the whole field blank "
+            "instead for single-file-per-day products with no lead dimension at all."
         ),
     )
     threshold_label = models.CharField(
