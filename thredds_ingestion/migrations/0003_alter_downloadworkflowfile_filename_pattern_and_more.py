@@ -13,7 +13,7 @@ class Migration(migrations.Migration):
         migrations.AlterField(
             model_name='downloadworkflowfile',
             name='filename_pattern',
-            field=models.CharField(help_text="Rendered against run_date[, lead_hours, valid_date, threshold]. valid_date is run_date + lead_hours, always available even without lead_hours_csv set. Examples: '5daymean_{run_date:%Y%m%d}.tif', 'mix{run_date:%Y%m%d}_{lead_hours}.tif', 'pop{run_date:%Y%m%d}_{threshold}_{lead_hours}.tif', 'heat_index_{run_date:%Y%m%d}_{valid_date:%Y%m%d}.tif' (lead_hours_csv in multiples of 24 for a day-granularity product like this one).", max_length=300),
+            field=models.CharField(help_text="Rendered against run_date[, lead_hours, valid_date, threshold]. valid_date is run_date + lead_hours hours (as a date), and defaults to run_date when lead_hours is unset. Examples: '5daymean_{run_date:%Y%m%d}.tif', 'mix{run_date:%Y%m%d}_{lead_hours}.tif', 'pop{run_date:%Y%m%d}_{threshold}_{lead_hours}.tif', 'heat_index_{run_date:%Y%m%d}_{valid_date:%Y%m%d}.tif' (lead_hours_csv in multiples of 24 for a day-granularity product like this one).", max_length=300),
         ),
         migrations.AlterField(
             model_name='downloadworkflowfile',
