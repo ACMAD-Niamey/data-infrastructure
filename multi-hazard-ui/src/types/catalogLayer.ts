@@ -59,6 +59,7 @@ export type CatalogLayer = {
   legend: Record<string, string>;
   ui: {
     default_visible: boolean;
+    always_on_top: boolean;
     opacity: number;
     minzoom: number;
     maxzoom: number;

@@ -66,6 +66,7 @@ def geoserver_layer_to_api_dict(layer: GeoServerLayer, request) -> dict:
         "tile":       {"template": layer.wms_url_template, "params": {}},
         "ui": {
             "default_visible": layer.default_visible,
+            "always_on_top":   False,
             "opacity":         layer.opacity,
             "minzoom":         0,
             "maxzoom":         12,
@@ -124,6 +125,7 @@ def static_wms_to_api_dict(layer: StaticWmsLayer, request) -> dict:
         "tile":       {"template": layer.tile_url, "params": {}},
         "ui": {
             "default_visible": layer.default_visible,
+            "always_on_top":   layer.always_on_top,
             "opacity":         layer.opacity,
             "minzoom":         0,
             "maxzoom":         22,

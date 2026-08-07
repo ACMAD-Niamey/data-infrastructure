@@ -1097,6 +1097,13 @@ class StaticWmsLayer(models.Model):
     description = RichTextField(blank=True)
 
     default_visible = models.BooleanField(default=False)
+    always_on_top = models.BooleanField(
+        default=False,
+        help_text=(
+            "Keep this layer rendered above every other active layer, e.g. an "
+            "admin-boundary overlay that should stay visible over hazard rasters."
+        ),
+    )
     opacity = models.FloatField(default=0.85)
     sort_order = models.PositiveIntegerField(default=0)
     color_class = models.CharField(max_length=80, default="text-blue-600", blank=True)
@@ -1121,6 +1128,7 @@ class StaticWmsLayer(models.Model):
         MultiFieldPanel(
             [
                 FieldPanel("default_visible"),
+                FieldPanel("always_on_top"),
                 FieldPanel("opacity"),
                 FieldPanel("sort_order"),
                 FieldPanel("color_class"),
