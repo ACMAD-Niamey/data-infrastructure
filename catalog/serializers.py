@@ -32,6 +32,7 @@ class TileConfigSerializer(serializers.Serializer):
 class UIConfigSerializer(serializers.Serializer):
     """UI display configuration serializer"""
     default_visible = serializers.BooleanField()
+    always_on_top = serializers.BooleanField(required=False, default=False)
     opacity = serializers.FloatField(min_value=0.0, max_value=1.0)
     minzoom = serializers.IntegerField(min_value=0)
     maxzoom = serializers.IntegerField(min_value=0, max_value=22)
