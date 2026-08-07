@@ -8,6 +8,7 @@ import NavBar from '../components/NavBar';
 import MapComponent from '../components/map.jsx';
 import { useMap } from '../components/MapContext.jsx';
 import { add_image_layer, remove_image_layer } from '../components/Maputils.js';
+import { LegendDisplay } from '../components/LegendDisplay';
 import { useCatalogLayers } from '../hooks/useCatalogLayers';
 import { useHazardCategories } from '../hooks/useHazardCategories';
 import { fetchDatasetAvailability, fetchDatasetVisualization } from '../services/layersApi';
@@ -169,6 +170,56 @@ export default function Home() {
   const [currentDateLabel, setCurrentDateLabel] = useState<string | null>(null);
   const [legendEntries, setLegendEntries] = useState<[string, string][]>([]);
   const prevLayerIdRef = useRef<string | null>(null);
+  // Layers pinned to always show on the homepage hero map, independent of the category
+  // switcher (e.g. an admin-boundary overlay) — loaded once and never swapped by category changes.
+  const loadedHomepageLayerIdsRef = useRef<Set<string>>(new Set());
+
+  // Re-assert any homepage layer marked always-on-top above the map's other layers —
+  // call this right after the category raster (or another homepage layer) is added.
+  const pinHomepageAlwaysOnTop = (justAddedLayerId?: string) => {
+    const map = mapRef?.current as any;
+    if (!map) return;
+    layers.forEach((l) => {
+      if (l.id === justAddedLayerId || !l.ui?.display_on_homepage || !l.ui?.always_on_top) return;
+      const rasterId = `raster-home-pin-${l.id}`;
+      if (map.getLayer(rasterId)) map.moveLayer(rasterId);
+    });
+  };
+
+  // Load every layer marked "display on homepage" once, alongside the category raster.
+  useEffect(() => {
+    const map = mapRef?.current as any;
+    if (!map) return;
+
+    layers
+      .filter((l) => l.ui?.display_on_homepage && !loadedHomepageLayerIdsRef.current.has(l.id))
+      .forEach((layer) => {
+        loadedHomepageLayerIdsRef.current.add(layer.id);
+        const cadence = layer.dataset.cadence;
+        const rasterId = `raster-home-pin-${layer.id}`;
+
+        fetchDatasetAvailability({ datasetId: layer.dataset.id, cadence })
+          .then(({ max, options }) => {
+            const date = max || options[0]?.value;
+            if (!date) return null;
+            return fetchDatasetVisualization({ datasetId: layer.dataset.id, cadence, date });
+          })
+          .then((result) => {
+            if (!result || !result.tileUrl) return;
+            const { tileUrl, bounds } = result;
+            const doAdd = () => {
+              add_image_layer(map, tileUrl, rasterId, true, bounds, false);
+              pinHomepageAlwaysOnTop(layer.id);
+            };
+            if (map.loaded()) doAdd();
+            else map.once('load', doAdd);
+          })
+          .catch(() => {
+            loadedHomepageLayerIdsRef.current.delete(layer.id);
+          });
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [layers, mapRef]);
 
   // Default to the first category (lowest sort order) once categories load
   useEffect(() => {
@@ -217,10 +268,12 @@ export default function Home() {
         const { tileUrl, bounds } = result;
         if (map.loaded()) {
           add_image_layer(map, tileUrl, rasterId, true, bounds, false);
+          pinHomepageAlwaysOnTop();
         } else {
           map.once('load', () => {
             if (controller.signal.aborted) return;
             add_image_layer(map, tileUrl, rasterId, true, bounds, false);
+            pinHomepageAlwaysOnTop();
           });
         }
       })
@@ -305,14 +358,7 @@ export default function Home() {
             {legendEntries.length > 0 && (
               <div className="absolute bottom-8 right-4 z-10 bg-white/90 backdrop-blur-sm rounded-lg shadow-md px-3 py-2.5 max-w-[180px]">
                 <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Legend</p>
-                <div className="space-y-1">
-                  {legendEntries.map(([label, color]) => (
-                    <div key={label} className="flex items-center gap-1.5">
-                      <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: color }} />
-                      <span className="text-xs text-gray-700 leading-tight">{label}</span>
-                    </div>
-                  ))}
-                </div>
+                <LegendDisplay entries={legendEntries} />
               </div>
             )}
 

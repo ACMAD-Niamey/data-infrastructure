@@ -60,6 +60,7 @@ export type CatalogLayer = {
   ui: {
     default_visible: boolean;
     always_on_top: boolean;
+    display_on_homepage: boolean;
     opacity: number;
     minzoom: number;
     maxzoom: number;
