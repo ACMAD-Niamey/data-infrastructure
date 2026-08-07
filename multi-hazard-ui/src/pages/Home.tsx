@@ -8,6 +8,7 @@ import NavBar from '../components/NavBar';
 import MapComponent from '../components/map.jsx';
 import { useMap } from '../components/MapContext.jsx';
 import { add_image_layer, remove_image_layer } from '../components/Maputils.js';
+import { LegendDisplay } from '../components/LegendDisplay';
 import { useCatalogLayers } from '../hooks/useCatalogLayers';
 import { useHazardCategories } from '../hooks/useHazardCategories';
 import { fetchDatasetAvailability, fetchDatasetVisualization } from '../services/layersApi';
@@ -357,14 +358,7 @@ export default function Home() {
             {legendEntries.length > 0 && (
               <div className="absolute bottom-8 right-4 z-10 bg-white/90 backdrop-blur-sm rounded-lg shadow-md px-3 py-2.5 max-w-[180px]">
                 <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Legend</p>
-                <div className="space-y-1">
-                  {legendEntries.map(([label, color]) => (
-                    <div key={label} className="flex items-center gap-1.5">
-                      <div className="w-3 h-3 rounded-sm shrink-0" style={{ backgroundColor: color }} />
-                      <span className="text-xs text-gray-700 leading-tight">{label}</span>
-                    </div>
-                  ))}
-                </div>
+                <LegendDisplay entries={legendEntries} />
               </div>
             )}
 
