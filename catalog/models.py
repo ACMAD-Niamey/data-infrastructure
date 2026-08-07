@@ -1104,6 +1104,14 @@ class StaticWmsLayer(models.Model):
             "admin-boundary overlay that should stay visible over hazard rasters."
         ),
     )
+    display_on_homepage = models.BooleanField(
+        default=False,
+        help_text=(
+            "Show this layer on the homepage hero map, alongside whichever hazard "
+            "category the visitor has selected. Combine with 'Always on top' to keep "
+            "it above the homepage's category raster too."
+        ),
+    )
     opacity = models.FloatField(default=0.85)
     sort_order = models.PositiveIntegerField(default=0)
     color_class = models.CharField(max_length=80, default="text-blue-600", blank=True)
@@ -1129,6 +1137,7 @@ class StaticWmsLayer(models.Model):
             [
                 FieldPanel("default_visible"),
                 FieldPanel("always_on_top"),
+                FieldPanel("display_on_homepage"),
                 FieldPanel("opacity"),
                 FieldPanel("sort_order"),
                 FieldPanel("color_class"),
