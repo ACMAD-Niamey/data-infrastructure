@@ -51,9 +51,10 @@ type RightPanelProps = {
   onOpacityChange: (layerId: string, opacity: number) => void;
   opacityMap: Record<string, number>;
   categories: HazardCategory[];
+  onTileApplied: (layerId: string) => void;
 };
 
-function RightPanel({ layer, isActive, onClose, onToggle, onOpacityChange, opacityMap, categories }: RightPanelProps) {
+function RightPanel({ layer, isActive, onClose, onToggle, onOpacityChange, opacityMap, categories, onTileApplied }: RightPanelProps) {
   const [tab, setTab] = useState<'details' | 'analysis'>('details');
   const [showFullDetails, setShowFullDetails] = useState(false);
   const [availability, setAvailability] = useState<string[]>([]);
@@ -94,10 +95,14 @@ function RightPanel({ layer, isActive, onClose, onToggle, onOpacityChange, opaci
       .then(({ tileUrl, bounds }) => {
         if (controller.signal.aborted || !tileUrl) return;
         add_image_layer(map, tileUrl, rasterId, true, bounds, false);
+        onTileApplied(layer.id);
       })
       .catch(() => {});
 
     return () => controller.abort();
+  // onTileApplied intentionally omitted — it's a stable per-render closure from the parent,
+  // including it would refire this effect every render without changing what it does here.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isActive, layer.id, layer.dataset.id, cadence, vizDate, mapRef]);
 
   // Apply opacity changes without re-fetching the tile
@@ -751,6 +756,20 @@ export default function Geoportal() {
     });
   };
 
+  // Re-assert any active always-on-top layer (e.g. an admin-boundary overlay) above the
+  // map's other raster layers. Call this right after any *other* layer's tile is added,
+  // since MapLibre renders layers in the order they were last added/moved.
+  const pinAlwaysOnTopLayers = (justAppliedLayerId: string) => {
+    const map = mapRef?.current as any;
+    if (!map) return;
+    layers.forEach((l) => {
+      if (l.id === justAppliedLayerId || !l.ui?.always_on_top) return;
+      if (!activeLayerIds.includes(l.id)) return;
+      const rasterId = `raster-${l.id}`;
+      if (map.getLayer(rasterId)) map.moveLayer(rasterId);
+    });
+  };
+
   // Fetch the latest tile for a layer and add it to the map
   const loadLayerTile = async (layer: CatalogLayer) => {
     const map = mapRef?.current as any;
@@ -773,6 +792,7 @@ export default function Geoportal() {
         if (map.getLayer(rasterId)) {
           map.setPaintProperty(rasterId, 'raster-opacity', opacity);
         }
+        pinAlwaysOnTopLayers(layer.id);
       };
 
       // Defer until the map style is loaded — addSource/addLayer throw if called too early
@@ -976,6 +996,7 @@ export default function Geoportal() {
                     onOpacityChange={handleOpacityChange}
                     opacityMap={opacityMap}
                     categories={categories}
+                    onTileApplied={pinAlwaysOnTopLayers}
                   />
                 );
               })}
