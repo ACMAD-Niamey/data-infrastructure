@@ -13,6 +13,7 @@ from catalog.models import DatasetPage, Layer, ProjectPage
 DEFAULT_UI = {
     "default_visible": False,
     "always_on_top": False,
+    "display_on_homepage": False,
     "opacity": 0.85,
     "minzoom": 0,
     "maxzoom": 12,
@@ -63,6 +64,7 @@ def dataset_to_api_dict(dataset: DatasetPage, request, category_override: str | 
         ui = {
             "default_visible": style.default_visible,
             "always_on_top": False,
+            "display_on_homepage": False,
             "opacity": style.opacity,
             "minzoom": style.minzoom,
             "maxzoom": style.maxzoom,

@@ -14,6 +14,7 @@ import NavBar from '../components/NavBar';
 import MapComponent from '../components/map.jsx';
 import { useMap } from '../components/MapContext.jsx';
 import { add_image_layer, remove_image_layer } from '../components/Maputils.js';
+import { LegendDisplay } from '../components/LegendDisplay';
 import { useCatalogLayers } from '../hooks/useCatalogLayers';
 import {
   fetchDatasetAvailability,
@@ -213,17 +214,7 @@ function RightPanel({ layer, isActive, onClose, onToggle, onOpacityChange, opaci
             {layer.legend && Object.keys(layer.legend).length > 0 && (
               <div>
                 <p className="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wide">Legend</p>
-                <div className="space-y-1.5">
-                  {Object.entries(layer.legend).map(([label, color]) => (
-                    <div key={label} className="flex items-center gap-2">
-                      <div
-                        className="size-4 rounded-full border border-gray-300 shrink-0"
-                        style={{ backgroundColor: color as string }}
-                      />
-                      <span className="text-xs text-gray-700">{label}</span>
-                    </div>
-                  ))}
-                </div>
+                <LegendDisplay entries={Object.entries(layer.legend)} />
               </div>
             )}
 
