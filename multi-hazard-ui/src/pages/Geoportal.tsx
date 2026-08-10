@@ -827,15 +827,15 @@ export default function Geoportal() {
     if (hasAppliedDatasetParamRef.current || loading || layers.length === 0) return;
     const datasetParam = searchParams.get('dataset');
     if (!datasetParam) return;
-    hasAppliedDatasetParamRef.current = true;
     const target = layers.find((l) => l.dataset.id === datasetParam);
     if (!target) return;
+    hasAppliedDatasetParamRef.current = true;
+
     const category = inferCategory(target);
     setActiveCategory(category);
     setExpandedCategories((prev) => new Set(prev).add(category));
-    if (!activeLayerIds.includes(target.id)) {
-      handleToggle(target);
-    }
+    setActiveLayerIds((prev) => (prev.includes(target.id) ? prev : [target.id, ...prev]));
+    loadLayerTile(target);
   }, [layers, loading, searchParams]);
 
   return (
