@@ -1,17 +1,35 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, Database, Satellite, BookOpen, Layers } from 'lucide-react';
 import NavBar from '../components/NavBar';
 import { useDataPlatformCatalog } from '../hooks/useDataPlatformCatalog';
 import { useHazardCategories } from '../hooks/useHazardCategories';
 import { inferCategory } from '../lib/inferCategory';
+import { fetchProjectConfig, getProjectSlug, type ProjectConfig } from '../services/catalogLayersApi';
 import type { CatalogLayer } from '../types/catalogLayer';
+
+// Fallback copy shown until (or if) a content editor sets these fields in
+// the CMS (ProjectPage "Data Platforms page" panel).
+const DEFAULT_TITLE = 'The ACMAD Multi-Hazard Data Infrastructure';
+const DEFAULT_DESCRIPTION =
+  'A STAC-catalogued archive of satellite, model, and station-derived geospatial datasets ' +
+  'covering Africa — drought, flood, weather, heat, and agriculture indicators, ingested on ' +
+  'daily, dekadal, and monthly cadences and served as cloud-optimized rasters. Browse the ' +
+  'catalog below; each dataset includes metadata, methodology, and an example notebook ' +
+  'showing how to access the data programmatically via STAC.';
 
 export default function DataPlatforms() {
   const { layers, loading, error } = useDataPlatformCatalog();
   const categories = useHazardCategories();
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<string>('all');
+  const [config, setConfig] = useState<ProjectConfig | null>(null);
+
+  useEffect(() => {
+    fetchProjectConfig(getProjectSlug())
+      .then(setConfig)
+      .catch(() => setConfig(null)); // fine — falls back to default copy below
+  }, []);
 
   const filtered = useMemo(() => {
     return layers.filter((layer) => {
@@ -36,32 +54,37 @@ export default function DataPlatforms() {
 
       {/* Overview */}
       <section className="py-14 px-6 bg-hub-900 text-white">
-        <div className="max-w-5xl mx-auto">
-          <div className="flex items-center gap-2 text-hub-400 text-sm font-semibold uppercase tracking-wide mb-3">
-            <Database className="size-4" /> Data Platforms
-          </div>
-          <h1 className="text-3xl font-bold mb-4">The ACMAD Multi-Hazard Data Infrastructure</h1>
-          <p className="text-gray-300 max-w-3xl leading-relaxed mb-6">
-            A STAC-catalogued archive of satellite, model, and station-derived geospatial datasets
-            covering Africa — drought, flood, weather, heat, and agriculture indicators, ingested on
-            daily, dekadal, and monthly cadences and served as cloud-optimized rasters. Browse the
-            catalog below; each dataset includes metadata, methodology, and an example notebook
-            showing how to access the data programmatically via STAC.
-          </p>
-          <div className="grid grid-cols-3 gap-4 max-w-md">
-            <div>
-              <p className="text-2xl font-bold">{layers.length}</p>
-              <p className="text-xs text-gray-400">Datasets</p>
+        <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-start gap-10">
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 text-hub-400 text-sm font-semibold uppercase tracking-wide mb-3">
+              <Database className="size-4" /> Data Platforms
             </div>
-            <div>
-              <p className="text-2xl font-bold">{Object.keys(categoryCounts).length}</p>
-              <p className="text-xs text-gray-400">Categories</p>
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{layers.filter((l) => l.details?.has_notebook).length}</p>
-              <p className="text-xs text-gray-400">With notebooks</p>
+            <h1 className="text-3xl font-bold mb-4">{config?.data_platforms_title || DEFAULT_TITLE}</h1>
+            <p className="text-gray-300 max-w-3xl leading-relaxed mb-6">
+              {config?.data_platforms_description || DEFAULT_DESCRIPTION}
+            </p>
+            <div className="grid grid-cols-3 gap-4 max-w-md">
+              <div>
+                <p className="text-2xl font-bold">{layers.length}</p>
+                <p className="text-xs text-gray-400">Datasets</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{Object.keys(categoryCounts).length}</p>
+                <p className="text-xs text-gray-400">Categories</p>
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{layers.filter((l) => l.details?.has_notebook).length}</p>
+                <p className="text-xs text-gray-400">With notebooks</p>
+              </div>
             </div>
           </div>
+          {config?.data_platforms_image_url && (
+            <img
+              src={config.data_platforms_image_url}
+              alt=""
+              className="w-full md:w-72 shrink-0 rounded-lg object-cover max-h-64 md:max-h-80"
+            />
+          )}
         </div>
       </section>
 

@@ -672,10 +672,15 @@ class ProjectConfigViewTests(TestCase):
         project.about_image      = kwargs.get("about_image",      None)
         project.partners_image_id = kwargs.get("partners_image_id", None)
         project.partners_image   = kwargs.get("partners_image",   None)
+        project.data_platforms_image_id = kwargs.get("data_platforms_image_id", None)
+        project.data_platforms_image    = kwargs.get("data_platforms_image",    None)
         # About fields
         project.about_title       = kwargs.get("about_title",       "")
         project.about_intro       = kwargs.get("about_intro",       "")
         project.about_description = kwargs.get("about_description", "")
+        # Data Platforms fields
+        project.data_platforms_title       = kwargs.get("data_platforms_title",       "")
+        project.data_platforms_description = kwargs.get("data_platforms_description", "")
         # Partners fields
         project.partners_title       = kwargs.get("partners_title",       "")
         project.partners_intro       = kwargs.get("partners_intro",       "")

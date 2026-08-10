@@ -104,6 +104,23 @@ class ProjectPage(Page):
         related_name='+',
         help_text="Image shown on the right side of the About hero section.",
     )
+    data_platforms_title = models.CharField(
+        max_length=300,
+        blank=True,
+        help_text="Heading for the Data Platforms overview section, e.g. 'The ACMAD Multi-Hazard Data Infrastructure'.",
+    )
+    data_platforms_description = models.TextField(
+        blank=True,
+        help_text="Body paragraph describing the data infrastructure, shown on the Data Platforms page.",
+    )
+    data_platforms_image = models.ForeignKey(
+        Image,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='+',
+        help_text="Image shown on the right side of the Data Platforms hero section.",
+    )
     partners_title = models.CharField(
         max_length=300,
         blank=True,
@@ -182,6 +199,11 @@ class ProjectPage(Page):
             FieldPanel("about_description"),
             FieldPanel("about_image"),
         ], heading="About page"),
+        MultiFieldPanel([
+            FieldPanel("data_platforms_title"),
+            FieldPanel("data_platforms_description"),
+            FieldPanel("data_platforms_image"),
+        ], heading="Data Platforms page"),
         InlinePanel("features", label="Features (What e-SAFARI provides)"),
         MultiFieldPanel([
             FieldPanel("partners_title"),

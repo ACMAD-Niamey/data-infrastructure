@@ -258,6 +258,10 @@ class ProjectConfigView(APIView):
         if project.about_image_id and project.about_image:
             about_image_url = request.build_absolute_uri(project.about_image.file.url)
 
+        data_platforms_image_url = None
+        if project.data_platforms_image_id and project.data_platforms_image:
+            data_platforms_image_url = request.build_absolute_uri(project.data_platforms_image.file.url)
+
         entries = dataset_entries_for_project(project.slug)
         gs_count = GeoServerLayer.objects.filter(project__slug=project.slug, is_published_for_ui=True).count()
         sw_count = StaticWmsLayer.objects.filter(project__slug=project.slug, is_published_for_ui=True).count()
@@ -301,6 +305,9 @@ class ProjectConfigView(APIView):
             "about_intro": project.about_intro,
             "about_description": project.about_description,
             "about_image_url": about_image_url,
+            "data_platforms_title": project.data_platforms_title,
+            "data_platforms_description": project.data_platforms_description,
+            "data_platforms_image_url": data_platforms_image_url,
             "features": features,
             "partners_title": project.partners_title,
             "partners_intro": project.partners_intro,
