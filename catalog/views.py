@@ -15,10 +15,12 @@ log = logging.getLogger(__name__)
 from .serializers import (
     DatasetAvailabilityResponseSerializer,
     DatasetVisualizationRequestSerializer,
-    DatasetVisualizationResponseSerializer
+    DatasetVisualizationResponseSerializer,
+    DatasetNotebookResponseSerializer,
 )
 
 from .utils import DatasetVisualization
+from .notebook_render import render_dataset_notebook_html
 
 replace_titiler_url = os.getenv("REPLACE_TITILER_URL", "false").lower() in ("true", "1", "yes")
 
@@ -294,6 +296,31 @@ class DatasetVisualizationView(APIView):
             )
         except ValueError as e:
             return Response({"detail": str(e)}, status=400)
+
+
+class DatasetNotebookView(APIView):
+    """
+    Get the rendered example notebook for a dataset, if one has been uploaded.
+    """
+    @extend_schema(
+        responses={200: DatasetNotebookResponseSerializer},
+        tags=["catalog"],
+        summary="Get a dataset's rendered example notebook",
+        description="Returns standalone rendered HTML of the .ipynb notebook uploaded for this "
+                    "dataset (via the Layer 'example_notebook' field), suitable for embedding in "
+                    "a sandboxed iframe. 404 if no notebook has been uploaded for this dataset.",
+    )
+    def get(self, request, dataset_id: str):
+        html = render_dataset_notebook_html(dataset_id)
+        if html is None:
+            return Response(
+                {"detail": "No example notebook for this dataset."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
+        return Response(
+            {"dataset_id": dataset_id, "html": html},
+            status=status.HTTP_200_OK,
+        )
 
 
   

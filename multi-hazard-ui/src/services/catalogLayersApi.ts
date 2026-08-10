@@ -30,13 +30,16 @@ function enrichLayer(raw: UILayersResponse["layers"][number]): CatalogLayer {
   };
 }
 
-export async function fetchProjectLayers(projectSlug: string): Promise<CatalogLayer[]> {
+export async function fetchProjectLayers(
+  projectSlug: string,
+  options: { requireIcon?: boolean } = {},
+): Promise<CatalogLayer[]> {
+  const { requireIcon = true } = options;
   const response = await client.get<UILayersResponse>("/api/catalog/ui/layers", {
     params: { project: projectSlug },
   });
-  return (response.data.layers || [])
-    .filter((layer) => layer.icon?.url)
-    .map(enrichLayer);
+  const layers = response.data.layers || [];
+  return (requireIcon ? layers.filter((layer) => layer.icon?.url) : layers).map(enrichLayer);
 }
 
 export function getProjectSlug(): string {

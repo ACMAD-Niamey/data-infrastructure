@@ -37,6 +37,8 @@ export type LayerDetails = {
   source_organization: string;
   methodology_html: string;
   methodology_url: string;
+  legend_description: string;
+  has_notebook: boolean;
 };
 
 export type CatalogLayer = {

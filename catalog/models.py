@@ -744,6 +744,17 @@ class Layer(ClusterableModel):
         blank=True,
         help_text="Short text shown as 'Legend' in the info panel (separate from the main description).",
     )
+    example_notebook = models.ForeignKey(
+        "wagtaildocs.Document",
+        null=True, blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        help_text="Upload a .ipynb Jupyter notebook demonstrating access to this dataset.",
+    )
+    example_notebook_description = models.CharField(
+        max_length=300, blank=True,
+        help_text="Optional one-line caption shown above the rendered notebook.",
+    )
 
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -783,6 +794,8 @@ class Layer(ClusterableModel):
                 FieldPanel("methodology"),
                 FieldPanel("methodology_url"),
                 FieldPanel("legend_description"),
+                FieldPanel("example_notebook"),
+                FieldPanel("example_notebook_description"),
             ],
             heading="Layer details",
         ),
