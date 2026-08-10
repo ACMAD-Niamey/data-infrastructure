@@ -311,7 +311,14 @@ class DatasetNotebookView(APIView):
                     "a sandboxed iframe. 404 if no notebook has been uploaded for this dataset.",
     )
     def get(self, request, dataset_id: str):
-        html = render_dataset_notebook_html(dataset_id)
+        try:
+            html = render_dataset_notebook_html(dataset_id)
+        except Exception:
+            log.exception("Notebook render failed for %s", dataset_id)
+            return Response(
+                {"detail": "Failed to render example notebook."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         if html is None:
             return Response(
                 {"detail": "No example notebook for this dataset."},
