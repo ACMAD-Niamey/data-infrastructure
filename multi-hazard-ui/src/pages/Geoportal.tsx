@@ -22,23 +22,11 @@ import {
 } from '../services/layersApi';
 import type { CatalogLayer } from '../types/catalogLayer';
 import type { BoundsObject } from '../services/layersApi';
+import { inferCategory } from '../lib/inferCategory';
 
 // ---------------------------------------------------------------------------
 // Hazard categories — loaded from backend, fallback to hardcoded list
 // ---------------------------------------------------------------------------
-
-// Fallback: assign category from layer title keywords when hazard_category not set
-function inferCategory(layer: CatalogLayer): string {
-  const t = layer.title.toLowerCase();
-  if (layer.hazard_category) return layer.hazard_category;
-  if (t.includes('drought') || t.includes('soil moisture') || t.includes('sma') || t.includes('cdi') || t.includes('spi')) return 'drought';
-  if (t.includes('flood') || t.includes('river')) return 'flood';
-  if (t.includes('rain') || t.includes('weather') || t.includes('precipitation') || t.includes('forecast')) return 'weather';
-  if (t.includes('heat') || t.includes('temperature') || t.includes('lst')) return 'heat';
-  if (t.includes('vegetation') || t.includes('ndvi') || t.includes('crop') || t.includes('agriculture')) return 'agriculture';
-  if (t.includes('boundary') || t.includes('admin') || t.includes('country')) return 'boundary';
-  return 'other';
-}
 
 // ---------------------------------------------------------------------------
 // Right panel

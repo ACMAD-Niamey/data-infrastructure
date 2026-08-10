@@ -7,11 +7,13 @@ from django.test import TestCase
 from rest_framework.test import APIClient
 
 from django import forms
+from django.core.cache import cache
 from django.core.exceptions import ValidationError
 from django.forms import ModelForm
 from django.utils.datastructures import MultiValueDict
 
 from catalog.models import Layer, LayerColorStop
+from catalog.notebook_render import render_dataset_notebook_html
 from catalog.style.band_defaults import (
     DEFAULT_RGB_BAND_VISUALIZATION_PARAMS,
     ensure_band_tile_params,
@@ -96,6 +98,7 @@ def _make_dataset(dataset_id="spi", project_slug="e-safari", with_style=False):
         mock_style.methodology = None
         mock_style.methodology_url = ""
         mock_style.legend_description = ""
+        mock_style.example_notebook_id = None
         mock_dataset.style_config = mock_style
     else:
         mock_dataset.style_config = None
@@ -669,10 +672,15 @@ class ProjectConfigViewTests(TestCase):
         project.about_image      = kwargs.get("about_image",      None)
         project.partners_image_id = kwargs.get("partners_image_id", None)
         project.partners_image   = kwargs.get("partners_image",   None)
+        project.data_platforms_image_id = kwargs.get("data_platforms_image_id", None)
+        project.data_platforms_image    = kwargs.get("data_platforms_image",    None)
         # About fields
         project.about_title       = kwargs.get("about_title",       "")
         project.about_intro       = kwargs.get("about_intro",       "")
         project.about_description = kwargs.get("about_description", "")
+        # Data Platforms fields
+        project.data_platforms_title       = kwargs.get("data_platforms_title",       "")
+        project.data_platforms_description = kwargs.get("data_platforms_description", "")
         # Partners fields
         project.partners_title       = kwargs.get("partners_title",       "")
         project.partners_intro       = kwargs.get("partners_intro",       "")
@@ -840,3 +848,82 @@ class TitilerComposeTests(unittest.TestCase):
         )
         bidx_vals = [v for k, v in params if k == "bidx"]
         self.assertEqual(bidx_vals, ["1", "2", "3"])
+
+
+# ---------------------------------------------------------------------------
+# DatasetNotebookView  GET /api/catalog/datasets/<dataset_id>/notebook/
+# ---------------------------------------------------------------------------
+
+
+class DatasetNotebookViewTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+
+    @patch("catalog.views.render_dataset_notebook_html")
+    def test_returns_404_when_no_notebook(self, mock_render):
+        mock_render.return_value = None
+        response = self.client.get("/api/catalog/datasets/spi/notebook/")
+        self.assertEqual(response.status_code, 404)
+
+    @patch("catalog.views.render_dataset_notebook_html")
+    def test_returns_200_with_html_when_notebook_present(self, mock_render):
+        mock_render.return_value = "<!DOCTYPE html><html><body>notebook</body></html>"
+        response = self.client.get("/api/catalog/datasets/spi/notebook/")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["dataset_id"], "spi")
+        self.assertIn("notebook", response.data["html"])
+
+
+# ---------------------------------------------------------------------------
+# render_dataset_notebook_html
+# ---------------------------------------------------------------------------
+
+
+class RenderDatasetNotebookHtmlTests(TestCase):
+    def setUp(self):
+        cache.clear()
+
+    def tearDown(self):
+        cache.clear()
+
+    @patch("catalog.notebook_render.Layer")
+    def test_returns_none_when_no_layer_or_no_notebook(self, mock_layer_cls):
+        mock_layer_cls.objects.filter.return_value.select_related.return_value.first.return_value = None
+        self.assertIsNone(render_dataset_notebook_html("spi"))
+
+    def _mock_layer_with_notebook(self, mock_layer_cls, *, doc_id=1, file_hash="abc123"):
+        mock_doc = MagicMock()
+        mock_doc.id = doc_id
+        mock_doc.get_file_hash.return_value = file_hash
+        mock_layer = MagicMock()
+        mock_layer.example_notebook = mock_doc
+        mock_layer_cls.objects.filter.return_value.select_related.return_value.first.return_value = mock_layer
+        return mock_doc
+
+    @patch("catalog.notebook_render._export_notebook_html")
+    @patch("catalog.notebook_render.Layer")
+    def test_caches_rendered_html_keyed_on_document_id_and_file_hash(self, mock_layer_cls, mock_export):
+        self._mock_layer_with_notebook(mock_layer_cls)
+        mock_export.return_value = "<html>rendered once</html>"
+
+        first = render_dataset_notebook_html("spi")
+        second = render_dataset_notebook_html("spi")
+
+        self.assertEqual(first, "<html>rendered once</html>")
+        self.assertEqual(second, "<html>rendered once</html>")
+        mock_export.assert_called_once()
+
+    @patch("catalog.notebook_render._export_notebook_html")
+    @patch("catalog.notebook_render.Layer")
+    def test_different_file_hash_produces_different_cache_key(self, mock_layer_cls, mock_export):
+        self._mock_layer_with_notebook(mock_layer_cls, file_hash="hash-v1")
+        mock_export.return_value = "<html>v1</html>"
+        first = render_dataset_notebook_html("spi")
+        self.assertEqual(first, "<html>v1</html>")
+
+        self._mock_layer_with_notebook(mock_layer_cls, file_hash="hash-v2")
+        mock_export.return_value = "<html>v2</html>"
+        second = render_dataset_notebook_html("spi")
+
+        self.assertEqual(second, "<html>v2</html>")
+        self.assertEqual(mock_export.call_count, 2)
