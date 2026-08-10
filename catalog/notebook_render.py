@@ -13,7 +13,12 @@ def render_dataset_notebook_html(dataset_id: str) -> str | None:
     """Return cached/rendered full HTML document for a dataset's example notebook, or None."""
     layer = (
         Layer.objects
-        .filter(dataset__dataset_id=dataset_id, example_notebook__isnull=False)
+        .filter(
+            dataset__dataset_id=dataset_id,
+            dataset__live=True,
+            dataset__is_published_for_ui=True,
+            example_notebook__isnull=False,
+        )
         .select_related("example_notebook", "dataset")
         .first()
     )
