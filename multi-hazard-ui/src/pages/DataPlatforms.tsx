@@ -53,14 +53,18 @@ export default function DataPlatforms() {
       <NavBar />
 
       {/* Overview */}
-      <section className="py-14 px-6 bg-hub-900 text-white">
+      <section className="relative pt-2 pb-4 px-6 bg-hub-900 text-white">
+        <div
+          className="absolute top-0 left-0 right-0 h-1"
+          style={{ background: 'linear-gradient(90deg, #33CD33, #F3D545)' }}
+        />
         <div className="max-w-5xl mx-auto flex flex-col md:flex-row items-start gap-10">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 text-hub-400 text-sm font-semibold uppercase tracking-wide mb-3">
               <Database className="size-4" /> Data Platforms
             </div>
             <h1 className="text-3xl font-bold mb-4">{config?.data_platforms_title || DEFAULT_TITLE}</h1>
-            <p className="text-gray-300 max-w-3xl leading-relaxed mb-6">
+            <p className="text-gray-300 max-w-3xl leading-relaxed mb-2">
               {config?.data_platforms_description || DEFAULT_DESCRIPTION}
             </p>
             <div className="grid grid-cols-3 gap-4 max-w-md">
