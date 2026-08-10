@@ -93,6 +93,7 @@ def dataset_to_api_dict(dataset: DatasetPage, request, category_override: str | 
         "methodology_url":     style.methodology_url or "",
         "legend_description":  style.legend_description or "",
         "has_notebook":        bool(style.example_notebook_id),
+        "has_stac_collection": style.has_stac_collection,
     } if style else None
 
     return {

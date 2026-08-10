@@ -777,6 +777,11 @@ class Layer(ClusterableModel):
         max_length=300, blank=True,
         help_text="Optional one-line caption/description for the example notebook.",
     )
+    has_stac_collection = models.BooleanField(
+        default=True,
+        help_text="Whether this dataset has a real STAC collection registered in pgSTAC. "
+                   "Uncheck to hide the 'View STAC collection' link on the Data Platforms page.",
+    )
 
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -818,6 +823,7 @@ class Layer(ClusterableModel):
                 FieldPanel("legend_description"),
                 FieldPanel("example_notebook"),
                 FieldPanel("example_notebook_description"),
+                FieldPanel("has_stac_collection"),
             ],
             heading="Layer details",
         ),
@@ -1029,6 +1035,11 @@ class GeoServerLayer(models.Model):
     methodology = RichTextField(blank=True)
     methodology_url = models.URLField(blank=True)
     legend_description = models.TextField(blank=True)
+    has_stac_collection = models.BooleanField(
+        default=False,
+        help_text="Whether this dataset has a real STAC collection registered in pgSTAC. "
+                   "Uncheck to hide the 'View STAC collection' link on the Data Platforms page.",
+    )
 
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -1069,6 +1080,7 @@ class GeoServerLayer(models.Model):
                 FieldPanel("methodology"),
                 FieldPanel("methodology_url"),
                 FieldPanel("legend_description"),
+                FieldPanel("has_stac_collection"),
             ],
             heading="Layer details",
         ),
@@ -1154,6 +1166,11 @@ class StaticWmsLayer(models.Model):
     coverage = models.CharField(max_length=200, blank=True, default="Africa")
     source_organization = models.CharField(max_length=200, blank=True)
     legend_description = models.TextField(blank=True)
+    has_stac_collection = models.BooleanField(
+        default=False,
+        help_text="Whether this dataset has a real STAC collection registered in pgSTAC. "
+                   "Uncheck to hide the 'View STAC collection' link on the Data Platforms page.",
+    )
 
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -1186,6 +1203,7 @@ class StaticWmsLayer(models.Model):
                 FieldPanel("coverage"),
                 FieldPanel("source_organization"),
                 FieldPanel("legend_description"),
+                FieldPanel("has_stac_collection"),
             ],
             heading="Layer details",
         ),

@@ -121,19 +121,21 @@ export default function DataPlatformDetail() {
             </div>
             <div className="flex flex-wrap gap-3 pt-2">
               <Link
-                to="/geoportal"
+                to={`/geoportal?dataset=${layer.dataset.id}`}
                 className="inline-flex items-center gap-1.5 bg-hub-800 text-white hover:bg-hub-700 rounded px-4 py-2 text-sm font-medium transition-colors"
               >
                 Open in Geoportal
               </Link>
-              <a
-                href={`${catalogBaseUrl}/stac/collections/${layer.dataset.stac_collection}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-1.5 border border-gray-300 text-gray-700 hover:border-hub-400 hover:text-hub-700 rounded px-4 py-2 text-sm font-medium transition-colors"
-              >
-                View STAC collection <ExternalLink className="size-3.5" />
-              </a>
+              {d?.has_stac_collection && (
+                <a
+                  href={`${catalogBaseUrl}/stac/collections/${layer.dataset.stac_collection}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1.5 border border-gray-300 text-gray-700 hover:border-hub-400 hover:text-hub-700 rounded px-4 py-2 text-sm font-medium transition-colors"
+                >
+                  View STAC collection <ExternalLink className="size-3.5" />
+                </a>
+              )}
             </div>
           </div>
         )}

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Layers, Search, ChevronDown, ChevronUp,
   Info, X, ChevronLeft, ChevronRight,
@@ -697,6 +698,7 @@ function LayerCard({ layer, isActive, onToggle }: LayerCardProps) {
 // ---------------------------------------------------------------------------
 
 export default function Geoportal() {
+  const [searchParams] = useSearchParams();
   const [activeCategory, setActiveCategory] = useState<string>('drought');
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['drought']));
   // Ordered newest-first: toggling a layer on prepends its id, so the stacked
@@ -816,6 +818,25 @@ export default function Geoportal() {
   const handleOpacityChange = (layerId: string, opacity: number) => {
     setOpacityMap((prev) => ({ ...prev, [layerId]: opacity }));
   };
+
+  // Deep-link support: ?dataset=<dataset_id> (e.g. from the Data Platforms detail
+  // page, or a homepage category shortcut) opens that specific dataset — expands
+  // its category and activates it on the map — once layers have loaded.
+  const hasAppliedDatasetParamRef = useRef(false);
+  useEffect(() => {
+    if (hasAppliedDatasetParamRef.current || loading || layers.length === 0) return;
+    const datasetParam = searchParams.get('dataset');
+    if (!datasetParam) return;
+    const target = layers.find((l) => l.dataset.id === datasetParam);
+    if (!target) return;
+    hasAppliedDatasetParamRef.current = true;
+
+    const category = inferCategory(target);
+    setActiveCategory(category);
+    setExpandedCategories((prev) => new Set(prev).add(category));
+    setActiveLayerIds((prev) => (prev.includes(target.id) ? prev : [target.id, ...prev]));
+    loadLayerTile(target);
+  }, [layers, loading, searchParams]);
 
   return (
     <div className="h-screen flex flex-col overflow-hidden">

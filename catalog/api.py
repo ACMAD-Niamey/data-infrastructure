@@ -45,6 +45,7 @@ def geoserver_layer_to_api_dict(layer: GeoServerLayer, request) -> dict:
         "methodology_url":     layer.methodology_url or "",
         "legend_description":  layer.legend_description or "",
         "has_notebook":        False,  # GeoServerLayer doesn't support notebooks in v1
+        "has_stac_collection": layer.has_stac_collection,
     }
 
     return {
@@ -106,6 +107,7 @@ def static_wms_to_api_dict(layer: StaticWmsLayer, request) -> dict:
         "methodology_url":     "",
         "legend_description":  layer.legend_description or "",
         "has_notebook":        False,  # StaticWmsLayer doesn't support notebooks in v1
+        "has_stac_collection": layer.has_stac_collection,
     }
 
     return {
