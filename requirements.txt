@@ -20,6 +20,8 @@ gdal==3.6.2
 rio-cogeo==7.0.1
 eccodes>=2.36
 pycountry==26.2.16
+nbconvert>=7.16,<8
+nbformat>=5.10,<6
 
 
 

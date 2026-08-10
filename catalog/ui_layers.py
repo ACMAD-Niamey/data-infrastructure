@@ -92,6 +92,7 @@ def dataset_to_api_dict(dataset: DatasetPage, request, category_override: str | 
         "methodology_html":    expand_db_html(_description_raw_html(style.methodology)),
         "methodology_url":     style.methodology_url or "",
         "legend_description":  style.legend_description or "",
+        "has_notebook":        bool(style.example_notebook_id),
     } if style else None
 
     return {

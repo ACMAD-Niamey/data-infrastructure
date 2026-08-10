@@ -132,3 +132,11 @@ class DatasetVisualizationResponseSerializer(serializers.Serializer):
     legend = serializers.JSONField(
         help_text="Legend configuration for visualizing this dataset"
     )
+
+
+class DatasetNotebookResponseSerializer(serializers.Serializer):
+    """Response serializer for a dataset's rendered example notebook."""
+    dataset_id = serializers.CharField(max_length=80)
+    html = serializers.CharField(
+        help_text="Standalone rendered HTML of the dataset's example Jupyter notebook"
+    )

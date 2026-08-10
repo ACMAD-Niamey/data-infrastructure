@@ -3,6 +3,8 @@ import { MapProvider } from './components/MapContext.jsx';
 import Home from './pages/Home';
 import Geoportal from './pages/Geoportal';
 import StubPage from './pages/StubPage';
+import DataPlatforms from './pages/DataPlatforms';
+import DataPlatformDetail from './pages/DataPlatformDetail';
 
 function App() {
   return (
@@ -12,7 +14,8 @@ function App() {
           <Route path="/" element={<Home />} />
           <Route path="/geoportal" element={<Geoportal />} />
           <Route path="/data-services" element={<StubPage title="Data Services" />} />
-          <Route path="/data-platforms" element={<StubPage title="Data Platforms" />} />
+          <Route path="/data-platforms" element={<DataPlatforms />} />
+          <Route path="/data-platforms/:datasetId" element={<DataPlatformDetail />} />
           <Route path="/bulletins" element={<StubPage title="Bulletins" />} />
           <Route path="/about" element={<StubPage title="About" />} />
           <Route path="/partners" element={<StubPage title="Partners" />} />
