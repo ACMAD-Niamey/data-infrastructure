@@ -39,6 +39,7 @@ export type LayerDetails = {
   methodology_url: string;
   legend_description: string;
   has_notebook: boolean;
+  has_stac_collection: boolean;
 };
 
 export type CatalogLayer = {

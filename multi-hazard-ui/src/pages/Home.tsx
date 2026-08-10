@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Map, Database, Network, FileText, Droplets, CloudRain, Waves,
@@ -151,6 +151,17 @@ export default function Home() {
   const { layers } = useCatalogLayers('en');
   const categories = useHazardCategories();
 
+  // Dataset id representing each category shortcut pill below, so "Drought" etc.
+  // deep-link straight to that dataset on the Geoportal instead of a bare /geoportal.
+  const categoryShortcutDatasetIds = useMemo(() => {
+    const map: Record<string, string | undefined> = {};
+    for (const key of ['drought', 'weather', 'flood']) {
+      const target = layers.find((l) => (l.hazard_category ?? inferCategory(l)) === key);
+      map[key] = target?.dataset.id;
+    }
+    return map;
+  }, [layers]);
+
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
   const [currentDateLabel, setCurrentDateLabel] = useState<string | null>(null);
   const [legendEntries, setLegendEntries] = useState<[string, string][]>([]);
@@ -298,20 +309,23 @@ export default function Home() {
           </div>
           <div className="flex flex-wrap gap-2">
             {[
-              { label: 'Drought', icon: <Droplets className="size-4" /> },
-              { label: 'Weather Forecast', icon: <CloudRain className="size-4" /> },
-              { label: 'Flood Risk', icon: <Waves className="size-4" /> },
-            ].map(({ label, icon }) => (
-              <Link
-                key={label}
-                to="/geoportal"
-                className="flex items-center gap-1.5 border border-white/30 text-white/80 hover:border-hub-400 hover:text-hub-400 px-3 py-1.5 rounded text-xs transition-colors"
-              >
-                {icon}
-                {label}
-                <ArrowRight className="size-3" />
-              </Link>
-            ))}
+              { label: 'Drought', categoryKey: 'drought', icon: <Droplets className="size-4" /> },
+              { label: 'Weather Forecast', categoryKey: 'weather', icon: <CloudRain className="size-4" /> },
+              { label: 'Flood Risk', categoryKey: 'flood', icon: <Waves className="size-4" /> },
+            ].map(({ label, categoryKey, icon }) => {
+              const datasetId = categoryShortcutDatasetIds[categoryKey];
+              return (
+                <Link
+                  key={label}
+                  to={datasetId ? `/geoportal?dataset=${datasetId}` : '/geoportal'}
+                  className="flex items-center gap-1.5 border border-white/30 text-white/80 hover:border-hub-400 hover:text-hub-400 px-3 py-1.5 rounded text-xs transition-colors"
+                >
+                  {icon}
+                  {label}
+                  <ArrowRight className="size-3" />
+                </Link>
+              );
+            })}
           </div>
         </div>
 
