@@ -99,6 +99,12 @@ services:
     container_name: geodatamanager_redis
     command: redis-server --requirepass ${REDIS_PASSWORD} --protected-mode yes
     env_file: .env
+    restart: "on-failure"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
     networks:
       - data_infra_network
   minio:
@@ -221,8 +227,11 @@ services:
       ENABLED_EXTENSIONS: "transactions,bulk_transactions"
       APP_HOST: "0.0.0.0"
       APP_PORT: "8080"
-      # Tell it where it is hosted (optional but useful for links)
-      STAC_FASTAPI_API_ROOT: http://nginx/stac
+      # nginx proxies /stac/ -> stac_api:8080/ (prefix stripped), so the app
+      # must be told it's mounted under /stac to generate correct self/links
+      # for clients (e.g. pystac-client) reached via the public /stac path.
+      ROOT_PATH: /stac
+      UVICORN_ROOT_PATH: /stac
       CORS_ORIGINS: "http://localhost,http://localhost:3000"
       CORS_METHODS: "GET,POST,PUT,PATCH,DELETE,OPTIONS"
       CORS_HEADERS: "*"
