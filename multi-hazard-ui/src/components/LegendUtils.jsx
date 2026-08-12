@@ -2,12 +2,18 @@
 import { useLegendStore } from "./stores/useLegendStore";
 
 
-export function renderLegend(colorMap, title = "") {
+export function renderLegend(colorMap, title = "", description = "", legendDescription = "") {
     return (
       <div className="legend-block is-size-7" key={title} title={title}>
         {title && (
-          <div style={{ fontWeight: "bold", marginBottom: "0.5em" }}>{title}</div>
+          <div style={{ fontWeight: "bold", marginBottom: "0.25em" }}>{title}</div>
         )}
+        {description && (
+          <div style={{ marginBottom: "0.5em" }}>{description}</div>
+        )}
+        <div style={{ fontWeight: "bold", marginBottom: "0.25em" }}>
+          {legendDescription ? `LEGEND: ${legendDescription}` : "Legend"}
+        </div>
         <div style={{ display: "flex", flexDirection: "column", gap: "0.3em" }}>
           {Object.entries(colorMap).map(([label, color]) => (
             <div key={label} style={{ display: "flex", alignItems: "center", gap: "0.5em" }}>

@@ -160,7 +160,9 @@ function RightPanel({ layer, isActive, onClose, onToggle, onOpacityChange, opaci
             {/* Title */}
             <div>
               <h3 className="font-bold text-gray-800 text-base leading-snug">{layer.title}</h3>
-              <p className="text-xs text-gray-500 mt-0.5">{layer.dataset.title}</p>
+              {layer.description?.plain && (
+                <p className="text-xs text-gray-500 mt-0.5">{layer.description.plain}</p>
+              )}
               {category && (
                 <span className={`inline-block mt-2 text-xs font-medium px-2 py-0.5 rounded ${badgeColors[categoryKey] ?? 'bg-gray-100 text-gray-600'}`}>
                   {category.label}
@@ -202,7 +204,12 @@ function RightPanel({ layer, isActive, onClose, onToggle, onOpacityChange, opaci
             {/* Legend */}
             {layer.legend && Object.keys(layer.legend).length > 0 && (
               <div>
-                <p className="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wide">Legend</p>
+                <p className="text-xs text-gray-500 mb-2 font-medium uppercase tracking-wide">
+                  Legend
+                  {layer.details?.legend_description && (
+                    <span className="normal-case font-normal text-[11px] text-gray-400"> — {layer.details.legend_description}</span>
+                  )}
+                </p>
                 <LegendDisplay entries={Object.entries(layer.legend)} />
               </div>
             )}
@@ -386,7 +393,12 @@ function FullDetailsDialog({
                   </table>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Legend</p>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                    Legend
+                    {d?.legend_description && (
+                      <span className="normal-case font-normal text-[11px] text-gray-400"> — {d.legend_description}</span>
+                    )}
+                  </p>
                   {layer.legend && Object.keys(layer.legend).length > 0 ? (
                     <div className="space-y-1.5">
                       {Object.entries(layer.legend).map(([label, color]) => (
@@ -487,16 +499,24 @@ function FullDetailsDialog({
 
           {activeTab === 'Legend' && (
             layer.legend && Object.keys(layer.legend).length > 0 ? (
-              <div className="space-y-2">
-                {Object.entries(layer.legend).map(([label, color]) => (
-                  <div key={label} className="flex items-center gap-3">
-                    <div
-                      className="w-5 h-5 rounded border border-gray-300 shrink-0"
-                      style={{ backgroundColor: color as string }}
-                    />
-                    <span className="text-sm text-gray-700">{label}</span>
-                  </div>
-                ))}
+              <div>
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                  Legend
+                  {d?.legend_description && (
+                    <span className="normal-case font-normal text-[11px] text-gray-400"> — {d.legend_description}</span>
+                  )}
+                </p>
+                <div className="space-y-2">
+                  {Object.entries(layer.legend).map(([label, color]) => (
+                    <div key={label} className="flex items-center gap-3">
+                      <div
+                        className="w-5 h-5 rounded border border-gray-300 shrink-0"
+                        style={{ backgroundColor: color as string }}
+                      />
+                      <span className="text-sm text-gray-700">{label}</span>
+                    </div>
+                  ))}
+                </div>
               </div>
             ) : (
               <p className="text-sm text-gray-400">No legend defined for this layer.</p>

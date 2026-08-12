@@ -221,7 +221,12 @@ const Portal = ({ language }: PortalProps) => {
           useLegendStore.getState().clearLegends();
           const legendMap = activeLayer.legend;
           if (legendMap && Object.keys(legendMap).length > 0) {
-            const legendNode = renderLegend(legendMap, activeLayer.title);
+            const legendNode = renderLegend(
+              legendMap,
+              activeLayer.title,
+              activeLayer.description?.plain,
+              activeLayer.details?.legend_description,
+            );
             addLegendOnce(legendNode, activeLayer.title);
           }
         })
