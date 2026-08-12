@@ -1,6 +1,6 @@
 # THREDDS download & ingestion (`thredds_ingestion`)
 
-Automates pulling daily GeoTIFF forecast products from an ACMAD THREDDS file server and pushing them through the existing upload/ingest pipeline, so new dated STAC items keep appearing under datasets that are still created and styled the normal, manual way.
+Automates pulling daily forecast products from an ACMAD THREDDS file server and pushing them through the existing upload/ingest pipeline, so new dated STAC items keep appearing under datasets that are still created and styled the normal, manual way. Products are GeoTIFF already, or CSV converted to GeoTIFF on the way in - see [CSV-sourced products](#csv-sourced-products).
 
 **What stays manual**: creating the `DatasetPage` and its `Layer` style snippet in Wagtail admin. This app never creates or edits either — it only references an existing `dataset_id`.
 
@@ -20,7 +20,7 @@ One workflow represents one THREDDS **source** (shared base URL + dated-folder p
 | Model | Purpose | Key fields |
 |---|---|---|
 | `DownloadWorkflow` | One THREDDS source | `source_base_url`, `folder_pattern`, `schedule_hour_utc`/`schedule_minute_utc`, `retry_interval_minutes`, `retry_until_hour_utc`, `catch_up_days` |
-| `DownloadWorkflowFile` | One dataset + filename pattern mapped into a workflow (many per workflow) | `dataset` (FK to `catalog.DatasetPage`), `filename_pattern`, `lead_hours_csv`, `threshold_label`, `item_id_pattern`, `overwrite_existing`, `datetime_from_run_date`, `validity_hours` |
+| `DownloadWorkflowFile` | One dataset + filename pattern mapped into a workflow (many per workflow) | `dataset` (FK to `catalog.DatasetPage`), `filename_pattern`, `lead_hours_csv`, `threshold_label`, `item_id_pattern`, `overwrite_existing`, `datetime_from_run_date`, `validity_hours`, `csv_value_column` |
 | `DownloadRun` | One execution of a workflow for one `run_date` | `status` (`pending`/`running`/`completed`/`partial`/`failed`), per-run counters |
 | `DownloadRunItem` | One resolved `(workflow_file, lead_hours)` file within a run | `source_url`, `item_id`, `status`, `ingestion_run_id` |
 
@@ -95,6 +95,26 @@ By default, a resolved item's STAC `datetime` (and `DownloadRunItem.valid_dateti
 Some products don't represent an instant at all — a 5-day mean covers a period, not a point in time. Set `validity_hours` on the `DownloadWorkflowFile` row (e.g. `120` for 5 days) and the item is ingested with `start_datetime`/`end_datetime` instead of a single `datetime` — reusing the same fields the `ingest` API already uses for dekadal/seasonal cadence products (`ingest.tasks.build_item`). The window starts at whatever `valid_datetime` already resolves to (`run_date + lead_hours`, or `run_date` alone if `datetime_from_run_date` is also set) and ends `validity_hours` later. `DownloadRunItem.valid_end_datetime` records the window end for reference; it's blank for the common point-in-time case (`validity_hours` unset).
 
 Example: a 5-day mean issued `2026-08-05`, `datetime_from_run_date=True`, `validity_hours=120` → STAC window `2026-08-05T00:00:00Z` to `2026-08-10T00:00:00Z`.
+
+### Filenames with a date range: `{valid_end_date}`
+
+Alongside `{valid_date}` (a single date), `{valid_end_date}` is available in any pattern once `validity_hours` is set on the `DownloadWorkflowFile` row — it's `{valid_date} + validity_hours`, formatted as a date. This is for products whose filename embeds a *range* rather than one date, e.g. `Vigilance_Data_GEFS_Week_1_Init-20260810_Valid-20260811-20260817.csv`. Referencing `{valid_end_date}` on a mapping with no `validity_hours` configured raises `PatternRenderError` at write time, the same way an unconfigured `{lead_hours}` does.
+
+## CSV-sourced products
+
+Some THREDDS products publish a CSV of point values (`lon, lat, value`) instead of a raster — e.g. the Meningitis Vigilance GEFS series. The ingest pipeline only COG-optimizes `.tif`/`.tiff` keys (`ingest.cog.ensure_raster_is_cog`), so a downloaded `.csv` is automatically converted to a GeoTIFF before upload whenever `filename_pattern` renders to a `.csv` file — no extra flag needed to turn this on, but `csv_value_column` must be set to the name of the column holding raster values, or the item fails with a clear error instead of silently uploading garbage.
+
+The conversion (`thredds_ingestion.services.raster_conversion.convert_to_raster`, wrapping `utils.raster_converstions.csv_to_raster`) uses fixed defaults for everything except the value column: `x`/`y` columns `"Data$x"`/`"y"` and 0.5° resolution, matching every CSV product seen on this THREDDS source so far. `DownloadRunItem.filename` still records the original `.csv` name fetched from THREDDS (an audit trail of what was downloaded); only the MinIO key and uploaded asset become `.tif`.
+
+**Example**: the real two-week Vigilance product, one `DownloadWorkflowFile` row per week (the filename literally differs by `Week_1`/`Week_2`, so it can't be expressed as a single lead-hour series):
+
+| Field | Week 1 | Week 2 |
+|---|---|---|
+| `dataset` | `meningitis-vigilance-gefs` | `meningitis-vigilance-gefs` |
+| `filename_pattern` | `Vigilance_Data_GEFS_Week_1_Init-{run_date:%Y%m%d}_Valid-{valid_date:%Y%m%d}-{valid_end_date:%Y%m%d}.csv` | `Vigilance_Data_GEFS_Week_2_Init-{run_date:%Y%m%d}_Valid-{valid_date:%Y%m%d}-{valid_end_date:%Y%m%d}.csv` |
+| `lead_hours_csv` | `24` | `192` |
+| `validity_hours` | `144` | `144` |
+| `csv_value_column` | `Vigilance` | `Vigilance` |
 
 ## Idempotency and retries
 
@@ -176,4 +196,5 @@ This makes ongoing operation self-healing: if Beat/a worker was down for a day, 
 
 - `docs/ingest-delete.md` — the upload/ingest pipeline this app calls into (reused, not duplicated).
 - `ingest.tasks.process_ingestion_run` — COG conversion, bbox/geometry extraction, STAC item creation.
+- `thredds_ingestion.services.raster_conversion` / `utils.raster_converstions.csv_to_raster` — the CSV→GeoTIFF conversion step, see [CSV-sourced products](#csv-sourced-products).
 - `weather_station_ingestion` — the closest existing analog (a different external download pipeline, MQTT-based).

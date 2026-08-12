@@ -24,7 +24,7 @@ from pathlib import Path
 from django.conf import settings
 from django.utils import timezone
 
-from . import ingest_bridge, thredds_client
+from . import ingest_bridge, raster_conversion, thredds_client
 from .patterns import render_item_id, render_source_url, render_valid_datetime
 from ..models import DownloadRun, DownloadRunItem, DownloadWorkflowFile
 
@@ -113,6 +113,7 @@ def process_item(
     # params) is recorded on the item as a real failure, not left to crash
     # the whole run.
     local_path = _download_dir() / f"{item_id}_{filename}"
+    upload_path = local_path
     try:
         available = thredds_client.exists(source_url, timeout=workflow.request_timeout_seconds)
         # A successful check this attempt supersedes any error recorded on a
@@ -135,8 +136,16 @@ def process_item(
 
         thredds_client.download_to_path(source_url, str(local_path), timeout=workflow.request_timeout_seconds)
 
-        key = ingest_bridge.build_minio_key(dataset.dataset_id, run.run_date, filename)
-        href = ingest_bridge.upload_file(str(local_path), key=key)
+        upload_filename = filename
+        if local_path.suffix.lower() == ".csv":
+            # THREDDS-published CSV (e.g. Meningitis Vigilance GEFS) - convert
+            # to a GeoTIFF before upload, since only .tif/.tiff keys get
+            # COG-optimized downstream (ingest.cog.ensure_raster_is_cog).
+            upload_path = raster_conversion.convert_to_raster(local_path, workflow_file, _download_dir())
+            upload_filename = upload_path.name
+
+        key = ingest_bridge.build_minio_key(dataset.dataset_id, run.run_date, upload_filename)
+        href = ingest_bridge.upload_file(str(upload_path), key=key)
         item.minio_href = href
 
         item.status = DownloadRunItem.Status.INGESTING
@@ -163,11 +172,13 @@ def process_item(
         item.error_message = str(exc)
         log.exception("thredds_ingestion item failed: item_id=%s", item_id)
     finally:
-        if not getattr(settings, "THREDDS_KEEP_DOWNLOADED_FILES", False) and local_path.exists():
-            try:
-                local_path.unlink()
-            except OSError:
-                pass
+        if not getattr(settings, "THREDDS_KEEP_DOWNLOADED_FILES", False):
+            for path in {local_path, upload_path}:
+                if path.exists():
+                    try:
+                        path.unlink()
+                    except OSError:
+                        pass
         item.save()
 
     return item

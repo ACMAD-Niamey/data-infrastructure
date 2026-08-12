@@ -122,6 +122,17 @@ class DownloadWorkflowFile(models.Model):
         default=False,
         help_text="If true, re-download/re-ingest even when a DownloadRunItem already succeeded.",
     )
+    csv_value_column = models.CharField(
+        max_length=100,
+        blank=True,
+        default="",
+        help_text=(
+            "Required when the downloaded file is a CSV: name of the column holding "
+            "raster values (e.g. 'Vigilance'). Converted to a GeoTIFF via "
+            "utils.raster_converstions.csv_to_raster before upload/ingest - x/y "
+            "columns and resolution use that function's defaults ('Data$x', 'y', 0.5°)."
+        ),
+    )
     datetime_from_run_date = models.BooleanField(
         default=False,
         help_text=(
