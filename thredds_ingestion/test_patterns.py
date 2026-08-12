@@ -20,12 +20,15 @@ def _workflow(base_url="https://sgbd.acmad.org/thredds/fileServer/ACMAD/WWFD/for
     return wf
 
 
-def _workflow_file(filename_pattern, *, lead_hours_csv="", threshold_label="", item_id_pattern=""):
+def _workflow_file(
+    filename_pattern, *, lead_hours_csv="", threshold_label="", item_id_pattern="", validity_hours=None
+):
     wff = MagicMock()
     wff.filename_pattern = filename_pattern
     wff.lead_hours_csv = lead_hours_csv
     wff.threshold_label = threshold_label
     wff.item_id_pattern = item_id_pattern
+    wff.validity_hours = validity_hours
     return wff
 
 
@@ -106,6 +109,37 @@ class RenderSourceUrlTests(SimpleTestCase):
         _, filename = render_source_url(workflow, wff, RUN_DATE, 0)
 
         self.assertEqual(filename, "mix20260805_0.tif")
+
+
+class ValidEndDatePlaceholderTests(SimpleTestCase):
+    """{valid_end_date}: needed for products whose filename embeds a date
+    *range* rather than a single date, e.g. the real
+    Vigilance_Data_GEFS_Week_1_Init-20260810_Valid-20260811-20260817.csv
+    shape found on THREDDS (a 7-day window starting the day after run_date)."""
+
+    def test_valid_end_date_is_start_plus_validity_hours(self):
+        workflow = _workflow()
+        wff = _workflow_file(
+            "Vigilance_Data_GEFS_Week_1_Init-{run_date:%Y%m%d}_Valid-{valid_date:%Y%m%d}-{valid_end_date:%Y%m%d}.csv",
+            lead_hours_csv="24,192",
+            validity_hours=144,
+        )
+
+        _, filename = render_source_url(workflow, wff, RUN_DATE, 24)
+
+        self.assertEqual(
+            filename,
+            "Vigilance_Data_GEFS_Week_1_Init-20260805_Valid-20260806-20260812.csv",
+        )
+
+    def test_missing_validity_hours_raises_loudly(self):
+        # Misconfiguration: pattern references {valid_end_date} but the
+        # mapping has no validity_hours configured.
+        workflow = _workflow()
+        wff = _workflow_file("mix{run_date:%Y%m%d}_{valid_end_date:%Y%m%d}.tif")
+
+        with self.assertRaises(PatternRenderError):
+            render_source_url(workflow, wff, RUN_DATE, None)
 
 
 class RenderItemIdTests(SimpleTestCase):

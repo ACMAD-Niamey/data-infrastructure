@@ -15,6 +15,7 @@ class DownloadWorkflowFileInline(admin.TabularInline):
         "item_id_pattern",
         "datetime_from_run_date",
         "validity_hours",
+        "csv_value_column",
         "overwrite_existing",
         "enabled",
         "sort_order",
