@@ -30,12 +30,21 @@ export function DataPanel({ activeLayer, language, selectedFeature }: DataPanelP
         <p className="text-sm text-gray-500">{emptyCopy[language]}</p>
       ) : (
         <>
-          {activeLayer.description?.plain ? (
-            <p className="text-sm text-gray-700">{activeLayer.description.plain}</p>
-          ) : null}
           {activeLayer.legend && Object.keys(activeLayer.legend).length > 0
-            ? renderLegend(activeLayer.legend, activeLayer.title)
-            : null}
+            ? renderLegend(
+                activeLayer.legend,
+                activeLayer.title,
+                activeLayer.description?.plain,
+                activeLayer.details?.legend_description,
+              )
+            : activeLayer.description?.plain
+              ? (
+                <>
+                  <div className="text-sm font-bold text-gray-900">{activeLayer.title}</div>
+                  <p className="text-sm text-gray-700">{activeLayer.description.plain}</p>
+                </>
+              )
+              : null}
         </>
       )}
     </div>

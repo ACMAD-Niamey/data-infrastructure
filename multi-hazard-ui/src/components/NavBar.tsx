@@ -8,12 +8,11 @@ import norcapLogo from './images/norcap_logo.svg';
 const navLinks = [
   { label: 'HOME', to: '/' },
   { label: 'GEOPORTAL', to: '/geoportal' },
-  { label: 'DATA SERVICES', to: '/data-services' },
   { label: 'DATA PLATFORMS', to: '/data-platforms' },
   { label: 'BULLETINS', to: '/bulletins' },
   { label: 'ABOUT', to: '/about' },
   { label: 'PARTNERS', to: '/partners' },
-  { label: 'CONTACT', to: '/contact' },
+  { label: 'FEEDBACK', to: '/feedback' },
 ];
 
 function NavLinks({ onClick }: { onClick?: () => void }) {

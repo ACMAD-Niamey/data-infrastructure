@@ -130,8 +130,19 @@ class DownloadWorkflowFile(models.Model):
             "Required when the downloaded file is a CSV: name of the column holding "
             "raster values (e.g. 'Vigilance'). Converted to a GeoTIFF via "
             "utils.raster_converstions.csv_to_raster before upload/ingest - x/y "
-            "columns and resolution use that function's defaults ('Data$x', 'y', 0.5°)."
+            "columns default to 'Data$x'/'y'; resolution defaults to csv_x_res/csv_y_res "
+            "below, or 0.5° each if those are also blank."
         ),
+    )
+    csv_x_res = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Longitude grid resolution in degrees for CSV->raster conversion. Leave blank to use the 0.5° default.",
+    )
+    csv_y_res = models.FloatField(
+        null=True,
+        blank=True,
+        help_text="Latitude grid resolution in degrees for CSV->raster conversion. Leave blank to use the 0.5° default.",
     )
     datetime_from_run_date = models.BooleanField(
         default=False,

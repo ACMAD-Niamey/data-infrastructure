@@ -20,7 +20,7 @@ One workflow represents one THREDDS **source** (shared base URL + dated-folder p
 | Model | Purpose | Key fields |
 |---|---|---|
 | `DownloadWorkflow` | One THREDDS source | `source_base_url`, `folder_pattern`, `schedule_hour_utc`/`schedule_minute_utc`, `retry_interval_minutes`, `retry_until_hour_utc`, `catch_up_days` |
-| `DownloadWorkflowFile` | One dataset + filename pattern mapped into a workflow (many per workflow) | `dataset` (FK to `catalog.DatasetPage`), `filename_pattern`, `lead_hours_csv`, `threshold_label`, `item_id_pattern`, `overwrite_existing`, `datetime_from_run_date`, `validity_hours`, `csv_value_column` |
+| `DownloadWorkflowFile` | One dataset + filename pattern mapped into a workflow (many per workflow) | `dataset` (FK to `catalog.DatasetPage`), `filename_pattern`, `lead_hours_csv`, `threshold_label`, `item_id_pattern`, `overwrite_existing`, `datetime_from_run_date`, `validity_hours`, `csv_value_column`, `csv_x_res`, `csv_y_res` |
 | `DownloadRun` | One execution of a workflow for one `run_date` | `status` (`pending`/`running`/`completed`/`partial`/`failed`), per-run counters |
 | `DownloadRunItem` | One resolved `(workflow_file, lead_hours)` file within a run | `source_url`, `item_id`, `status`, `ingestion_run_id` |
 
@@ -104,7 +104,9 @@ Alongside `{valid_date}` (a single date), `{valid_end_date}` is available in any
 
 Some THREDDS products publish a CSV of point values (`lon, lat, value`) instead of a raster — e.g. the Meningitis Vigilance GEFS series. The ingest pipeline only COG-optimizes `.tif`/`.tiff` keys (`ingest.cog.ensure_raster_is_cog`), so a downloaded `.csv` is automatically converted to a GeoTIFF before upload whenever `filename_pattern` renders to a `.csv` file — no extra flag needed to turn this on, but `csv_value_column` must be set to the name of the column holding raster values, or the item fails with a clear error instead of silently uploading garbage.
 
-The conversion (`thredds_ingestion.services.raster_conversion.convert_to_raster`, wrapping `utils.raster_converstions.csv_to_raster`) uses fixed defaults for everything except the value column: `x`/`y` columns `"Data$x"`/`"y"` and 0.5° resolution, matching every CSV product seen on this THREDDS source so far. `DownloadRunItem.filename` still records the original `.csv` name fetched from THREDDS (an audit trail of what was downloaded); only the MinIO key and uploaded asset become `.tif`.
+The conversion (`thredds_ingestion.services.raster_conversion.convert_to_raster`, wrapping `utils.raster_converstions.csv_to_raster`) uses fixed `x`/`y` columns (`"Data$x"`/`"y"`, matching every CSV product seen on this THREDDS source so far) and 0.5° grid resolution by default. Set `csv_x_res`/`csv_y_res` on the `DownloadWorkflowFile` row (degrees) only if a product's CSV grid uses a different spacing — leave both blank to keep the 0.5° default. `DownloadRunItem.filename` still records the original `.csv` name fetched from THREDDS (an audit trail of what was downloaded); only the MinIO key and uploaded asset become `.tif`.
+
+The generated GeoTIFF also carries the linked dataset's `dataset_id`, `title`, `cadence`, and plain-text `description` (the same description shown in the catalog UI, via `catalog.ui_layers.dataset_description_payload`) as GeoTIFF tags — so the raster is self-describing even outside the STAC item, e.g. when opened directly in QGIS.
 
 **Example**: the real two-week Vigilance product, one `DownloadWorkflowFile` row per week (the filename literally differs by `Week_1`/`Week_2`, so it can't be expressed as a single lead-hour series):
 
@@ -115,6 +117,7 @@ The conversion (`thredds_ingestion.services.raster_conversion.convert_to_raster`
 | `lead_hours_csv` | `24` | `192` |
 | `validity_hours` | `144` | `144` |
 | `csv_value_column` | `Vigilance` | `Vigilance` |
+| `csv_x_res` / `csv_y_res` | *(blank — 0.5° grid)* | *(blank — 0.5° grid)* |
 
 ## Idempotency and retries
 
