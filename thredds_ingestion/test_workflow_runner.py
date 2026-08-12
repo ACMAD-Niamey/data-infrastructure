@@ -1,4 +1,5 @@
 from datetime import date, datetime, timezone
+from pathlib import Path
 from unittest.mock import patch
 
 from django.test import TestCase
@@ -248,6 +249,66 @@ class ValidityWindowTests(WorkflowRunnerTestCase):
             item = workflow_runner.process_item(self.run, self.workflow_file, 0)
 
         self.assertIsNone(item.valid_end_datetime)
+
+
+class CsvToRasterConversionTests(WorkflowRunnerTestCase):
+    """CSV-published products (e.g. Meningitis Vigilance GEFS) must be
+    converted to a GeoTIFF before upload - ingest.cog only COG-optimizes
+    .tif/.tiff keys, so a raw .csv would upload but never become a raster."""
+
+    CSV_CONTENT = "Data$x,y,Vigilance\n-0.5,10,4\n0.0,10,3\n-0.5,10.5,2\n0.0,10.5,4\n"
+
+    def setUp(self):
+        super().setUp()
+        self.workflow_file.filename_pattern = "Vigilance_Data_GEFS_{run_date:%Y%m%d}.csv"
+        self.workflow_file.csv_value_column = "Vigilance"
+        self.workflow_file.save()
+
+    def _write_csv(self, source_url, dest_path, timeout):
+        Path(dest_path).write_text(self.CSV_CONTENT)
+
+    @patch("thredds_ingestion.services.workflow_runner._stac_item_exists", return_value=False)
+    @patch("thredds_ingestion.services.workflow_runner.ingest_bridge.push_to_ingest")
+    @patch("thredds_ingestion.services.workflow_runner.ingest_bridge.upload_file", return_value="s3://geodata/x.tif")
+    @patch("thredds_ingestion.services.workflow_runner.thredds_client.exists", return_value=True)
+    def test_csv_is_converted_to_tif_before_upload(self, mock_thredds_exists, mock_upload, mock_push, mock_stac):
+        mock_push.return_value = IngestionRun.objects.create(
+            dataset_id=self.dataset.dataset_id, cadence="daily", status="completed"
+        )
+        with patch(
+            "thredds_ingestion.services.workflow_runner.thredds_client.download_to_path",
+            side_effect=self._write_csv,
+        ):
+            item = workflow_runner.process_item(self.run, self.workflow_file, 0)
+
+        self.assertEqual(item.status, DownloadRunItem.Status.COMPLETED)
+        mock_upload.assert_called_once()
+        uploaded_local_path, uploaded_key = mock_upload.call_args.args[0], mock_upload.call_args.kwargs["key"]
+        self.assertTrue(uploaded_key.endswith(".tif"))
+        self.assertTrue(uploaded_local_path.endswith(".tif"))
+        # Original THREDDS filename (the .csv) is still what's recorded on the item.
+        self.assertEqual(item.filename, "Vigilance_Data_GEFS_20260805.csv")
+
+    @patch("thredds_ingestion.services.workflow_runner._stac_item_exists", return_value=False)
+    @patch("thredds_ingestion.services.workflow_runner.ingest_bridge.push_to_ingest")
+    @patch("thredds_ingestion.services.workflow_runner.ingest_bridge.upload_file")
+    @patch("thredds_ingestion.services.workflow_runner.thredds_client.exists", return_value=True)
+    def test_missing_csv_value_column_fails_the_item_with_a_clear_message(
+        self, mock_thredds_exists, mock_upload, mock_push, mock_stac
+    ):
+        self.workflow_file.csv_value_column = ""
+        self.workflow_file.save()
+
+        with patch(
+            "thredds_ingestion.services.workflow_runner.thredds_client.download_to_path",
+            side_effect=self._write_csv,
+        ):
+            item = workflow_runner.process_item(self.run, self.workflow_file, 0)
+
+        self.assertEqual(item.status, DownloadRunItem.Status.FAILED)
+        self.assertIn("csv_value_column", item.error_message)
+        mock_upload.assert_not_called()
+        mock_push.assert_not_called()
 
 
 class ExecuteAggregationTests(WorkflowRunnerTestCase):

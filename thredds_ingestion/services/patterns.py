@@ -14,7 +14,14 @@ class PatternRenderError(ValueError):
     pass
 
 
-def _context(*, run_date: date, lead_hours: int | None, threshold_label: str, dataset_id: str) -> dict:
+def _context(
+    *,
+    run_date: date,
+    lead_hours: int | None,
+    threshold_label: str,
+    dataset_id: str,
+    validity_hours: int | None = None,
+) -> dict:
     ctx: dict = {
         "run_date": run_date,
         "dataset_id": dataset_id,
@@ -34,6 +41,13 @@ def _context(*, run_date: date, lead_hours: int | None, threshold_label: str, da
         ctx["lead_hours"] = lead_hours
     if threshold_label:
         ctx["threshold"] = threshold_label
+    # valid_end_date is only meaningful for window products (validity_hours
+    # set) - e.g. Vigilance_Data_..._Valid-20260811-20260817.csv, a 7-day
+    # window starting at valid_date. Omitted otherwise, same as lead_hours.
+    if validity_hours is not None:
+        ctx["valid_end_date"] = (
+            render_valid_datetime(run_date, lead_hours) + timedelta(hours=validity_hours)
+        ).date()
     return ctx
 
 
@@ -44,9 +58,14 @@ def render(
     lead_hours: int | None = None,
     threshold_label: str = "",
     dataset_id: str = "",
+    validity_hours: int | None = None,
 ) -> str:
     ctx = _context(
-        run_date=run_date, lead_hours=lead_hours, threshold_label=threshold_label, dataset_id=dataset_id
+        run_date=run_date,
+        lead_hours=lead_hours,
+        threshold_label=threshold_label,
+        dataset_id=dataset_id,
+        validity_hours=validity_hours,
     )
     try:
         return pattern.format(**ctx)
@@ -68,6 +87,7 @@ def render_source_url(
         run_date=run_date,
         lead_hours=lead_hours,
         threshold_label=workflow_file.threshold_label,
+        validity_hours=workflow_file.validity_hours,
     )
     return f"{base}/{folder}/{filename}", filename
 
@@ -85,6 +105,7 @@ def render_item_id(
             lead_hours=lead_hours,
             threshold_label=workflow_file.threshold_label,
             dataset_id=dataset_id,
+            validity_hours=workflow_file.validity_hours,
         )
     if lead_hours is not None:
         return f"{dataset_id}_{run_date:%Y%m%d}_{lead_hours}h"
