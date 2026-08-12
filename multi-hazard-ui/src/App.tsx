@@ -7,6 +7,7 @@ import DataPlatforms from './pages/DataPlatforms';
 import DataPlatformDetail from './pages/DataPlatformDetail';
 import Feedback from './pages/Feedback';
 import Partners from './pages/Partners';
+import DataServices from './pages/DataServices';
 
 function App() {
   return (
@@ -15,7 +16,7 @@ function App() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/geoportal" element={<Geoportal />} />
-          <Route path="/data-services" element={<StubPage title="Data Services" />} />
+          <Route path="/data-services" element={<DataServices />} />
           <Route path="/data-platforms" element={<DataPlatforms />} />
           <Route path="/data-platforms/:datasetId" element={<DataPlatformDetail />} />
           <Route path="/bulletins" element={<StubPage title="Bulletins" />} />
