@@ -24,6 +24,7 @@ import {
 import type { CatalogLayer } from '../types/catalogLayer';
 import type { BoundsObject } from '../services/layersApi';
 import { inferCategory } from '../lib/inferCategory';
+import { visualizationEndpointUrl } from '../lib/datasetUrls';
 
 // ---------------------------------------------------------------------------
 // Hazard categories — loaded from backend, fallback to hardcoded list
@@ -52,9 +53,22 @@ function RightPanel({ layer, isActive, onClose, onToggle, onOpacityChange, opaci
   const [vizDate, setVizDate] = useState<string | null>(null);
   const [dateIndex, setDateIndex] = useState(0);
   const [availError, setAvailError] = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const { mapRef } = useMap() ?? { mapRef: { current: null } };
 
   const cadence = layer.dataset.cadence;
+
+  const handleCopyApiLink = async () => {
+    const date = availability[dateIndex] ?? vizDate ?? maxDate;
+    if (!date) return;
+    try {
+      await navigator.clipboard.writeText(visualizationEndpointUrl(layer.dataset.id, cadence, date));
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 1800);
+    } catch {
+      // clipboard unavailable (e.g. insecure context) — button label stays as-is
+    }
+  };
 
   // Load availability when the layer changes
   useEffect(() => {
@@ -305,8 +319,21 @@ function FullDetailsDialog({
   availability, dateIndex, currentDateLabel, onDateNav,
 }: FullDetailsDialogProps) {
   const [activeTab, setActiveTab] = useState<DetailTab>('Overview');
+  const [linkCopied, setLinkCopied] = useState(false);
   const categoryKey = inferCategory(layer);
   const hazardCat = categories.find((c) => c.key === categoryKey);
+
+  const handleCopyApiLink = async () => {
+    const date = availability[dateIndex];
+    if (!date) return;
+    try {
+      await navigator.clipboard.writeText(visualizationEndpointUrl(layer.dataset.id, layer.dataset.cadence, date));
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 1800);
+    } catch {
+      // clipboard unavailable (e.g. insecure context) — button label stays as-is
+    }
+  };
 
   const badgeColors: Record<string, string> = {
     drought: 'bg-amber-100 text-amber-700',
@@ -446,8 +473,11 @@ function FullDetailsDialog({
                   <button className="flex-1 flex items-center justify-center gap-1.5 border border-gray-300 text-gray-700 hover:border-hub-400 rounded px-3 py-2 text-sm font-medium">
                     <Download className="size-4" /> Download
                   </button>
-                  <button className="flex-1 flex items-center justify-center gap-1.5 border border-gray-300 text-gray-700 hover:border-hub-400 rounded px-3 py-2 text-sm font-medium">
-                    <Copy className="size-4" /> Copy API Link
+                  <button
+                    onClick={handleCopyApiLink}
+                    className="flex-1 flex items-center justify-center gap-1.5 border border-gray-300 text-gray-700 hover:border-hub-400 rounded px-3 py-2 text-sm font-medium"
+                  >
+                    <Copy className="size-4" /> {linkCopied ? 'Copied!' : 'Copy API Link'}
                   </button>
                 </div>
                 {hazardCat?.external_system_url && (
@@ -600,8 +630,11 @@ function FullDetailsDialog({
               <button className="w-full flex items-center justify-center gap-2 border border-gray-300 text-gray-700 hover:border-hub-400 hover:text-hub-700 rounded px-4 py-2.5 text-sm font-medium transition-colors">
                 <Download className="size-4" /> Download
               </button>
-              <button className="w-full flex items-center justify-center gap-2 border border-gray-300 text-gray-700 hover:border-hub-400 hover:text-hub-700 rounded px-4 py-2.5 text-sm font-medium transition-colors">
-                <Copy className="size-4" /> Copy API Link
+              <button
+                onClick={handleCopyApiLink}
+                className="w-full flex items-center justify-center gap-2 border border-gray-300 text-gray-700 hover:border-hub-400 hover:text-hub-700 rounded px-4 py-2.5 text-sm font-medium transition-colors"
+              >
+                <Copy className="size-4" /> {linkCopied ? 'Copied!' : 'Copy API Link'}
               </button>
               {hazardCat?.external_system_url && (
                 <a
