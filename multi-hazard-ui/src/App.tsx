@@ -5,6 +5,8 @@ import Geoportal from './pages/Geoportal';
 import StubPage from './pages/StubPage';
 import DataPlatforms from './pages/DataPlatforms';
 import DataPlatformDetail from './pages/DataPlatformDetail';
+import Feedback from './pages/Feedback';
+import Partners from './pages/Partners';
 
 function App() {
   return (
@@ -18,8 +20,8 @@ function App() {
           <Route path="/data-platforms/:datasetId" element={<DataPlatformDetail />} />
           <Route path="/bulletins" element={<StubPage title="Bulletins" />} />
           <Route path="/about" element={<StubPage title="About" />} />
-          <Route path="/partners" element={<StubPage title="Partners" />} />
-          <Route path="/contact" element={<StubPage title="Contact" />} />
+          <Route path="/partners" element={<Partners />} />
+          <Route path="/feedback" element={<Feedback />} />
           <Route path="*" element={<StubPage title="Page Not Found" />} />
         </Routes>
       </MapProvider>
