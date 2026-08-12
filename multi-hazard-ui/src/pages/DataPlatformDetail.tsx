@@ -7,6 +7,7 @@ import { useDataPlatformCatalog } from '../hooks/useDataPlatformCatalog';
 import { useHazardCategories } from '../hooks/useHazardCategories';
 import { inferCategory } from '../lib/inferCategory';
 import { catalogBaseUrl } from '../config/api';
+import { fetchDatasetAvailability } from '../services/layersApi';
 
 const DETAIL_TABS = ['Overview', 'Metadata', 'Methodology', 'Example Notebook'] as const;
 type DetailTab = typeof DETAIL_TABS[number];
@@ -28,8 +29,17 @@ export default function DataPlatformDetail() {
   const { layers, loading } = useDataPlatformCatalog();
   const categories = useHazardCategories();
   const [activeTab, setActiveTab] = useState<DetailTab>('Overview');
+  const [startDate, setStartDate] = useState<string | null>(null);
 
   const layer = layers.find((l) => l.dataset.id === datasetId);
+
+  useEffect(() => {
+    if (!layer) return;
+    setStartDate(null);
+    fetchDatasetAvailability({ datasetId: layer.dataset.id, cadence: layer.dataset.cadence })
+      .then(({ min }) => setStartDate(min))
+      .catch(() => setStartDate(null));
+  }, [layer?.dataset.id, layer?.dataset.cadence]);
 
   if (loading) {
     return (
@@ -104,7 +114,12 @@ export default function DataPlatformDetail() {
               {layer.description?.plain || 'No description available.'}
             </p>
             <div>
-              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Legend</p>
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                Legend
+                {d?.legend_description && (
+                  <span className="normal-case font-normal text-[11px] text-gray-400"> — {d.legend_description}</span>
+                )}
+              </p>
               {layer.legend && Object.keys(layer.legend).length > 0 ? (
                 <div className="flex flex-wrap gap-x-5 gap-y-1.5">
                   {Object.entries(layer.legend).map(([label, color]) => (
@@ -150,6 +165,7 @@ export default function DataPlatformDetail() {
                 ['Update frequency', d?.update_frequency || '—'],
                 ['Source', d?.source_organization || layer.dataset.title],
                 ['Cadence', layer.dataset.cadence],
+                ['Start date', startDate || '—'],
                 ['STAC collection', layer.dataset.stac_collection],
               ].map(([k, v]) => (
                 <tr key={k}>
