@@ -18,11 +18,10 @@ from .serializers import (
 )
 from .storage.minio import minio_client
 from .tasks import upload_file_to_minio
-# from ingest.auth import HeaderAPIKeyAuthentication
-# from ingest.permissions import HasAPIKey
+from ingest.auth import HeaderAPIKeyAuthentication
+from ingest.permissions import HasAPIKey
 from catalog.models import DatasetPage
 from ingest.api import validate_payload_for_cadence
-from rest_framework.permissions import IsAuthenticated
 from drf_spectacular.utils import extend_schema
 
 
@@ -39,8 +38,8 @@ class PresignUploadView(APIView):
     """
     Returns a pre-signed PUT url for direct upload to MinIO + the resulting s3:// href.
     """
-    # authentication_classes = [HeaderAPIKeyAuthentication]
-    permission_classes = [IsAuthenticated]
+    authentication_classes = [HeaderAPIKeyAuthentication]
+    permission_classes = [HasAPIKey]
 
     @extend_schema(
         request=PresignUploadRequestSerializer,
@@ -110,8 +109,8 @@ class DirectUpFileUploadView(APIView):
     Returns a task ID that can be used to check upload status.
     """
     parser_classes = (MultiPartParser, FormParser)
-    # authentication_classes = [HeaderAPIKeyAuthentication]
-    permission_classes = [IsAuthenticated]
+    authentication_classes = [HeaderAPIKeyAuthentication]
+    permission_classes = [HasAPIKey]
 
     @extend_schema(
         request=DirectUploadRequestSerializer,
@@ -252,7 +251,8 @@ class UploadStatusView(APIView):
     """
     Check the status of an async upload task.
     """
-    permission_classes = [IsAuthenticated]
+    authentication_classes = [HeaderAPIKeyAuthentication]
+    permission_classes = [HasAPIKey]
 
     @extend_schema(
         responses={200: UploadStatusResponseSerializer},

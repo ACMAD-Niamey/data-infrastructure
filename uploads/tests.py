@@ -3,14 +3,11 @@ import os
 import tempfile
 from unittest.mock import MagicMock, patch
 
-from django.contrib.auth import get_user_model
 from django.core.cache import cache
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from ingest.models import IngestionRun
-
-User = get_user_model()
+from ingest.models import APIKey, IngestionRun
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -46,8 +43,8 @@ class PresignUploadViewTests(TestCase):
 
     def setUp(self):
         self.client = APIClient()
-        self.user = User.objects.create_user("upload_user", password="pass")
-        self.client.force_authenticate(user=self.user)
+        self.api_key = APIKey.objects.create(name="upload_user")
+        self.client.credentials(HTTP_X_API_KEY=self.api_key.key)
 
     def test_returns_403_without_authentication(self):
         anon = APIClient()
@@ -104,8 +101,8 @@ class DirectUploadViewTests(TestCase):
 
     def setUp(self):
         self.client = APIClient()
-        self.user = User.objects.create_user("direct_user", password="pass")
-        self.client.force_authenticate(user=self.user)
+        self.api_key = APIKey.objects.create(name="direct_user")
+        self.client.credentials(HTTP_X_API_KEY=self.api_key.key)
 
     def test_returns_403_without_authentication(self):
         anon = APIClient()
@@ -155,8 +152,8 @@ class DirectUploadViewTests(TestCase):
 class UploadStatusViewTests(TestCase):
     def setUp(self):
         self.client = APIClient()
-        self.user = User.objects.create_user("status_user", password="pass")
-        self.client.force_authenticate(user=self.user)
+        self.api_key = APIKey.objects.create(name="status_user")
+        self.client.credentials(HTTP_X_API_KEY=self.api_key.key)
 
     def test_pending_task_returns_status_pending(self):
         task_id = "abc-123"

@@ -5,7 +5,7 @@ from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 
-from ingest.models import DeletionRun, IngestionRun
+from ingest.models import APIKey, DeletionRun, IngestionRun
 from ingest.tasks import build_item
 from ingest.stac_ops import derive_item_id
 
@@ -54,8 +54,8 @@ class IngestionSubmitViewTests(TestCase):
 
     def setUp(self):
         self.client = APIClient()
-        self.user = User.objects.create_user("ingest_user", password="pass")
-        self.client.force_authenticate(user=self.user)
+        self.api_key = APIKey.objects.create(name="ingest_user")
+        self.client.credentials(HTTP_X_API_KEY=self.api_key.key)
 
     def test_returns_403_without_authentication(self):
         anon = APIClient()
