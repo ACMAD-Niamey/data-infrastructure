@@ -1,15 +1,12 @@
 from unittest.mock import MagicMock, patch
 
 import botocore.exceptions
-from django.contrib.auth import get_user_model
 from django.test import TestCase
 from rest_framework.test import APIClient
 
 from ingest.models import APIKey, DeletionRun, IngestionRun
 from ingest.tasks import build_item
 from ingest.stac_ops import derive_item_id
-
-User = get_user_model()
 
 # ---------------------------------------------------------------------------
 # Shared fixtures
@@ -359,8 +356,8 @@ class DeleteDatasetItemViewTests(TestCase):
 
     def setUp(self):
         self.client = APIClient()
-        self.user = User.objects.create_user("delete_user", password="pass")
-        self.client.force_authenticate(user=self.user)
+        self.api_key = APIKey.objects.create(name="delete_user")
+        self.client.credentials(HTTP_X_API_KEY=self.api_key.key)
 
     @patch("ingest.delete_api.process_deletion_run")
     @patch("ingest.delete_api._get_dataset")

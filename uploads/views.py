@@ -6,6 +6,7 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.parsers import MultiPartParser, FormParser
+from rest_framework.authentication import TokenAuthentication
 from django.core.cache import cache
 from django.conf import settings
 
@@ -24,6 +25,11 @@ from catalog.models import DatasetPage
 from ingest.api import validate_payload_for_cadence
 from drf_spectacular.utils import extend_schema
 
+# Either an APIKey (X-API-Key header, Ingest > Api keys in admin) or a DRF
+# Token (Authorization: Token ... header, Tokens in admin, auto-generated
+# per user) authenticates — see ingest.permissions.HasAPIKey.
+_KEY_OR_TOKEN_AUTH = [HeaderAPIKeyAuthentication, TokenAuthentication]
+
 
 def _json_safe(value):
     if isinstance(value, (datetime, date)):
@@ -38,7 +44,7 @@ class PresignUploadView(APIView):
     """
     Returns a pre-signed PUT url for direct upload to MinIO + the resulting s3:// href.
     """
-    authentication_classes = [HeaderAPIKeyAuthentication]
+    authentication_classes = _KEY_OR_TOKEN_AUTH
     permission_classes = [HasAPIKey]
 
     @extend_schema(
@@ -109,7 +115,7 @@ class DirectUpFileUploadView(APIView):
     Returns a task ID that can be used to check upload status.
     """
     parser_classes = (MultiPartParser, FormParser)
-    authentication_classes = [HeaderAPIKeyAuthentication]
+    authentication_classes = _KEY_OR_TOKEN_AUTH
     permission_classes = [HasAPIKey]
 
     @extend_schema(
@@ -251,7 +257,7 @@ class UploadStatusView(APIView):
     """
     Check the status of an async upload task.
     """
-    authentication_classes = [HeaderAPIKeyAuthentication]
+    authentication_classes = _KEY_OR_TOKEN_AUTH
     permission_classes = [HasAPIKey]
 
     @extend_schema(
