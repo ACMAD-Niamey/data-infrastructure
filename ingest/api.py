@@ -1,14 +1,13 @@
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from datetime import datetime, date
 
 from catalog.models import DatasetPage
-# from .auth import HeaderAPIKeyAuthentication
+from .auth import HeaderAPIKeyAuthentication
 from .models import IngestionRun
-# from .permissions import HasAPIKey
+from .permissions import HasAPIKey
 from .serializers import IngestRequestSerializer, IngestResponseSerializer
 
 from .tasks import process_ingestion_run
@@ -49,8 +48,8 @@ class IngestDatasetItemView(APIView):
     It validates the S3 path, creates necessary STAC collections,
     and posts the item metadata to the pgSTAC catalog.
     """
-    # authentication_classes = [HeaderAPIKeyAuthentication]
-    permission_classes = [IsAuthenticated]
+    authentication_classes = [HeaderAPIKeyAuthentication]
+    permission_classes = [HasAPIKey]
 
     @extend_schema(
         request=IngestRequestSerializer,
