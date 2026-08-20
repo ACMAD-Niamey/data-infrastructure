@@ -5,12 +5,12 @@ from __future__ import annotations
 from catalog.models import DatasetPage
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import status
-from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .api import _json_safe, validate_payload_for_cadence
+from .api import _json_safe, validate_payload_for_cadence, KEY_OR_TOKEN_AUTH
 from .models import DeletionRun
+from .permissions import HasAPIKey
 from .serializers import DeleteByDatetimeSerializer, DeleteResponseSerializer
 from .stac_ops import resolve_item_ids_for_delete
 from .tasks import process_deletion_run
@@ -53,7 +53,8 @@ _DELETE_OBJECT_PARAM = OpenApiParameter(
 class DeleteDatasetItemView(APIView):
     """Delete a single STAC item by id (optional MinIO purge)."""
 
-    permission_classes = [IsAuthenticated]
+    authentication_classes = KEY_OR_TOKEN_AUTH
+    permission_classes = [HasAPIKey]
 
     @extend_schema(
         responses={202: DeleteResponseSerializer},
@@ -106,7 +107,8 @@ class DeleteDatasetItemView(APIView):
 class DeleteDatasetItemByDatetimeView(APIView):
     """Delete a STAC item identified by datetime (optional MinIO purge)."""
 
-    permission_classes = [IsAuthenticated]
+    authentication_classes = KEY_OR_TOKEN_AUTH
+    permission_classes = [HasAPIKey]
 
     @extend_schema(
         request=DeleteByDatetimeSerializer,
