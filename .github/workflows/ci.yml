@@ -195,13 +195,13 @@ jobs:
     - name: Deploy to Vultr
       run: |
         ssh -o StrictHostKeyChecking=no -p 2224 ${{ secrets.VULTR_USER }}@${{ secrets.VULTR_IP }} << 'EOF'
+          set -euo pipefail
           cd data-infrastructure
-          git pull origin production
-          
-          
+          # Hard-sync instead of `git pull` so a dirty working tree or a
+          # non-fast-forward doesn't silently leave stale code deployed.
+          git fetch origin production
+          git reset --hard origin/production
           docker compose up -d --build
           docker compose --profile prod up -d
           docker builder prune -af
-         
-          
         EOF
