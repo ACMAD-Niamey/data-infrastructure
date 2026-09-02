@@ -143,6 +143,9 @@ services:
     networks:
       - data_infra_network
     restart: on-failure
+    # Reload every 12h so certbot-renew's freshly issued certs are actually
+    # picked up without a manual `nginx -s reload` or a redeploy.
+    command: sh -c "while :; do sleep 12h & wait $${!}; nginx -s reload; done & nginx -g 'daemon off;'"
   certbot:
     image: certbot/certbot
     container_name: geodatamanager_certbot

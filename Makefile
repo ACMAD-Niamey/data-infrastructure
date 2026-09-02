@@ -34,6 +34,15 @@ connectdb:
 	PGPASSWORD=${POSTGRES_PASSWORD} psql -h localhost -U ${POSTGRES_USER} -d ${POSTGRES_DB}
 connectdb-container:
 	 docker exec -e PGPASSWORD=$(POSTGRES_PASSWORD) -it geodatamanager_db psql -U ${POSTGRES_USER} -d ${POSTGRES_DB} -h ${POSTGRES_HOST} 
+# --- TLS / Let's Encrypt ---------------------------------------------------
+# Bootstrap flow for first-time issuance:
+#   make nginx-bootstrap   # HTTP-only vhost that serves ACME challenges
+#   make certificate       # run certbot webroot HTTP-01 for all domains
+#   make nginx-ssl         # switch to the HTTPS vhost + redirect
+nginx-bootstrap:
+	NGINX_CONFIG=default_pre_ssl.conf docker compose up -d --force-recreate nginx
+nginx-ssl:
+	NGINX_CONFIG=default_ssl.conf docker compose up -d --force-recreate nginx
 certificate:
 	docker compose run --rm certbot
 test:
