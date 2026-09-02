@@ -13,10 +13,13 @@ from thredds_ingestion.services.patterns import (
 RUN_DATE = date(2026, 8, 5)
 
 
-def _workflow(base_url="https://sgbd.acmad.org/thredds/fileServer/ACMAD/WWFD/forecastinservice/ensemble5"):
+def _workflow(
+    base_url="https://sgbd.acmad.org/thredds/fileServer/ACMAD/WWFD/forecastinservice/ensemble5",
+    folder_pattern="{run_date:%Y%m%d}",
+):
     wf = MagicMock()
     wf.source_base_url = base_url
-    wf.folder_pattern = "{run_date:%Y%m%d}"
+    wf.folder_pattern = folder_pattern
     return wf
 
 
@@ -140,6 +143,48 @@ class ValidEndDatePlaceholderTests(SimpleTestCase):
 
         with self.assertRaises(PatternRenderError):
             render_source_url(workflow, wff, RUN_DATE, None)
+
+
+class MonthTokenTests(SimpleTestCase):
+    """{month_abbr}/{month_name} for monthly products whose THREDDS path
+    embeds the English month literally, e.g.
+    .../monthly/Sep/tif/AFR_Sep_2025_RFE2_Precip-Anom.tif."""
+
+    def test_month_abbr_in_folder_and_filename(self):
+        workflow = _workflow(
+            base_url="https://sgbd.acmad.org/thredds/fileServer/ACMAD/CDD/ClimateBulletin_TN/OBS_RAIN_ANOM/monthly",
+            folder_pattern="{month_abbr}/tif",
+        )
+        wff = _workflow_file("AFR_{month_abbr}_{run_date:%Y}_RFE2_Precip-Anom.tif")
+
+        url, filename = render_source_url(workflow, wff, date(2025, 9, 1), None)
+
+        self.assertEqual(filename, "AFR_Sep_2025_RFE2_Precip-Anom.tif")
+        self.assertTrue(url.endswith("/OBS_RAIN_ANOM/monthly/Sep/tif/AFR_Sep_2025_RFE2_Precip-Anom.tif"))
+
+    def test_month_tokens_are_english_regardless_of_run_date_month(self):
+        workflow = _workflow(folder_pattern="{month_name}")
+        wff = _workflow_file("{month_abbr}.tif")
+
+        for month, abbr, name in [
+            (1, "Jan", "January"), (5, "May", "May"), (10, "Oct", "October"), (12, "Dec", "December")
+        ]:
+            _, filename = render_source_url(workflow, wff, date(2024, month, 1), None)
+            self.assertEqual(filename, f"{abbr}.tif")
+
+    def test_literal_season_folder_passes_through_untouched(self):
+        # Seasonal products: the season (JJA = Jun/Jul/Aug) isn't derivable
+        # from a date, so the folder is a literal with no placeholders.
+        workflow = _workflow(
+            base_url="https://sgbd.acmad.org/thredds/fileServer/ACMAD/CDD/ClimateBulletin_TN/OBS_RAIN_ANOM/seasonal",
+            folder_pattern="JJA/tif",
+        )
+        wff = _workflow_file("AFR_JJA_{run_date:%Y}_RFE2_Precip-Anom.tif")
+
+        url, filename = render_source_url(workflow, wff, date(2025, 6, 1), None)
+
+        self.assertEqual(filename, "AFR_JJA_2025_RFE2_Precip-Anom.tif")
+        self.assertTrue(url.endswith("/seasonal/JJA/tif/AFR_JJA_2025_RFE2_Precip-Anom.tif"))
 
 
 class RenderItemIdTests(SimpleTestCase):

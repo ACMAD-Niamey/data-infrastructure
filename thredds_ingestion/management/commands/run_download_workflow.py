@@ -14,9 +14,16 @@ Usage
     # One workflow, one date
     python manage.py run_download_workflow --workflow-name "ACMAD WWFD ensemble5" --run-date 2026-08-05
 
+    # Monthly/seasonal cadence: one period (1st of the month; a season's anchor month)
+    python manage.py run_download_workflow --workflow-name "ACMAD OBS_RAIN_ANOM monthly" --run-month 2025-09
+    python manage.py run_download_workflow --workflow-name "ACMAD OBS_RAIN_ANOM JJA" --run-month 2025-06
+
     # Backfill a date range, via Celery (recommended for large ranges - lets
     # workers process dates in parallel instead of one at a time inline)
     python manage.py run_download_workflow --workflow-id 3 --run-date-range 2026-07-01:2026-08-05 --dispatch-celery
+
+    # Monthly backfill - steps one calendar month at a time
+    python manage.py run_download_workflow --workflow-id 5 --run-month-range 2020-01:2025-09 --dispatch-celery
 
     # Backfill the last 14 days (inclusive of today)
     python manage.py run_download_workflow --all-enabled --days-back 14
@@ -36,6 +43,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from thredds_ingestion.models import DownloadRun, DownloadWorkflow
 from thredds_ingestion.services import workflow_runner
+from thredds_ingestion.services.dates import month_range
 
 
 class Command(BaseCommand):
@@ -78,6 +86,23 @@ class Command(BaseCommand):
             "--days-back",
             type=int,
             help="Backfill convenience: the last N days through today (inclusive), e.g. 14.",
+        )
+        dates.add_argument(
+            "--run-month",
+            type=str,
+            help=(
+                "Monthly/seasonal cadence: a single period, YYYY-MM, resolved to the "
+                "1st of that month. For a season, pass its anchor month (JJA 2025 -> "
+                "2025-06)."
+            ),
+        )
+        dates.add_argument(
+            "--run-month-range",
+            type=str,
+            help=(
+                "Inclusive month range for a monthly backfill, START:END, e.g. "
+                "2020-01:2025-09 - steps one calendar month at a time (not one day)."
+            ),
         )
 
         parser.add_argument(
@@ -154,6 +179,20 @@ class Command(BaseCommand):
             days = (end - start).days
             return [start + dt.timedelta(days=i) for i in range(days + 1)]
 
+        if options.get("run_month"):
+            return [cls._parse_month(options["run_month"], "--run-month")]
+
+        if options.get("run_month_range"):
+            raw = options["run_month_range"]
+            if ":" not in raw:
+                raise CommandError("--run-month-range must be START:END (e.g. 2020-01:2025-09).")
+            start_s, end_s = raw.split(":", 1)
+            start = cls._parse_month(start_s, "--run-month-range start")
+            end = cls._parse_month(end_s, "--run-month-range end")
+            if end < start:
+                raise CommandError("--run-month-range end must be >= start.")
+            return month_range(start, end)
+
         days_back = options["days_back"]
         if days_back <= 0:
             raise CommandError("--days-back must be > 0.")
@@ -167,6 +206,13 @@ class Command(BaseCommand):
             return dt.datetime.strptime(raw.strip(), "%Y-%m-%d").date()
         except ValueError as exc:
             raise CommandError(f"{label} must be YYYY-MM-DD, got {raw!r}") from exc
+
+    @staticmethod
+    def _parse_month(raw: str, label: str) -> dt.date:
+        try:
+            return dt.datetime.strptime(raw.strip(), "%Y-%m").date().replace(day=1)
+        except ValueError as exc:
+            raise CommandError(f"{label} must be YYYY-MM, got {raw!r}") from exc
 
     @staticmethod
     def _select_workflows(

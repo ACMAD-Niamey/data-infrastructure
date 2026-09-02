@@ -35,3 +35,38 @@ class ResolveRunDatesTests(SimpleTestCase):
     def test_days_back_zero_raises(self):
         with self.assertRaises(CommandError):
             Command._resolve_run_dates({"run_date": None, "run_date_range": None, "days_back": 0})
+
+
+def _opts(**overrides):
+    base = {"run_date": None, "run_date_range": None, "days_back": None, "run_month": None, "run_month_range": None}
+    base.update(overrides)
+    return base
+
+
+class ResolveRunMonthsTests(SimpleTestCase):
+    def test_single_run_month_resolves_to_first_of_month(self):
+        dates = Command._resolve_run_dates(_opts(run_month="2025-09"))
+        self.assertEqual(dates, [dt.date(2025, 9, 1)])
+
+    def test_run_month_accepts_a_season_anchor_month(self):
+        dates = Command._resolve_run_dates(_opts(run_month="2025-06"))
+        self.assertEqual(dates, [dt.date(2025, 6, 1)])
+
+    def test_run_month_bad_format_raises(self):
+        with self.assertRaises(CommandError):
+            Command._resolve_run_dates(_opts(run_month="2025-09-01"))
+
+    def test_run_month_range_steps_one_month_at_a_time_inclusive(self):
+        dates = Command._resolve_run_dates(_opts(run_month_range="2024-11:2025-02"))
+        self.assertEqual(
+            dates,
+            [dt.date(2024, 11, 1), dt.date(2024, 12, 1), dt.date(2025, 1, 1), dt.date(2025, 2, 1)],
+        )
+
+    def test_run_month_range_end_before_start_raises(self):
+        with self.assertRaises(CommandError):
+            Command._resolve_run_dates(_opts(run_month_range="2025-09:2025-01"))
+
+    def test_run_month_range_missing_colon_raises(self):
+        with self.assertRaises(CommandError):
+            Command._resolve_run_dates(_opts(run_month_range="2025-09"))

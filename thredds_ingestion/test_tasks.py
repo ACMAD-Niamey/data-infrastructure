@@ -96,3 +96,102 @@ class RunDueDownloadWorkflowsTests(TestCase):
         run_due_download_workflows()
 
         mock_delay.assert_not_called()
+
+
+def _dispatched_run_dates(workflow) -> list[dt.date]:
+    return sorted(DownloadRun.objects.filter(workflow=workflow).values_list("run_date", flat=True))
+
+
+# FIXED_NOW is 2026-08-05.
+@patch("thredds_ingestion.tasks.timezone.now", return_value=FIXED_NOW)
+@patch("thredds_ingestion.tasks.process_download_run.delay")
+class MonthlyCadenceTests(TestCase):
+    def _workflow(self, **overrides):
+        defaults = dict(cadence=DownloadWorkflow.Cadence.MONTHLY, catch_up_days=2)
+        defaults.update(overrides)
+        return _workflow(**defaults)
+
+    def test_newest_target_is_last_month_and_run_dates_are_first_of_month(self, mock_delay, _now):
+        # publish window open (schedule_day_of_month=1, today is the 5th).
+        workflow = self._workflow(schedule_day_of_month=1)
+
+        run_due_download_workflows()
+
+        dates = _dispatched_run_dates(workflow)
+        self.assertEqual(dates, [dt.date(2026, 6, 1), dt.date(2026, 7, 1)])  # last month + 1 catch-up month
+        self.assertTrue(all(d.day == 1 for d in dates))
+
+    def test_newest_month_gated_out_before_publish_day(self, mock_delay, _now):
+        # schedule_day_of_month=20 but today is the 5th -> July not attempted,
+        # only the always-safe older catch-up month.
+        workflow = self._workflow(schedule_day_of_month=20)
+
+        run_due_download_workflows()
+
+        self.assertEqual(_dispatched_run_dates(workflow), [dt.date(2026, 6, 1)])
+
+    def test_newest_month_gated_out_after_retry_window(self, mock_delay, _now):
+        workflow = self._workflow(schedule_day_of_month=1, retry_window_days=2)  # window [08-01, 08-03]
+
+        run_due_download_workflows()
+
+        self.assertEqual(_dispatched_run_dates(workflow), [dt.date(2026, 6, 1)])
+
+    def test_catch_up_zero_still_considers_the_newest_month(self, mock_delay, _now):
+        workflow = self._workflow(schedule_day_of_month=1, catch_up_days=0)
+
+        run_due_download_workflows()
+
+        self.assertEqual(_dispatched_run_dates(workflow), [dt.date(2026, 7, 1)])
+
+
+@patch("thredds_ingestion.tasks.process_download_run.delay")
+class SeasonalCadenceTests(TestCase):
+    def _workflow(self, **overrides):
+        defaults = dict(
+            cadence=DownloadWorkflow.Cadence.SEASONAL,
+            anchor_month=6,  # JJA
+            publish_month_offset=3,  # data lands ~September
+            schedule_day_of_month=8,
+            catch_up_days=2,
+        )
+        defaults.update(overrides)
+        return _workflow(**defaults)
+
+    @patch("thredds_ingestion.tasks.timezone.now", return_value=FIXED_NOW)  # 2026-08-05
+    def test_current_year_season_not_attempted_before_its_publish_window(self, _now, mock_delay):
+        workflow = self._workflow()
+
+        run_due_download_workflows()
+
+        # JJA 2026 publishes ~2026-09-08; on 2026-08-05 only JJA 2025 is due.
+        self.assertEqual(_dispatched_run_dates(workflow), [dt.date(2025, 6, 1)])
+
+    @patch(
+        "thredds_ingestion.tasks.timezone.now",
+        return_value=dt.datetime(2026, 9, 20, 10, 0, tzinfo=dt_timezone.utc),
+    )
+    def test_current_year_season_due_inside_its_publish_window(self, _now, mock_delay):
+        workflow = self._workflow()
+
+        run_due_download_workflows()
+
+        self.assertEqual(
+            _dispatched_run_dates(workflow), [dt.date(2025, 6, 1), dt.date(2026, 6, 1)]
+        )
+
+    @patch(
+        "thredds_ingestion.tasks.timezone.now",
+        return_value=dt.datetime(2026, 3, 10, 10, 0, tzinfo=dt_timezone.utc),
+    )
+    def test_early_in_year_only_prior_seasons_that_have_happened(self, _now, mock_delay):
+        workflow = self._workflow(catch_up_days=3)
+
+        run_due_download_workflows()
+
+        # In March 2026, with catch_up spanning 2026/2025/2024: JJA 2026 hasn't
+        # happened yet (gated out); JJA 2025 and JJA 2024 have.
+        self.assertEqual(
+            _dispatched_run_dates(workflow),
+            [dt.date(2024, 6, 1), dt.date(2025, 6, 1)],
+        )

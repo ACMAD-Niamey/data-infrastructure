@@ -4,6 +4,11 @@ from django.db import models
 class DownloadWorkflow(models.Model):
     """One THREDDS source: shared base URL, dated-folder pattern, and schedule."""
 
+    class Cadence(models.TextChoices):
+        DAILY = "daily", "Daily"
+        MONTHLY = "monthly", "Monthly"
+        SEASONAL = "seasonal", "Seasonal"
+
     name = models.CharField(
         max_length=150,
         unique=True,
@@ -19,13 +24,30 @@ class DownloadWorkflow(models.Model):
     folder_pattern = models.CharField(
         max_length=200,
         default="{run_date:%Y%m%d}",
-        help_text="Dated subfolder, rendered with run_date, e.g. {run_date:%Y%m%d}",
+        help_text=(
+            "Dated subfolder, rendered with run_date (plus {month_abbr}/{month_name}, "
+            "always English). Daily: {run_date:%Y%m%d}. Monthly: {month_abbr}/tif. "
+            "Seasonal: a literal season folder like 'JJA/tif' (the season isn't "
+            "derivable from a date - one workflow per season)."
+        ),
+    )
+    cadence = models.CharField(
+        max_length=10,
+        choices=Cadence.choices,
+        default=Cadence.DAILY,
+        help_text=(
+            "Drives how the Beat scheduler picks run_dates. daily: today + previous "
+            "catch_up_days days. monthly: last month + previous catch_up_days *months* "
+            "(1st-of-month run_date). seasonal: one run per year anchored at "
+            "anchor_month, + previous catch_up_days *years*. Backfill via the "
+            "run_download_workflow command is unaffected by this."
+        ),
     )
     enabled = models.BooleanField(default=True)
 
     schedule_hour_utc = models.PositiveSmallIntegerField(
         default=7,
-        help_text="Earliest UTC hour to attempt today's run.",
+        help_text="Daily cadence only: earliest UTC hour to attempt today's run.",
     )
     schedule_minute_utc = models.PositiveSmallIntegerField(default=0)
     retry_interval_minutes = models.PositiveIntegerField(
@@ -34,17 +56,50 @@ class DownloadWorkflow(models.Model):
     )
     retry_until_hour_utc = models.PositiveSmallIntegerField(
         default=20,
-        help_text="Stop retrying for the day after this UTC hour; the run is left partial.",
+        help_text="Daily cadence only: stop retrying for the day after this UTC hour; the run is left partial.",
+    )
+    schedule_day_of_month = models.PositiveSmallIntegerField(
+        default=8,
+        help_text=(
+            "Monthly/seasonal cadence: earliest day of the publish month to start "
+            "attempting a period (observed products land weeks after the period ends). "
+            "Monthly -> day of the month after the data month; seasonal -> day of the "
+            "month anchor_month + publish_month_offset."
+        ),
+    )
+    retry_window_days = models.PositiveSmallIntegerField(
+        default=45,
+        help_text=(
+            "Monthly/seasonal cadence: keep retrying the newest period for this many "
+            "days after its publish day, then stop (older periods still self-heal until "
+            "they scroll out of catch_up)."
+        ),
+    )
+    anchor_month = models.PositiveSmallIntegerField(
+        default=1,
+        help_text=(
+            "Seasonal cadence only: first calendar month of the season (JJA -> 6, "
+            "OND -> 10, DJF -> 12). The run_date is the 1st of this month."
+        ),
+    )
+    publish_month_offset = models.PositiveSmallIntegerField(
+        default=3,
+        help_text=(
+            "Seasonal cadence only: months after anchor_month when the observed data "
+            "is expected (3-month season -> ~3; a 5-month season -> ~5; a full-year "
+            "'season' -> ~13)."
+        ),
     )
     request_timeout_seconds = models.PositiveIntegerField(default=30)
     catch_up_days = models.PositiveSmallIntegerField(
         default=3,
         help_text=(
-            "On every scheduled tick, also re-check this many previous days (not just "
-            "today) and retry any that aren't completed yet - self-heals after an outage "
-            "or a day with not-yet-available files, without operator intervention. "
-            "For a large historical backfill, use the run_download_workflow management "
-            "command instead of raising this."
+            "On every scheduled tick, also re-check this many previous periods (days "
+            "for daily cadence, months for monthly, years for seasonal) and retry any "
+            "that aren't completed yet - self-heals after an outage or a period with "
+            "not-yet-available files, without operator intervention. For a large "
+            "historical backfill, use the run_download_workflow management command "
+            "instead of raising this."
         ),
     )
 
@@ -56,6 +111,13 @@ class DownloadWorkflow(models.Model):
 
     def __str__(self) -> str:
         return self.name
+
+    @property
+    def catch_up_periods(self) -> int:
+        """catch_up_days, named for what it counts once cadence isn't daily
+        (months for monthly, years for seasonal). At least 1 so the newest
+        period is always a candidate even when catch-up is disabled."""
+        return max(self.catch_up_days, 1)
 
 
 class DownloadWorkflowFile(models.Model):

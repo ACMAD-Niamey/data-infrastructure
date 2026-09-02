@@ -1,6 +1,6 @@
 # THREDDS download & ingestion (`thredds_ingestion`)
 
-Automates pulling daily forecast products from an ACMAD THREDDS file server and pushing them through the existing upload/ingest pipeline, so new dated STAC items keep appearing under datasets that are still created and styled the normal, manual way. Products are GeoTIFF already, or CSV converted to GeoTIFF on the way in - see [CSV-sourced products](#csv-sourced-products).
+Automates pulling dated products (daily forecasts, monthly/seasonal observed climatologies) from an ACMAD THREDDS file server and pushing them through the existing upload/ingest pipeline, so new dated STAC items keep appearing under datasets that are still created and styled the normal, manual way. Products are GeoTIFF already, or CSV converted to GeoTIFF on the way in - see [CSV-sourced products](#csv-sourced-products). The `cadence` field on a workflow controls how the scheduler steps `run_date` - see [Cadence](#cadence-daily-monthly-seasonal).
 
 **What stays manual**: creating the `DatasetPage` and its `Layer` style snippet in Wagtail admin. This app never creates or edits either — it only references an existing `dataset_id`.
 
@@ -19,7 +19,7 @@ One workflow represents one THREDDS **source** (shared base URL + dated-folder p
 
 | Model | Purpose | Key fields |
 |---|---|---|
-| `DownloadWorkflow` | One THREDDS source | `source_base_url`, `folder_pattern`, `schedule_hour_utc`/`schedule_minute_utc`, `retry_interval_minutes`, `retry_until_hour_utc`, `catch_up_days` |
+| `DownloadWorkflow` | One THREDDS source | `source_base_url`, `folder_pattern`, `cadence`, `schedule_hour_utc`/`schedule_minute_utc`, `retry_interval_minutes`, `retry_until_hour_utc`, `schedule_day_of_month`, `retry_window_days`, `anchor_month`, `publish_month_offset`, `catch_up_days` |
 | `DownloadWorkflowFile` | One dataset + filename pattern mapped into a workflow (many per workflow) | `dataset` (FK to `catalog.DatasetPage`), `filename_pattern`, `lead_hours_csv`, `threshold_label`, `item_id_pattern`, `overwrite_existing`, `datetime_from_run_date`, `validity_hours`, `csv_value_column`, `csv_x_res`, `csv_y_res` |
 | `DownloadRun` | One execution of a workflow for one `run_date` | `status` (`pending`/`running`/`completed`/`partial`/`failed`), per-run counters |
 | `DownloadRunItem` | One resolved `(workflow_file, lead_hours)` file within a run | `source_url`, `item_id`, `status`, `ingestion_run_id` |
@@ -99,6 +99,80 @@ Example: a 5-day mean issued `2026-08-05`, `datetime_from_run_date=True`, `valid
 ### Filenames with a date range: `{valid_end_date}`
 
 Alongside `{valid_date}` (a single date), `{valid_end_date}` is available in any pattern once `validity_hours` is set on the `DownloadWorkflowFile` row — it's `{valid_date} + validity_hours`, formatted as a date. This is for products whose filename embeds a *range* rather than one date, e.g. `Vigilance_Data_GEFS_Week_1_Init-20260810_Valid-20260811-20260817.csv`. Referencing `{valid_end_date}` on a mapping with no `validity_hours` configured raises `PatternRenderError` at write time, the same way an unconfigured `{lead_hours}` does.
+
+## Cadence: daily, monthly, seasonal
+
+`DownloadWorkflow.cadence` controls how the Beat scheduler picks `run_date`s. It does **not** affect the management command (which always takes explicit dates), nor the pattern rendering — a `run_date` is a `run_date`.
+
+| `cadence` | `run_date` meaning | Beat picks each tick | Publish-window gate on the newest period |
+|---|---|---|---|
+| `daily` (default) | the forecast issue day | today + previous `catch_up_days` days | `schedule_hour_utc` … `retry_until_hour_utc` (UTC time of day) |
+| `monthly` | the 1st of the data month | last month + previous `catch_up_days` **months** | from day `schedule_day_of_month` of the *following* month, for `retry_window_days` days |
+| `seasonal` | the 1st of the season's `anchor_month` | one run per year at `anchor_month` + previous `catch_up_days` **years** | from day `schedule_day_of_month` of month `anchor_month + publish_month_offset`, for `retry_window_days` days |
+
+For `monthly`/`seasonal` the *current* period is never a target — its observed data doesn't exist until the period is over and the upstream batch has run (2–3 weeks later for the ACMAD OBS products). Older periods within `catch_up_days` are retried whenever they aren't `completed`, throttled only by `retry_interval_minutes` — same self-healing behaviour as daily catch-up.
+
+### Locale-safe month tokens: `{month_abbr}` / `{month_name}`
+
+Available in `folder_pattern`, `filename_pattern` and `item_id_pattern` alongside `{run_date}`. They render the **English** month for `run_date` (`Sep`, `September`) regardless of the host's `LC_TIME` locale — unlike `{run_date:%b}`, which would silently produce `sept.`/`Sept` on a non-English host and 404 every URL. Use them for products whose THREDDS path embeds the month name literally.
+
+### Example: ACMAD monthly observed rainfall anomaly
+
+`.../thredds/catalog/ACMAD/CDD/ClimateBulletin_TN/OBS_RAIN_ANOM/monthly/<Mon>/tif/AFR_<Mon>_<YYYY>_<Source>_<Var>.tif`
+(`<Mon>` = `Jan`…`Dec`, `<Source>` ∈ `RFE2` / `CPC-UNI` / `CAMSO-PI`, `<Var>` ∈ `Tot` / `Tercile` / `Ranking_Percentile` / `Quintile` / `Precip-Anom` / `Pnorm` / `Percentile` / `Climo`).
+
+**Workflow:**
+
+| Field | Value |
+|---|---|
+| `source_base_url` | `https://sgbd.acmad.org/thredds/fileServer/ACMAD/CDD/ClimateBulletin_TN/OBS_RAIN_ANOM/monthly` |
+| `folder_pattern` | `{month_abbr}/tif` |
+| `cadence` | `monthly` |
+| `schedule_day_of_month` | `12` (Sep 2025 landed 2025-10-17 — tune to the source's real lag) |
+
+**One `DownloadWorkflowFile` per `(Source, Var)` you want as a dataset** (the linked `DatasetPage.cadence` must be `monthly`):
+
+| Field | Value |
+|---|---|
+| `dataset` | e.g. `obs-rain-anom-rfe2` |
+| `filename_pattern` | `AFR_{month_abbr}_{run_date:%Y}_RFE2_Precip-Anom.tif` |
+| `lead_hours_csv` | *(blank)* |
+
+Resolved item: `datetime` = `<YYYY>-<MM>-01T00:00:00Z`, `item_id` = `{dataset_id}_<YYYY><MM>01`, MinIO key `{dataset_id}/<YYYY>/<MM>/AFR_<Mon>_<YYYY>_RFE2_Precip-Anom.tif`.
+
+### Example: ACMAD seasonal observed rainfall anomaly
+
+`.../OBS_RAIN_ANOM/seasonal/<SEASON>/tif/AFR_<SEASON>_<YYYY>_<Source>_<Var>.tif`, where `<SEASON>` is a named rolling season (`DJF`, `MAM`, `JJA`, `SON`, `OND`, … also 4-/5-month and full-year combinations). The season **isn't derivable from a date**, so it's a literal in the patterns and there's **one workflow per season**:
+
+| Field | Value (JJA) |
+|---|---|
+| `source_base_url` | `https://sgbd.acmad.org/thredds/fileServer/ACMAD/CDD/ClimateBulletin_TN/OBS_RAIN_ANOM/seasonal` |
+| `folder_pattern` | `JJA/tif` |
+| `cadence` | `seasonal` |
+| `anchor_month` | `6` (June — first month of JJA; `SON`→9, `OND`→10, `DJF`→12) |
+| `publish_month_offset` | `3` (data expected ~September; a 5-month season → ~5, a full-year one → ~13) |
+
+`DownloadWorkflowFile` (linked `DatasetPage.cadence` = `seasonal`), one per `(Source, Var)`, with `validity_hours` set to the season length so the item is ingested as a `start_datetime`/`end_datetime` window:
+
+| Field | Value |
+|---|---|
+| `filename_pattern` | `AFR_JJA_{run_date:%Y}_RFE2_Precip-Anom.tif` |
+| `item_id_pattern` | `{dataset_id}_JJA_{run_date:%Y}` |
+| `validity_hours` | `2208` (92 days: Jun 1 → Sep 1) |
+| `lead_hours_csv` | *(blank)* |
+
+### Backfill (monthly and seasonal)
+
+```bash
+# One period
+python manage.py run_download_workflow --workflow-name "ACMAD OBS_RAIN_ANOM monthly" --run-month 2025-09
+python manage.py run_download_workflow --workflow-name "ACMAD OBS_RAIN_ANOM JJA" --run-month 2025-06   # season anchor month
+
+# Range - steps one calendar month at a time (not one day)
+python manage.py run_download_workflow --workflow-id 5 --run-month-range 2000-01:2025-09 --dispatch-celery
+```
+
+`--run-month-range` over a seasonal workflow steps monthly, so ~11 of every 12 URLs it checks are 404s (cheap HEADs, and idempotency skips anything already done). For a deep seasonal backfill it's simpler to bump `catch_up_days` (interpreted as *years*) on the workflow for a few Beat ticks, then set it back.
 
 ## CSV-sourced products
 
@@ -184,12 +258,12 @@ Confirm results in admin at `/api/django-admin/thredds_ingestion/downloadrunitem
 
 One static Beat entry (`run-due-thredds-download-workflows`, every 15 min) rather than one entry per workflow — adding a new THREDDS source is an admin DB row, not a settings.py redeploy.
 
-Each tick, for every enabled workflow:
+Each tick, for every enabled workflow, `run_due_download_workflows` builds the set of candidate `run_date`s per the [cadence table](#cadence-daily-monthly-seasonal), then dispatches each that isn't already `completed`/`running` and isn't inside its `retry_interval_minutes` throttle:
 
-- **Today** is dispatched only inside `[schedule_hour_utc:schedule_minute_utc, retry_until_hour_utc]` UTC.
-- The previous `catch_up_days` days are also re-checked and retried if not yet `completed` — **not** gated by time of day (a past day has no "time of day" left to wait for), only throttled by `retry_interval_minutes`.
+- **The newest period** (today / last month / this year's season) is gated by a publish window — `[schedule_hour_utc, retry_until_hour_utc]` UTC for daily; day `schedule_day_of_month` … `+ retry_window_days` for monthly/seasonal.
+- **Older periods** within `catch_up_days` (days / months / years by cadence) are re-checked and retried if not yet `completed` — **not** gated by the publish window, only throttled by `retry_interval_minutes`.
 
-This makes ongoing operation self-healing: if Beat/a worker was down for a day, or a file published late, the backlog clears automatically on the next tick with no operator action. `catch_up_days` defaults to 3 and is meant for short gaps — for a deep historical backfill (e.g. onboarding a product against a year of history), use the management command instead of raising it.
+This makes ongoing operation self-healing: if Beat/a worker was down, or a file published late, the backlog clears automatically on the next tick with no operator action. `catch_up_days` defaults to 3 and is meant for short gaps — for a deep historical backfill, use the management command instead of raising it (or, for monthly/seasonal where the period count is small, raise it briefly).
 
 ## Known infra quirk: ACMAD TLS
 
