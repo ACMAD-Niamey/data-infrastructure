@@ -8,7 +8,7 @@ from django.utils import timezone
 
 from .models import DownloadRun, DownloadWorkflow
 from .services import workflow_runner
-from .services.dates import add_months
+from .services.dates import add_months, clamp_day
 
 log = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ def _monthly_candidate_run_dates(
     # so the newest target is last month; its publish day is
     # schedule_day_of_month of *this* month.
     newest = add_months(today.replace(day=1), -1)
-    publish_day = today.replace(day=min(workflow.schedule_day_of_month, 28))
+    publish_day = clamp_day(today.year, today.month, workflow.schedule_day_of_month)
 
     dates: list[datetime.date] = []
     for i in range(workflow.catch_up_periods):
@@ -85,9 +85,8 @@ def _seasonal_candidate_run_dates(
     dates: list[datetime.date] = []
     for i in range(workflow.catch_up_periods):
         anchor = datetime.date(today.year - i, workflow.anchor_month, 1)
-        publish_day = add_months(anchor, workflow.publish_month_offset).replace(
-            day=min(workflow.schedule_day_of_month, 28)
-        )
+        publish_month = add_months(anchor, workflow.publish_month_offset)
+        publish_day = clamp_day(publish_month.year, publish_month.month, workflow.schedule_day_of_month)
         if i == 0:
             if not _within_publish_window(workflow, today, publish_day):
                 continue

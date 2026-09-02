@@ -114,10 +114,11 @@ class DownloadWorkflow(models.Model):
 
     @property
     def catch_up_periods(self) -> int:
-        """catch_up_days, named for what it counts once cadence isn't daily
-        (months for monthly, years for seasonal). At least 1 so the newest
-        period is always a candidate even when catch-up is disabled."""
-        return max(self.catch_up_days, 1)
+        """Total periods a monthly/seasonal tick considers: the newest period
+        plus the previous `catch_up_days` of them - mirroring the daily path,
+        where catch_up_days=2 means today + 2 previous days = 3 dates. With
+        catch_up_days=0 only the newest period is considered."""
+        return self.catch_up_days + 1
 
 
 class DownloadWorkflowFile(models.Model):

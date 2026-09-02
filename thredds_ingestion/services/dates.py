@@ -9,7 +9,17 @@ tiny module - no I/O, pure date math.
 
 from __future__ import annotations
 
+import calendar
 from datetime import date
+
+
+def clamp_day(year: int, month: int, day: int) -> date:
+    """``date(year, month, day)`` with ``day`` capped at that month's real
+    length, so a configured day-of-month like 31 lands on the 28th/29th/30th
+    where the month is shorter rather than raising or silently shifting to a
+    fixed 28."""
+    last = calendar.monthrange(year, month)[1]
+    return date(year, month, min(day, last))
 
 
 def add_months(anchor: date, delta: int) -> date:

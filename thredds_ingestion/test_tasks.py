@@ -113,29 +113,30 @@ class MonthlyCadenceTests(TestCase):
 
     def test_newest_target_is_last_month_and_run_dates_are_first_of_month(self, mock_delay, _now):
         # publish window open (schedule_day_of_month=1, today is the 5th).
+        # catch_up_days=2 -> last month + 2 previous months, mirroring daily.
         workflow = self._workflow(schedule_day_of_month=1)
 
         run_due_download_workflows()
 
         dates = _dispatched_run_dates(workflow)
-        self.assertEqual(dates, [dt.date(2026, 6, 1), dt.date(2026, 7, 1)])  # last month + 1 catch-up month
+        self.assertEqual(dates, [dt.date(2026, 5, 1), dt.date(2026, 6, 1), dt.date(2026, 7, 1)])
         self.assertTrue(all(d.day == 1 for d in dates))
 
     def test_newest_month_gated_out_before_publish_day(self, mock_delay, _now):
         # schedule_day_of_month=20 but today is the 5th -> July not attempted,
-        # only the always-safe older catch-up month.
+        # only the always-safe older catch-up months.
         workflow = self._workflow(schedule_day_of_month=20)
 
         run_due_download_workflows()
 
-        self.assertEqual(_dispatched_run_dates(workflow), [dt.date(2026, 6, 1)])
+        self.assertEqual(_dispatched_run_dates(workflow), [dt.date(2026, 5, 1), dt.date(2026, 6, 1)])
 
     def test_newest_month_gated_out_after_retry_window(self, mock_delay, _now):
         workflow = self._workflow(schedule_day_of_month=1, retry_window_days=2)  # window [08-01, 08-03]
 
         run_due_download_workflows()
 
-        self.assertEqual(_dispatched_run_dates(workflow), [dt.date(2026, 6, 1)])
+        self.assertEqual(_dispatched_run_dates(workflow), [dt.date(2026, 5, 1), dt.date(2026, 6, 1)])
 
     def test_catch_up_zero_still_considers_the_newest_month(self, mock_delay, _now):
         workflow = self._workflow(schedule_day_of_month=1, catch_up_days=0)
@@ -143,6 +144,17 @@ class MonthlyCadenceTests(TestCase):
         run_due_download_workflows()
 
         self.assertEqual(_dispatched_run_dates(workflow), [dt.date(2026, 7, 1)])
+
+    def test_schedule_day_31_is_clamped_to_the_month_length_not_to_28(self, mock_delay, _now):
+        # August has 31 days: schedule_day_of_month=31 -> publish day 2026-08-31,
+        # which is after today (the 5th), so the newest month is gated out and
+        # only the older catch-up months dispatch. (A naive min(day, 28) would
+        # have opened the window on the 28th and let July through.)
+        workflow = self._workflow(schedule_day_of_month=31)
+
+        run_due_download_workflows()
+
+        self.assertEqual(_dispatched_run_dates(workflow), [dt.date(2026, 5, 1), dt.date(2026, 6, 1)])
 
 
 @patch("thredds_ingestion.tasks.process_download_run.delay")
@@ -164,8 +176,11 @@ class SeasonalCadenceTests(TestCase):
 
         run_due_download_workflows()
 
-        # JJA 2026 publishes ~2026-09-08; on 2026-08-05 only JJA 2025 is due.
-        self.assertEqual(_dispatched_run_dates(workflow), [dt.date(2025, 6, 1)])
+        # JJA 2026 publishes ~2026-09-08 -> gated out on 2026-08-05.
+        # catch_up_days=2 -> the two prior seasons (2025, 2024) still dispatch.
+        self.assertEqual(
+            _dispatched_run_dates(workflow), [dt.date(2024, 6, 1), dt.date(2025, 6, 1)]
+        )
 
     @patch(
         "thredds_ingestion.tasks.timezone.now",
@@ -177,7 +192,8 @@ class SeasonalCadenceTests(TestCase):
         run_due_download_workflows()
 
         self.assertEqual(
-            _dispatched_run_dates(workflow), [dt.date(2025, 6, 1), dt.date(2026, 6, 1)]
+            _dispatched_run_dates(workflow),
+            [dt.date(2024, 6, 1), dt.date(2025, 6, 1), dt.date(2026, 6, 1)],
         )
 
     @patch(
@@ -189,9 +205,9 @@ class SeasonalCadenceTests(TestCase):
 
         run_due_download_workflows()
 
-        # In March 2026, with catch_up spanning 2026/2025/2024: JJA 2026 hasn't
-        # happened yet (gated out); JJA 2025 and JJA 2024 have.
+        # In March 2026, catch_up_days=3 spans 2026/2025/2024/2023: JJA 2026
+        # hasn't happened yet (gated out); JJA 2025/2024/2023 have.
         self.assertEqual(
             _dispatched_run_dates(workflow),
-            [dt.date(2024, 6, 1), dt.date(2025, 6, 1)],
+            [dt.date(2023, 6, 1), dt.date(2024, 6, 1), dt.date(2025, 6, 1)],
         )
