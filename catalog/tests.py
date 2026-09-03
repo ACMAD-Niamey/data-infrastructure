@@ -59,6 +59,8 @@ def _make_dataset(dataset_id="spi", project_slug="e-safari", with_style=False):
     mock_dataset.cadence = "monthly"
     mock_dataset.dataset_type = "raster"
     mock_dataset.stac_collection_id = dataset_id
+    mock_dataset.allow_multiple_layers = False
+    mock_dataset.effective_stac_collection = dataset_id
     mock_dataset.is_published_for_ui = True
     mock_dataset.description = None
     mock_dataset.color_class = "text-blue-600"
@@ -100,9 +102,9 @@ def _make_dataset(dataset_id="spi", project_slug="e-safari", with_style=False):
         mock_style.legend_description = ""
         mock_style.example_notebook_id = None
         mock_style.has_stac_collection = True
-        mock_dataset.style_config = mock_style
+        mock_dataset.primary_layer = mock_style
     else:
-        mock_dataset.style_config = None
+        mock_dataset.primary_layer = None
 
     return mock_dataset
 
@@ -928,3 +930,68 @@ class RenderDatasetNotebookHtmlTests(TestCase):
 
         self.assertEqual(second, "<html>v2</html>")
         self.assertEqual(mock_export.call_count, 2)
+
+
+class MultipleLayerStylesTests(TestCase):
+    """A DatasetPage can carry several Layer styles only when allow_multiple_layers
+    is set; the STAC collection then comes from the primary Layer."""
+
+    def setUp(self):
+        from wagtail.models import Page
+
+        from catalog.models import DatasetPage, ProjectPage
+
+        root = Page.get_first_root_node()
+        self.project = root.add_child(instance=ProjectPage(title="Proj", slug="proj-multi"))
+
+    def _dataset(self, dataset_id, *, multi):
+        from catalog.models import DatasetPage
+
+        ds = DatasetPage(
+            title=dataset_id,
+            slug=f"ds-{dataset_id}",
+            dataset_id=dataset_id,
+            dataset_type="raster",
+            cadence="monthly",
+            allow_multiple_layers=multi,
+        )
+        self.project.add_child(instance=ds)
+        return ds
+
+    def _layer(self, ds, layer_id, *, default_visible=False, collection=""):
+        return Layer.objects.create(
+            dataset=ds,
+            title=layer_id,
+            layer_id=layer_id,
+            layer_type="raster",
+            default_visible=default_visible,
+            stac_collection_id=collection,
+        )
+
+    def test_second_layer_rejected_when_not_allow_multiple(self):
+        ds = self._dataset("single", multi=False)
+        self._layer(ds, "single")
+        dup = Layer(dataset=ds, title="dup", layer_id="single-b", layer_type="raster")
+        with self.assertRaises(ValidationError):
+            dup.full_clean()
+
+    def test_layer_id_required_when_allow_multiple(self):
+        ds = self._dataset("multi", multi=True)
+        layer = Layer(dataset=ds, title="x", layer_type="raster")
+        with self.assertRaises(ValidationError):
+            layer.full_clean()
+
+    def test_effective_stac_collection_single_layer_uses_dataset(self):
+        ds = self._dataset("cdi", multi=False)
+        self._layer(ds, "cdi")
+        self.assertEqual(ds.effective_stac_collection, "cdi")
+
+    def test_effective_stac_collection_multi_uses_primary_layer(self):
+        ds = self._dataset("precipitation-tercile-monthly", multi=True)
+        self._layer(ds, "precipitation-tercile-rfe2", collection="precipitation-tercile-rfe2")
+        self._layer(
+            ds, "precipitation-tercile-cpc-uni",
+            default_visible=True, collection="precipitation-tercile-cpc-uni",
+        )
+        self.assertEqual(ds.effective_stac_collection, "precipitation-tercile-cpc-uni")
+        self.assertEqual(ds.primary_layer.layer_id, "precipitation-tercile-cpc-uni")

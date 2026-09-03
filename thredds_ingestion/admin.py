@@ -8,6 +8,7 @@ class DownloadWorkflowFileInline(admin.TabularInline):
     extra = 1
     fields = (
         "dataset",
+        "layer",
         "label",
         "filename_pattern",
         "lead_hours_csv",

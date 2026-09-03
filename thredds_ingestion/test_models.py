@@ -4,7 +4,9 @@ from django.db import IntegrityError, transaction
 from django.test import TestCase
 from wagtail.models import Page
 
-from catalog.models import DatasetPage, ProjectPage
+from django.core.exceptions import ValidationError
+
+from catalog.models import DatasetPage, Layer, ProjectPage
 from thredds_ingestion.models import (
     DownloadRun,
     DownloadRunItem,
@@ -113,3 +115,50 @@ class DownloadWorkflowFileLeadHoursListTests(TestCase):
             lead_hours_csv="24, 96,144",
         )
         self.assertEqual(wf.lead_hours_list(), [24, 96, 144])
+
+
+class DownloadWorkflowFileLayerTests(TestCase):
+    def setUp(self):
+        self.dataset = _make_dataset("precipitation-tercile-monthly")
+        self.dataset.allow_multiple_layers = True
+        self.dataset.save()
+        self.other_dataset = _make_dataset("something-else")
+        self.workflow = DownloadWorkflow.objects.create(
+            name="tercile",
+            source_base_url="https://sgbd.acmad.org/thredds/fileServer/x",
+        )
+        self.layer = Layer.objects.create(
+            dataset=self.dataset,
+            title="CPC-UNI",
+            layer_id="precipitation-tercile-cpc-uni",
+            layer_type="raster",
+            stac_collection_id="precipitation-tercile-cpc-uni",
+        )
+
+    def test_clean_rejects_layer_from_a_different_dataset(self):
+        wf = DownloadWorkflowFile(
+            workflow=self.workflow,
+            dataset=self.other_dataset,
+            layer=self.layer,
+            filename_pattern="x_{run_date:%Y%m%d}.tif",
+        )
+        with self.assertRaises(ValidationError):
+            wf.clean()
+
+    def test_clean_accepts_layer_belonging_to_the_dataset(self):
+        wf = DownloadWorkflowFile(
+            workflow=self.workflow,
+            dataset=self.dataset,
+            layer=self.layer,
+            filename_pattern="x_{run_date:%Y%m%d}.tif",
+        )
+        wf.clean()  # no raise
+
+    def test_resolve_collection_prefers_the_layer(self):
+        wf = DownloadWorkflowFile.objects.create(
+            workflow=self.workflow,
+            dataset=self.dataset,
+            layer=self.layer,
+            filename_pattern="x_{run_date:%Y%m%d}.tif",
+        )
+        self.assertEqual(wf.resolve_collection(), "precipitation-tercile-cpc-uni")

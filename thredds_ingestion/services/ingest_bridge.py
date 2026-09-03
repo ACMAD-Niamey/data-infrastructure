@@ -23,11 +23,12 @@ log = logging.getLogger(__name__)
 DEFAULT_BUCKET = os.getenv("MINIO_DEFAULT_BUCKET", "geodata")
 
 
-def build_minio_key(dataset_id: str, run_date: date, filename: str) -> str:
+def build_minio_key(collection: str, run_date: date, filename: str) -> str:
     """Deterministic key, no UUID - a retry overwrites the same object instead
     of creating an orphaned duplicate blob, since filename is already unique
-    per (workflow_file, run_date, lead_hours) by construction."""
-    return f"{dataset_id}/{run_date:%Y/%m}/{filename}"
+    per (workflow_file, run_date, lead_hours) by construction. Prefixed by the
+    STAC collection so multiple sources under one dataset don't collide."""
+    return f"{collection}/{run_date:%Y/%m}/{filename}"
 
 
 def upload_file(local_path: str, *, bucket: str = DEFAULT_BUCKET, key: str, content_type: str = "image/tiff") -> str:
@@ -50,7 +51,8 @@ def upload_file(local_path: str, *, bucket: str = DEFAULT_BUCKET, key: str, cont
 
 def push_to_ingest(
     *,
-    dataset,
+    collection: str,
+    cadence: str,
     href: str,
     item_id: str,
     valid_datetime: datetime,
@@ -77,9 +79,12 @@ def push_to_ingest(
     else:
         payload["datetime"] = valid_datetime.isoformat()
 
+    # IngestionRun.dataset_id is used downstream verbatim as the STAC collection
+    # id (ingest.tasks.ensure_collection/build_item), so it carries the resolved
+    # collection here, which may be a per-layer collection rather than a dataset_id.
     run = IngestionRun.objects.create(
-        dataset_id=dataset.dataset_id,
-        cadence=dataset.cadence,
+        dataset_id=collection,
+        cadence=cadence,
         status="accepted",
         payload=payload,
     )

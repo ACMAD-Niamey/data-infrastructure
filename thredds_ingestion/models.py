@@ -135,6 +135,19 @@ class DownloadWorkflowFile(models.Model):
         related_name="thredds_download_files",
         help_text="Target dataset (existing DatasetPage, matched by dataset_id).",
     )
+    layer = models.ForeignKey(
+        "catalog.Layer",
+        on_delete=models.PROTECT,
+        related_name="thredds_download_files",
+        null=True,
+        blank=True,
+        help_text=(
+            "Target Layer style, for a dataset with multiple sources/styles. When set, "
+            "ingestion goes into this layer's STAC collection (stac_collection_id, or "
+            "layer_id if blank) instead of the dataset's. Must belong to 'dataset' above. "
+            "Leave blank for the usual single-collection dataset."
+        ),
+    )
     label = models.CharField(
         max_length=150,
         blank=True,
@@ -240,6 +253,24 @@ class DownloadWorkflowFile(models.Model):
 
     def __str__(self) -> str:
         return self.label or self.filename_pattern
+
+    def clean(self) -> None:
+        super().clean()
+        if self.layer_id and self.dataset_id and self.layer.dataset_id != self.dataset_id:
+            from django.core.exceptions import ValidationError
+
+            raise ValidationError(
+                {"layer": "Layer must belong to the dataset selected above."}
+            )
+
+    def resolve_collection(self) -> str:
+        """STAC collection this mapping ingests into: the linked Layer's
+        stac_collection_id (or its layer_id), else the dataset's
+        stac_collection_id (or its dataset_id) - matching how the rest of the
+        stack derives a collection from a DatasetPage."""
+        if self.layer_id:
+            return self.layer.stac_collection_id or self.layer.layer_id
+        return self.dataset.stac_collection_id or self.dataset.dataset_id
 
     def lead_hours_list(self) -> list[int]:
         raw = (self.lead_hours_csv or "").strip()
