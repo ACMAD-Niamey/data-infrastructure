@@ -117,7 +117,9 @@ class DatasetVisualization:
 
     def get_tile_params_for_dataset(self):
         """
-        Return tile params for layers tied to this dataset_id (first matching layer).
+        Return tile params for this dataset_id, taken from its primary Layer
+        style (the ``default_visible`` one, else the first by title - matching
+        ``DatasetPage.primary_layer``).
 
         Returns:
             dict or None: Tile params JSON for visualization.
