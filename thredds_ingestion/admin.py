@@ -27,8 +27,8 @@ class DownloadWorkflowFileInline(admin.TabularInline):
 
 @admin.register(DownloadWorkflow)
 class DownloadWorkflowAdmin(admin.ModelAdmin):
-    list_display = ("name", "enabled", "schedule_hour_utc", "schedule_minute_utc", "updated_at")
-    list_filter = ("enabled",)
+    list_display = ("name", "cadence", "enabled", "folder_pattern", "updated_at")
+    list_filter = ("enabled", "cadence")
     search_fields = ("name", "source_base_url")
     inlines = [DownloadWorkflowFileInline]
 
