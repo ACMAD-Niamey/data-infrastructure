@@ -20,7 +20,7 @@ One workflow represents one THREDDS **source** (shared base URL + dated-folder p
 | Model | Purpose | Key fields |
 |---|---|---|
 | `DownloadWorkflow` | One THREDDS source | `source_base_url`, `folder_pattern`, `cadence`, `schedule_hour_utc`/`schedule_minute_utc`, `retry_interval_minutes`, `retry_until_hour_utc`, `schedule_day_of_month`, `retry_window_days`, `anchor_month`, `publish_month_offset`, `catch_up_days` |
-| `DownloadWorkflowFile` | One dataset + filename pattern mapped into a workflow (many per workflow) | `dataset` (FK to `catalog.DatasetPage`), `filename_pattern`, `lead_hours_csv`, `threshold_label`, `item_id_pattern`, `overwrite_existing`, `datetime_from_run_date`, `validity_hours`, `csv_value_column`, `csv_x_res`, `csv_y_res` |
+| `DownloadWorkflowFile` | One dataset (or one source's `Layer`) + filename pattern mapped into a workflow (many per workflow) | `dataset` (FK to `catalog.DatasetPage`), `layer` (optional FK to `catalog.Layer` — see [Multiple sources for one dataset](#multiple-sources-for-one-dataset)), `filename_pattern`, `lead_hours_csv`, `threshold_label`, `item_id_pattern`, `overwrite_existing`, `datetime_from_run_date`, `validity_hours`, `csv_value_column`, `csv_x_res`, `csv_y_res` |
 | `DownloadRun` | One execution of a workflow for one `run_date` | `status` (`pending`/`running`/`completed`/`partial`/`failed`), per-run counters |
 | `DownloadRunItem` | One resolved `(workflow_file, lead_hours)` file within a run | `source_url`, `item_id`, `status`, `ingestion_run_id` |
 
@@ -173,6 +173,38 @@ python manage.py run_download_workflow --workflow-id 5 --run-month-range 2000-01
 ```
 
 `--run-month-range` over a seasonal workflow steps monthly, so ~11 of every 12 URLs it checks are 404s (cheap HEADs, and idempotency skips anything already done). For a deep seasonal backfill it's simpler to bump `catch_up_days` (interpreted as *years*) on the workflow for a few Beat ticks, then set it back.
+
+## Multiple sources for one dataset
+
+The ACMAD monthly/seasonal folders publish the **same product from several sources** — `RFE2`, `CPC-UNI`, `CAMSO-PI` (and `CHIRPS` for some seasons) — each a separate GeoTIFF. Rather than a near-duplicate `DatasetPage` per source, keep **one `DatasetPage`** and give it **one `Layer` style per source**, each carrying its own STAC collection id:
+
+1. On the `DatasetPage`, check **"allow multiple layer styles"**. Its own `stac_collection_id` is then ignored.
+2. Add one `Layer` style per source. Set a distinct `layer_id` (e.g. `precipitation-tercile-cpc-uni`) and, in *Layer details*, `stac_collection_id` (leave blank to reuse `layer_id`).
+3. On each `DownloadWorkflowFile`, set **`layer`** to the matching style. Ingestion then targets that layer's collection (`stac_collection_id`, or `layer_id` if blank) instead of the dataset's — driving the STAC item id, the MinIO key prefix, and the `IngestionRun`. `dataset` still points at the `DatasetPage` (for cadence and description tags); the `layer` must belong to it.
+
+The geoportal UI still shows one entry per dataset (the **primary layer** — the `default_visible` style, else first by title); the other collections are ingested and queryable via STAC but not yet surfaced in the UI.
+
+### Seeded example: `precipitation-tercile-monthly`
+
+Create the `DatasetPage` in Wagtail first (`dataset_id` = `precipitation-tercile-monthly`, cadence **Monthly**, "allow multiple layer styles" checked), then:
+
+```bash
+python manage.py seed_precipitation_tercile_workflow
+```
+
+This `update_or_create`s three `Layer` styles (`precipitation-tercile-{cpc-uni,rfe2,camso-pi}`, `cpc-uni` primary), the `DownloadWorkflow` "ACMAD OBS_RAIN_ANOM tercile monthly" (`folder_pattern` `{month_abbr}/tif`, monthly cadence), and three `DownloadWorkflowFile`s (`AFR_{month_abbr}_{run_date:%Y}_<SRC>_Tercile.tif`, each linked to its `layer`). It's idempotent — re-run after editing.
+
+Then backfill (`CPC-UNI`/`CAMSO-PI` reach back to 2000, `RFE2` to 2023 — earlier `RFE2` months just resolve to `not_yet_available` and are skipped):
+
+```bash
+python manage.py run_download_workflow --workflow-name "ACMAD OBS_RAIN_ANOM tercile monthly" \
+  --run-month-range 2000-01:$(date -u +%Y-%m) --dry-run       # confirm URL resolution first
+python manage.py run_download_workflow --workflow-name "ACMAD OBS_RAIN_ANOM tercile monthly" \
+  --run-month-range 2000-01:$(date -u +%Y-%m) --dispatch-celery
+```
+
+Celery Beat then keeps each new month current. Verify in
+`/api/django-admin/thredds_ingestion/downloadrunitem/` (3 `COMPLETED` per month, distinct `item_id`s) and `GET /stac/collections/precipitation-tercile-cpc-uni/items?limit=1`.
 
 ## CSV-sourced products
 

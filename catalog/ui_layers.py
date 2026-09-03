@@ -53,7 +53,7 @@ def _layer_type_for_dataset(dataset: DatasetPage, style: Layer | None) -> str:
 
 
 def dataset_to_api_dict(dataset: DatasetPage, request, category_override: str | None = None) -> dict:
-    style: Layer | None = getattr(dataset, "style_config", None)
+    style: Layer | None = dataset.primary_layer
     icon = icon_payload_from_dataset(dataset, request)
 
     if style:
@@ -112,7 +112,7 @@ def dataset_to_api_dict(dataset: DatasetPage, request, category_override: str | 
             "title": dataset.title,
             "cadence": dataset.cadence,
             "dataset_type": dataset.dataset_type,
-            "stac_collection": dataset.stac_collection_id or dataset.dataset_id,
+            "stac_collection": dataset.effective_stac_collection,
         },
         "selection": {"cadence": dataset.cadence},
         "tile": tile,
@@ -128,9 +128,8 @@ def datasets_for_project(project_slug: str) -> list[DatasetPage]:
         DatasetPage.objects.live()
         .child_of(project_page)
         .filter(is_published_for_ui=True, icon__isnull=False)
-        .select_related("icon", "icon__image")
-        .select_related("style_config")
-        .select_related("hazard_category")
+        .select_related("icon", "icon__image", "hazard_category")
+        .prefetch_related("style_configs", "style_configs__color_stops")
         .order_by("sort_order", "title")
     )
 
@@ -150,7 +149,8 @@ def _dataset_qs(project_page: ProjectPage):
         DatasetPage.objects.live()
         .child_of(project_page)
         .filter(is_published_for_ui=True, icon__isnull=False)
-        .select_related("icon", "icon__image", "style_config", "hazard_category")
+        .select_related("icon", "icon__image", "hazard_category")
+        .prefetch_related("style_configs", "style_configs__color_stops")
         .order_by("sort_order", "title")
     )
 

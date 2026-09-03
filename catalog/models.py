@@ -554,7 +554,19 @@ class DatasetPage(Page):
     stac_collection_id = models.CharField(
         max_length=120,
         blank=True,
-        help_text="If blank, defaults to dataset_id",
+        help_text=(
+            "If blank, defaults to dataset_id. Ignored when 'allow multiple layer "
+            "styles' is checked - the collection is then taken from each Layer style."
+        ),
+    )
+
+    allow_multiple_layers = models.BooleanField(
+        default=False,
+        help_text=(
+            "Let this dataset carry more than one Layer style (e.g. one per data "
+            "source), each with its own STAC collection id. Leave unchecked for the "
+            "usual one-style-per-dataset case."
+        ),
     )
 
     # controls what shows up in the UI config API
@@ -598,11 +610,34 @@ class DatasetPage(Page):
         FieldPanel("dataset_type"),
         FieldPanel("cadence"),
         FieldPanel("stac_collection_id"),
+        FieldPanel("allow_multiple_layers"),
         FieldPanel("is_published_for_ui"),
     ]
 
     parent_page_types = ["catalog.ProjectPage"]
     subpage_types = []
+
+    @property
+    def primary_layer(self):
+        """The Layer style the UI renders for this dataset. With one style that's
+        just it; with several (allow_multiple_layers) it's the default-visible one,
+        else the first by title. None if no style is configured yet."""
+        styles = list(self.style_configs.all())
+        return (
+            next((s for s in styles if s.default_visible), None)
+            or min(styles, key=lambda s: s.title, default=None)
+        )
+
+    @property
+    def effective_stac_collection(self) -> str:
+        """pgSTAC collection id backing this dataset's primary layer. For a
+        multi-layer dataset it comes from the Layer style; otherwise from the
+        dataset itself (falling back to dataset_id)."""
+        if self.allow_multiple_layers:
+            layer = self.primary_layer
+            if layer:
+                return layer.stac_collection_id or layer.layer_id
+        return self.stac_collection_id or self.dataset_id
 
 
 STYLE_SCHEME_CHOICES = [
@@ -660,7 +695,9 @@ class LayerColorStop(Orderable):
 
 @register_snippet
 class Layer(ClusterableModel):
-    """Optional raster styling config (1:1 with a DatasetPage). Listing uses the dataset."""
+    """Raster/vector styling config for a DatasetPage. Usually 1:1; a dataset with
+    allow_multiple_layers can have several (e.g. one per data source). Listing uses
+    the dataset."""
 
     class Meta:
         ordering = ["title"]
@@ -677,13 +714,16 @@ class Layer(ClusterableModel):
         max_length=120,
         unique=True,
         blank=True,
-        help_text="Defaults to dataset_id. Use a distinct id when multiple styles share one dataset.",
+        help_text=(
+            "Defaults to dataset_id for a single-style dataset. Required (and distinct) "
+            "when the dataset allows multiple styles - e.g. precipitation-tercile-cpc-uni."
+        ),
     )
 
-    dataset = models.OneToOneField(
+    dataset = models.ForeignKey(
         "catalog.DatasetPage",
         on_delete=models.CASCADE,
-        related_name="style_config",
+        related_name="style_configs",
     )
 
     layer_type = models.CharField(max_length=10, choices=LAYER_TYPES)
@@ -782,6 +822,16 @@ class Layer(ClusterableModel):
         help_text="Whether this dataset has a real STAC collection registered in pgSTAC. "
                    "Uncheck to hide the 'View STAC collection' link on the Data Platforms page.",
     )
+    stac_collection_id = models.CharField(
+        max_length=120,
+        blank=True,
+        help_text=(
+            "pgSTAC collection this style renders from and that ingestion targets. "
+            "If blank, falls back to layer_id. Only meaningful on a dataset with "
+            "'allow multiple layer styles' checked; otherwise the dataset's own "
+            "stac_collection_id is used."
+        ),
+    )
 
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -824,6 +874,7 @@ class Layer(ClusterableModel):
                 FieldPanel("example_notebook"),
                 FieldPanel("example_notebook_description"),
                 FieldPanel("has_stac_collection"),
+                FieldPanel("stac_collection_id"),
             ],
             heading="Layer details",
         ),
@@ -841,10 +892,21 @@ class Layer(ClusterableModel):
         if self.tile_params is None:
             self.tile_params = {}
         if self.dataset_id:
+            multi = self.dataset.allow_multiple_layers
             if not self.layer_id:
+                if multi:
+                    raise ValidationError(
+                        {"layer_id": "Required: this dataset allows multiple layer styles, "
+                                     "so each needs a distinct layer_id."}
+                    )
                 self.layer_id = self.dataset.dataset_id
-            elif self.layer_id != self.dataset.dataset_id:
-                pass  # allow distinct layer_id for future multi-style datasets
+            if not multi:
+                clash = Layer.objects.filter(dataset_id=self.dataset_id).exclude(pk=self.pk)
+                if clash.exists():
+                    raise ValidationError(
+                        "This dataset already has a layer style. Check 'allow multiple "
+                        "layer styles' on the dataset to add more than one."
+                    )
         from catalog.style.normalize import normalize_tile_params
         from catalog.style.parse_qml import parse_qml_raster_pseudocolor
         from catalog.style.parse_sld import parse_sld_raster_colormap
@@ -933,7 +995,7 @@ class Layer(ClusterableModel):
                 self.style_import.delete(save=False)
 
     def save(self, *args, **kwargs):
-        if self.dataset_id and not self.layer_id:
+        if self.dataset_id and not self.layer_id and not self.dataset.allow_multiple_layers:
             self.layer_id = self.dataset.dataset_id
         pending = getattr(self, "_pending_style_import", None)
         if pending:
