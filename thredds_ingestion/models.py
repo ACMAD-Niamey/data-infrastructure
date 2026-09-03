@@ -269,7 +269,7 @@ class DownloadWorkflowFile(models.Model):
         stac_collection_id (or its dataset_id) - matching how the rest of the
         stack derives a collection from a DatasetPage."""
         if self.layer_id:
-            return self.layer.stac_collection_id or self.layer.layer_id
+            return self.layer.effective_stac_collection
         return self.dataset.stac_collection_id or self.dataset.dataset_id
 
     def lead_hours_list(self) -> list[int]:

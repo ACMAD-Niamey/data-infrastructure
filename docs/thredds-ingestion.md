@@ -178,33 +178,47 @@ python manage.py run_download_workflow --workflow-id 5 --run-month-range 2000-01
 
 The ACMAD monthly/seasonal folders publish the **same product from several sources** — `RFE2`, `CPC-UNI`, `CAMSO-PI` (and `CHIRPS` for some seasons) — each a separate GeoTIFF. Rather than a near-duplicate `DatasetPage` per source, keep **one `DatasetPage`** and give it **one `Layer` style per source**, each carrying its own STAC collection id:
 
+In Wagtail admin:
+
 1. On the `DatasetPage`, check **"allow multiple layer styles"**. Its own `stac_collection_id` is then ignored.
-2. Add one `Layer` style per source. Set a distinct `layer_id` (e.g. `precipitation-tercile-cpc-uni`) and, in *Layer details*, `stac_collection_id` (leave blank to reuse `layer_id`).
-3. On each `DownloadWorkflowFile`, set **`layer`** to the matching style. Ingestion then targets that layer's collection (`stac_collection_id`, or `layer_id` if blank) instead of the dataset's — driving the STAC item id, the MinIO key prefix, and the `IngestionRun`. `dataset` still points at the `DatasetPage` (for cadence and description tags); the `layer` must belong to it.
+2. Add one **Layer style** per source (Snippets → Layer styles). Pick the **dataset** from the dropdown, set a distinct `layer_id` (e.g. `pecipitation-tercile-cpc-uni-monthly`), and under *Layer details* set `stac_collection_id` (leave blank to reuse `layer_id`). Style one, then copy its colormap/legend to the others.
+3. Wire the download workflow — see below. On each `DownloadWorkflowFile`, `layer` points at the matching style; ingestion targets that layer's collection (`stac_collection_id`, or `layer_id` if blank) — driving the STAC item id, the MinIO key prefix, and the `IngestionRun`. `dataset` still points at the `DatasetPage` (cadence, description tags); the `layer` must belong to it.
 
 The geoportal UI still shows one entry per dataset (the **primary layer** — the `default_visible` style, else first by title); the other collections are ingested and queryable via STAC but not yet surfaced in the UI.
 
-### Seeded example: `precipitation-tercile-monthly`
+### Wiring the workflow: `seed_obs_rain_anom_workflow`
 
-Create the `DatasetPage` in Wagtail first (`dataset_id` = `precipitation-tercile-monthly`, cadence **Monthly**, "allow multiple layer styles" checked), then:
+Once the `DatasetPage` and its Layer styles exist, this command creates the `DownloadWorkflow` + one `DownloadWorkflowFile` per source, mapped onto the existing styles (it does **not** create pages or styles). Idempotent.
 
 ```bash
-python manage.py seed_precipitation_tercile_workflow
+# Monthly Tercile, three sources
+python manage.py seed_obs_rain_anom_workflow \
+  --dataset-id pecipitation-tercile-monthly --variable Tercile \
+  --layer CPC-UNI=pecipitation-tercile-cpc-uni-monthly \
+  --layer RFE2=pecipitation-tercile-rfe2-monthly \
+  --layer CAMSO-PI=pecipitation-tercile-camso-pi-monthly \
+  --primary CPC-UNI --dry-run          # drop --dry-run to write
+
+# Seasonal (one workflow per season; the season is a literal folder)
+python manage.py seed_obs_rain_anom_workflow \
+  --dataset-id pecipitation-tercile-jja --variable Tercile \
+  --period seasonal --season JJA --anchor-month 6 \
+  --layer CPC-UNI=pecipitation-tercile-jja-cpc-uni
 ```
 
-This `update_or_create`s three `Layer` styles (`precipitation-tercile-{cpc-uni,rfe2,camso-pi}`, `cpc-uni` primary), the `DownloadWorkflow` "ACMAD OBS_RAIN_ANOM tercile monthly" (`folder_pattern` `{month_abbr}/tif`, monthly cadence), and three `DownloadWorkflowFile`s (`AFR_{month_abbr}_{run_date:%Y}_<SRC>_Tercile.tif`, each linked to its `layer`). It's idempotent — re-run after editing.
+`--variable` is the filename token (`Tercile`, `Percentile`, `Quintile`, `Pnorm`, `Precip-Anom`, …); `--layer SOURCE=layer_id` is repeatable (`RFE2` / `CPC-UNI` / `CAMSO-PI` / `CHIRPS`).
 
-Then backfill (`CPC-UNI`/`CAMSO-PI` reach back to 2000, `RFE2` to 2023 — earlier `RFE2` months just resolve to `not_yet_available` and are skipped):
+Then backfill (`CPC-UNI`/`CAMSO-PI` reach back to 2000, `RFE2` to 2023 — earlier `RFE2` months resolve to `not_yet_available` and are skipped) — the command prints the exact line:
 
 ```bash
 python manage.py run_download_workflow --workflow-name "ACMAD OBS_RAIN_ANOM tercile monthly" \
-  --run-month-range 2000-01:$(date -u +%Y-%m) --dry-run       # confirm URL resolution first
+  --run-month-range 2000-01:$(date -u +%Y-%m) --dry-run
 python manage.py run_download_workflow --workflow-name "ACMAD OBS_RAIN_ANOM tercile monthly" \
   --run-month-range 2000-01:$(date -u +%Y-%m) --dispatch-celery
 ```
 
 Celery Beat then keeps each new month current. Verify in
-`/api/django-admin/thredds_ingestion/downloadrunitem/` (3 `COMPLETED` per month, distinct `item_id`s) and `GET /stac/collections/precipitation-tercile-cpc-uni/items?limit=1`.
+`/api/django-admin/thredds_ingestion/downloadrunitem/` (one `COMPLETED` per source per month, distinct `item_id`s) and `GET /stac/collections/<layer stac_collection_id>/items?limit=1`.
 
 ## CSV-sourced products
 

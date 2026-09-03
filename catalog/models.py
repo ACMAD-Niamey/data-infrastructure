@@ -636,7 +636,7 @@ class DatasetPage(Page):
         if self.allow_multiple_layers:
             layer = self.primary_layer
             if layer:
-                return layer.stac_collection_id or layer.layer_id
+                return layer.effective_stac_collection
         return self.stac_collection_id or self.dataset_id
 
 
@@ -884,6 +884,12 @@ class Layer(ClusterableModel):
         if self.dataset_id:
             return f"{self.title} ({self.dataset})"
         return self.title
+
+    @property
+    def effective_stac_collection(self) -> str:
+        """pgSTAC collection this style renders from / ingestion targets:
+        stac_collection_id, or layer_id when that's blank."""
+        return self.stac_collection_id or self.layer_id
 
     def clean(self):
         super().clean()
