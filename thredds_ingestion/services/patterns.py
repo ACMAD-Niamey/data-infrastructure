@@ -9,6 +9,22 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
+# Locale-independent English month tokens. Both str.strftime("%b"/"%B") and
+# calendar.month_abbr/month_name honour the process LC_TIME locale, so a host
+# whose locale isn't English (or a future base image that sets one) would
+# silently resolve THREDDS folders/filenames like ".../sept./tif/..." and 404
+# everything. These ACMAD products embed the English abbreviation literally
+# (AFR_Sep_2025_RFE2_Precip-Anom.tif, .../monthly/Sep/tif/), so the mapping is
+# pinned here rather than derived from the locale.
+_MONTH_ABBR = (
+    "", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+)
+_MONTH_NAME = (
+    "", "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December",
+)
+
 
 class PatternRenderError(ValueError):
     pass
@@ -31,6 +47,12 @@ def _context(
         # second *date* rather than a bare hour count, e.g.
         # heat_index_{run_date:%Y%m%d}_{valid_date:%Y%m%d}.tif.
         "valid_date": render_valid_datetime(run_date, lead_hours).date(),
+        # Locale-independent English month tokens, for monthly products whose
+        # THREDDS folder/filename embeds the month name literally rather than a
+        # numeric strftime code, e.g. .../monthly/Sep/tif/AFR_Sep_2025_...tif.
+        # See the note on _MONTH_ABBR for why these aren't derived from strftime.
+        "month_abbr": _MONTH_ABBR[run_date.month],
+        "month_name": _MONTH_NAME[run_date.month],
     }
     # Omit lead_hours/threshold entirely when unset (lead_hours is None, not
     # merely falsy - 0 is a legitimate configured lead, e.g. a "day 0"
