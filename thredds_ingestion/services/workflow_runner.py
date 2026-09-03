@@ -31,13 +31,11 @@ from ..models import DownloadRun, DownloadRunItem, DownloadWorkflowFile
 log = logging.getLogger(__name__)
 
 
-def _stac_item_exists(dataset, item_id: str) -> bool:
+def _stac_item_exists(collection: str, item_id: str) -> bool:
     from ingest.stac_ops import get_stac_item
 
-    # ingest.tasks.build_item/ensure_collection use dataset_id (not
-    # stac_collection_id) as the STAC collection id - match that exactly.
     try:
-        get_stac_item(dataset.dataset_id, item_id)
+        get_stac_item(collection, item_id)
         return True
     except ValueError:
         return False
@@ -59,6 +57,10 @@ def process_item(
 ) -> DownloadRunItem:
     workflow = run.workflow
     dataset = workflow_file.dataset
+    # STAC collection this item lands in - the dataset's, or a per-source Layer's
+    # when workflow_file.layer is set. Drives the item id, the MinIO key prefix,
+    # the STAC recon check, and IngestionRun.dataset_id.
+    collection = workflow_file.resolve_collection()
     # lead_hours=0 is ambiguous on its own: it's both the sentinel for "this
     # workflow_file has no lead-hour dimension" (execute() passes 0 when
     # lead_hours_list() is empty) AND a legitimate configured lead (e.g. a
@@ -68,7 +70,7 @@ def process_item(
     lh = lead_hours if workflow_file.lead_hours_list() else None
 
     source_url, filename = render_source_url(workflow, workflow_file, run.run_date, lh)
-    item_id = render_item_id(workflow_file, dataset.dataset_id, run.run_date, lh)
+    item_id = render_item_id(workflow_file, collection, run.run_date, lh)
     # filename/item_id always reflect the real lead (via lh above) - only the
     # STAC/valid_datetime can be pinned to the issue date instead, per
     # workflow_file.datetime_from_run_date.
@@ -102,7 +104,7 @@ def process_item(
     item.valid_end_datetime = valid_end_dt
 
     # 2. STAC reconciliation fast path.
-    if not overwrite and _stac_item_exists(dataset, item_id):
+    if not overwrite and _stac_item_exists(collection, item_id):
         item.status = DownloadRunItem.Status.SKIPPED
         item.error_message = "Reconciled: STAC item already exists."
         item.save()
@@ -144,7 +146,7 @@ def process_item(
             upload_path = raster_conversion.convert_to_raster(local_path, workflow_file, _download_dir())
             upload_filename = upload_path.name
 
-        key = ingest_bridge.build_minio_key(dataset.dataset_id, run.run_date, upload_filename)
+        key = ingest_bridge.build_minio_key(collection, run.run_date, upload_filename)
         href = ingest_bridge.upload_file(str(upload_path), key=key)
         item.minio_href = href
 
@@ -153,14 +155,19 @@ def process_item(
 
         # 4. Download -> MinIO put -> ingest (above), synchronous ingest call below.
         ingestion_run = ingest_bridge.push_to_ingest(
-            dataset=dataset, href=href, item_id=item_id, valid_datetime=valid_dt, valid_end_datetime=valid_end_dt
+            collection=collection,
+            cadence=dataset.cadence,
+            href=href,
+            item_id=item_id,
+            valid_datetime=valid_dt,
+            valid_end_datetime=valid_end_dt,
         )
         item.ingestion_run_id = ingestion_run.id
 
         if ingestion_run.status == "completed":
             item.status = DownloadRunItem.Status.COMPLETED
             item.error_message = ""
-        elif "409" in (ingestion_run.error_message or "") and _stac_item_exists(dataset, item_id):
+        elif "409" in (ingestion_run.error_message or "") and _stac_item_exists(collection, item_id):
             # 5. Downstream conflict, but the item is actually present - reconcile as success.
             item.status = DownloadRunItem.Status.COMPLETED
             item.error_message = f"Reconciled after downstream conflict: {ingestion_run.error_message}"

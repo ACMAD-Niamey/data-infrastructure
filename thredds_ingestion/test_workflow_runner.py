@@ -5,7 +5,7 @@ from unittest.mock import patch
 from django.test import TestCase
 from wagtail.models import Page
 
-from catalog.models import DatasetPage, ProjectPage
+from catalog.models import DatasetPage, Layer, ProjectPage
 from ingest.models import IngestionRun
 from thredds_ingestion.models import DownloadRun, DownloadRunItem, DownloadWorkflow, DownloadWorkflowFile
 from thredds_ingestion.services import workflow_runner
@@ -309,6 +309,76 @@ class CsvToRasterConversionTests(WorkflowRunnerTestCase):
         self.assertIn("csv_value_column", item.error_message)
         mock_upload.assert_not_called()
         mock_push.assert_not_called()
+
+
+class PerLayerCollectionTests(TestCase):
+    """A workflow_file with a `layer` ingests into that layer's STAC collection
+    (one dataset, several sources) rather than the dataset_id."""
+
+    def setUp(self):
+        root = Page.get_first_root_node()
+        project = root.add_child(instance=ProjectPage(title="P", slug="p-multi"))
+        self.dataset = DatasetPage(
+            title="Precip tercile",
+            slug="precip-tercile",
+            dataset_id="precipitation-tercile-monthly",
+            dataset_type="raster",
+            cadence="monthly",
+            allow_multiple_layers=True,
+        )
+        project.add_child(instance=self.dataset)
+        self.layer = Layer.objects.create(
+            dataset=self.dataset,
+            title="CPC-UNI",
+            layer_id="precipitation-tercile-cpc-uni",
+            layer_type="raster",
+            stac_collection_id="precipitation-tercile-cpc-uni",
+        )
+        self.workflow = DownloadWorkflow.objects.create(
+            name="tercile",
+            source_base_url="https://sgbd.acmad.org/thredds/fileServer/ACMAD/CDD/ClimateBulletin_TN/OBS_RAIN_ANOM/monthly",
+            folder_pattern="{month_abbr}/tif",
+            cadence=DownloadWorkflow.Cadence.MONTHLY,
+        )
+        self.run = DownloadRun.objects.create(workflow=self.workflow, run_date=date(2025, 9, 1))
+        self.workflow_file = DownloadWorkflowFile.objects.create(
+            workflow=self.workflow,
+            dataset=self.dataset,
+            layer=self.layer,
+            filename_pattern="AFR_{month_abbr}_{run_date:%Y}_CPC-UNI_Tercile.tif",
+        )
+
+    @patch("thredds_ingestion.services.workflow_runner._stac_item_exists", return_value=False)
+    @patch("thredds_ingestion.services.workflow_runner.ingest_bridge.push_to_ingest")
+    @patch("thredds_ingestion.services.workflow_runner.ingest_bridge.upload_file", return_value="s3://geodata/x.tif")
+    @patch("thredds_ingestion.services.workflow_runner.thredds_client.download_to_path")
+    @patch("thredds_ingestion.services.workflow_runner.thredds_client.exists", return_value=True)
+    def test_layer_collection_drives_item_id_minio_key_and_ingestion_run(
+        self, _exists, _download, mock_upload, mock_push, _stac
+    ):
+        mock_push.return_value = IngestionRun.objects.create(
+            dataset_id="precipitation-tercile-cpc-uni", cadence="monthly", status="completed"
+        )
+
+        item = workflow_runner.process_item(self.run, self.workflow_file, 0)
+
+        self.assertEqual(item.status, DownloadRunItem.Status.COMPLETED)
+        self.assertEqual(item.item_id, "precipitation-tercile-cpc-uni_20250901")
+        self.assertEqual(
+            mock_upload.call_args.kwargs["key"],
+            "precipitation-tercile-cpc-uni/2025/09/AFR_Sep_2025_CPC-UNI_Tercile.tif",
+        )
+        self.assertEqual(mock_push.call_args.kwargs["collection"], "precipitation-tercile-cpc-uni")
+        self.assertEqual(mock_push.call_args.kwargs["cadence"], "monthly")
+
+    def test_resolve_collection_falls_back_to_layer_id_when_stac_collection_id_blank(self):
+        self.layer.stac_collection_id = ""
+        self.layer.save()
+        self.assertEqual(self.workflow_file.resolve_collection(), "precipitation-tercile-cpc-uni")
+
+    def test_resolve_collection_without_layer_uses_the_dataset(self):
+        self.workflow_file.layer = None
+        self.assertEqual(self.workflow_file.resolve_collection(), "precipitation-tercile-monthly")
 
 
 class ExecuteAggregationTests(WorkflowRunnerTestCase):

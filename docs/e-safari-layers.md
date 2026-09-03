@@ -35,10 +35,12 @@ No Layer snippet is required for a dataset to appear in the sidebar.
 ### 3. Layer style snippets (optional)
 
 1. Open **Snippets → Layer styles**.
-2. Create one style per dataset (1:1): pick the **dataset**, set legend/colormap/tile params.
+2. Create one style per dataset: pick the **dataset**, set legend/colormap/tile params.
 3. **layer_id** defaults to `dataset_id` if left blank.
 
 Use this when you need TiTiler colormap, legend, opacity, or zoom limits. Visualization reads style from the linked snippet.
+
+**Multiple styles per dataset.** Check **"allow multiple layer styles"** on the dataset page to attach more than one style — e.g. one per data source, each with its own **`stac_collection_id`** (under *Layer details*) that ingestion targets. Each style then needs a distinct non-blank `layer_id`. The UI still renders one entry per dataset — the **primary** style (the `default_visible` one, else first by title). See `docs/thredds-ingestion.md` → *Multiple sources for one dataset*.
 
 ### 4. Ingest data
 

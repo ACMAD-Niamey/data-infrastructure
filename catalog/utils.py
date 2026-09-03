@@ -22,9 +22,13 @@ log = logging.getLogger(__name__)
 
 class DatasetVisualization:
 
-    def __init__(self, date, dataset_id, cadence):
+    def __init__(self, date, dataset_id, cadence, collection=None):
         self.date = date
         self.dataset_id = dataset_id
+        # STAC collection backing this dataset. Same as dataset_id for the usual
+        # single-collection case; differs for a multi-layer dataset where the
+        # collection comes from the primary Layer style.
+        self.collection = collection or dataset_id
         self.cadence = cadence
         self.stack_items = None
         self.stack_item_url = None
@@ -79,7 +83,7 @@ class DatasetVisualization:
 
     def _query_stac(self, start, end):
         """Query STAC API with datetime range."""
-        url = f"{stac_api_url}/collections/{self.dataset_id}/items"
+        url = f"{stac_api_url}/collections/{self.collection}/items"
         log.info(f"Querying STAC API at {url} with datetime range {start} to {end}")
         params = {"datetime": f"{start}/{end}", "limit": 100}
 
@@ -121,14 +125,14 @@ class DatasetVisualization:
         from catalog.models import DatasetPage
 
         try:
-            dataset_page = DatasetPage.objects.select_related("style_config").get(
+            dataset_page = DatasetPage.objects.prefetch_related("style_configs").get(
                 dataset_id=self.dataset_id
             )
         except DatasetPage.DoesNotExist:
             self.legend_dict = None
             return None
 
-        style = getattr(dataset_page, "style_config", None)
+        style = dataset_page.primary_layer
         if not style:
             self.legend_dict = None
             return None
@@ -264,7 +268,7 @@ class DatasetVisualization:
         try:
             stac_item = self.stack_items[0]
             item_id = stac_item["id"]
-            stac_item_url = f"{stac_api_url}/collections/{self.dataset_id}/items/{item_id}"
+            stac_item_url = f"{stac_api_url}/collections/{self.collection}/items/{item_id}"
             tile_url = f"{titiler_url}/stac/tiles/WebMercatorQuad/{{z}}/{{x}}/{{y}}?url={stac_item_url}&tile_format=png&tileMatrixSetId={tile_matrix_id}&assets=data"
             return tile_url
         except Exception as e:

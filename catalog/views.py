@@ -275,8 +275,15 @@ class DatasetVisualizationView(APIView):
         date = serializer.validated_data["date"]
         cadence = serializer.validated_data["cadence"]
 
+        # A multi-layer dataset renders from its primary Layer's STAC collection,
+        # which isn't the dataset_id; resolve it here (falls back to dataset_id).
+        from catalog.models import DatasetPage
+
+        dataset_page = DatasetPage.objects.filter(dataset_id=dataset_id).first()
+        collection = dataset_page.effective_stac_collection if dataset_page else dataset_id
+
         try:
-            visualization_info = DatasetVisualization(date, dataset_id, cadence)
+            visualization_info = DatasetVisualization(date, dataset_id, cadence, collection=collection)
             log.info(f'replace_titiler_url={replace_titiler_url}')
             titiler_info = visualization_info.get_visualization(replace_url=replace_titiler_url)
 
