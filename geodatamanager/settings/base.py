@@ -321,6 +321,12 @@ MINIO_SECRET_KEY = os.environ.get("MINIO_SECRET_KEY", "")
 MINIO_USE_SSL = os.environ.get("MINIO_USE_SSL", "false").lower() == "true"
 MINIO_ARCHIVE_BUCKET = os.environ.get("MINIO_ARCHIVE_BUCKET", "geodata-archive")
 
+# Africa Drought Advisory backend — canonical source for CMS-editable layer
+# styles / legends (GET /api/data_api/rs_data/get_layer_style?key=). The
+# register_combined_forecast_layers command pulls the palette from here instead
+# of hardcoding it.
+DROUGHT_BACKEND_URL = os.environ.get("DROUGHT_BACKEND_URL", "https://ada.acmad.org")
+
 
 WIS2_BROKER_HOST = os.environ.get("WIS2_BROKER_HOST", "globalbroker.meteo.fr")
 WIS2_BROKER_PORT = int(os.environ.get("WIS2_BROKER_PORT", "8883"))
