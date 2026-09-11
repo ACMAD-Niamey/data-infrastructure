@@ -210,9 +210,10 @@ WIS2_DOWNLOAD_DIR = Path(
     os.getenv("WIS2_DOWNLOAD_DIR", str(BASE_DIR / "data" / "wis2_downloads"))
 )
 
-WIS2_KEEP_DOWNLOADED_FILES = True
-WIS2_MAX_PAYLOAD_PREVIEW_CHARS = 2000
+# WIS2_KEEP_DOWNLOADED_FILES / WIS2_MAX_PAYLOAD_PREVIEW_CHARS live with the rest
+# of the WIS2 consumer settings below, not duplicated here.
 WIS2_DOWNLOAD_RETENTION_DAYS = int(os.getenv("WIS2_DOWNLOAD_RETENTION_DAYS", "1"))
+WIS2_RAW_LOG_RETENTION_DAYS = int(os.getenv("WIS2_RAW_LOG_RETENTION_DAYS", "7"))
 
 THREDDS_DOWNLOAD_DIR = Path(
     os.getenv("THREDDS_DOWNLOAD_DIR", str(BASE_DIR / "data" / "thredds_downloads"))
@@ -234,6 +235,19 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": crontab(minute="*/15"),
     },
 }
+if os.getenv("WIS2_RAW_LOG_PRUNE_SCHEDULE_ENABLED", "1") == "1":
+    # DB-row deletion (RawPayloadLog), distinct from the file-only cleanup
+    # above -- see prune_wis2_raw_logs. Offset 15min after the file cleanup so
+    # the two don't contend on the table at once. Set the env flag to "0" to
+    # turn this off (e.g. while still deciding on retention policy) without
+    # touching code.
+    CELERY_BEAT_SCHEDULE["prune-wis2-raw-logs-daily"] = {
+        "task": "weather_station_ingestion.tasks.prune_wis2_raw_logs_task",
+        "schedule": crontab(
+            hour=int(os.getenv("CELERY_BEAT_PRUNE_WIS2_RAW_LOGS_SCHEDULE_HOUR", "21")),
+            minute=int(os.getenv("CELERY_BEAT_PRUNE_WIS2_RAW_LOGS_SCHEDULE_MINUTE", "35")),
+        ),
+    }
 
 # Cache settings
 CACHES = {
@@ -335,13 +349,24 @@ WIS2_BROKER_PASSWORD = os.environ.get("WIS2_BROKER_PASSWORD", "everyone")
 WIS2_TOPICS = [
     ("cache/a/wis2/#", 0),
 ]
-WIS2_STORE_FULL_PAYLOAD = False
+
+# Volume/storage knobs — every message on WIS2_TOPICS creates a RawPayloadLog
+# row, and the global broker firehose is large, so these are .env-driven to
+# turn load down (fewer downloads, no full payload, no file writes) without a
+# redeploy while sizing compute/DB storage. Defaults below match prior
+# hardcoded behaviour, so an unset .env changes nothing.
+# Master switch: False = still create the RawPayloadLog notification row
+# (topic/data_id/pubtime etc.), but skip fetching + parsing the asset
+# entirely (marked skipped_downloads_disabled). The cheapest lever for
+# cutting load — no network fetch, no file write, no parser CPU.
+WIS2_DOWNLOAD_ENABLED = os.getenv("WIS2_DOWNLOAD_ENABLED", "1") == "1"
+WIS2_KEEP_DOWNLOADED_FILES = os.getenv("WIS2_KEEP_DOWNLOADED_FILES", "1") == "1"
+WIS2_STORE_FULL_PAYLOAD = os.getenv("WIS2_STORE_FULL_PAYLOAD", "0") == "1"
+WIS2_ONLY_CACHE_TOPICS = os.getenv("WIS2_ONLY_CACHE_TOPICS", "1") == "1"
+WIS2_STORE_TEXT_PREVIEW = os.getenv("WIS2_STORE_TEXT_PREVIEW", "1") == "1"
+WIS2_MAX_PAYLOAD_PREVIEW_CHARS = int(os.getenv("WIS2_MAX_PAYLOAD_PREVIEW_CHARS", "2000"))
 
 WIS2_DOWNLOAD_TIMEOUT = 60
-WIS2_MAX_PAYLOAD_PREVIEW_CHARS = 2000
-WIS2_ONLY_CACHE_TOPICS = True
-WIS2_STORE_TEXT_PREVIEW = True
-WIS2_DOWNLOAD_ENABLED = True
 WIS2_ALLOWED_CONTENT_TYPES = {
     "text/plain",
     "application/octet-stream",

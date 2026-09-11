@@ -438,18 +438,37 @@ To roll back a backfill cohort entirely:
 DELETE FROM observations WHERE qc_flag = 'noaa_isd_lite';
 ```
 
+## WIS2 volume controls (.env-driven)
+
+The WIS2 consumer subscribes to the global broker's `cache/a/wis2/#` topic,
+which is high-volume — every message creates a `RawPayloadLog` row, and by
+default the consumer also fetches + saves the referenced asset. All of the
+knobs that control how much work/storage that does are `.env`-driven (see
+`env.sample`), so they can be turned down without a redeploy while sizing
+compute/DB storage:
+
+| Variable | Default | Effect when off |
+|---|---|---|
+| `WIS2_DOWNLOAD_ENABLED` | `1` | Master switch. `0` = still create the `RawPayloadLog` row per notification (topic/data_id/pubtime), but skip the HTTP fetch, file write, and parsing entirely (`decision=skipped_downloads_disabled`). The single biggest lever for cutting load. |
+| `WIS2_KEEP_DOWNLOADED_FILES` | `1` | `0` = classify/parse in memory only, nothing written to `WIS2_DOWNLOAD_DIR`. |
+| `WIS2_STORE_FULL_PAYLOAD` | `0` | `1` stores the raw notification JSON on the row itself (`payload` field) — the biggest per-row size contributor, off by default. |
+| `WIS2_STORE_TEXT_PREVIEW` | `1` | `0` = don't store `payload_preview` for text/json payloads. |
+| `WIS2_ONLY_CACHE_TOPICS` | `1` | `0` = also process non-`cache/` topics (not recommended — those aren't data notifications). |
+
+Booleans are `1`/`0`, matching `DJANGO_DEBUG`'s convention in this repo.
+
 ## WIS2 Download Retention Cleanup
 
-Downloaded WIS2/MQTT payload files can be cleaned up with a retention policy.
-Default retention is **7 days**, configurable to a shorter or longer window.
+Downloaded WIS2/MQTT payload **files** can be cleaned up with a retention
+policy. Default retention is `WIS2_DOWNLOAD_RETENTION_DAYS=1` day.
 
 ### Defaults and configuration
 
-- Default retention: `WIS2_DOWNLOAD_RETENTION_DAYS=7`
+- Default retention: `WIS2_DOWNLOAD_RETENTION_DAYS=1`
 - Override globally via env var:
   - `WIS2_DOWNLOAD_RETENTION_DAYS=<days>`
 - Override per-run via command:
-  - `--older-than-days <days>`
+  - `python manage.py cleanup_wis2_downloads --older-than-days <days>`
 
 ### Safety rules
 
@@ -458,7 +477,48 @@ Cleanup only targets rows where:
 - `received_at <= now - retention`
 - `local_file_path` is non-null/non-empty
 
-It does **not** touch pending/downloading logs.
+It does **not** touch pending/downloading logs, and it only deletes the file
+on disk + nulls `local_file_path` — the `RawPayloadLog` row itself stays. See
+below to actually reclaim DB space.
+
+## WIS2 Raw Log Pruning (DB rows — reclaims database space)
+
+`cleanup_wis2_downloads` above only deletes files; the `RawPayloadLog` **DB
+rows** accumulate forever regardless, which is what actually drives unbounded
+database growth under the global broker's volume. `prune_wis2_raw_logs`
+deletes the rows themselves.
+
+```bash
+# See what would be deleted first
+python manage.py prune_wis2_raw_logs --dry-run
+
+# Then actually delete (uses WIS2_RAW_LOG_RETENTION_DAYS, default 7)
+python manage.py prune_wis2_raw_logs
+
+# One-off override, e.g. to reclaim space aggressively right now
+python manage.py prune_wis2_raw_logs --older-than-days 2
+
+# Restrict to specific statuses (default: processed, skipped, failed)
+python manage.py prune_wis2_raw_logs --status skipped --status failed
+```
+
+- Default retention: `WIS2_RAW_LOG_RETENTION_DAYS=7` (independent of the file
+  retention above — DB rows are cheap individually but numerous).
+- Deletes in batches (`--batch-size`, default 5000) to avoid a single long
+  lock/transaction on a large table.
+- Runs daily via Celery beat (`prune-wis2-raw-logs-daily`, 21:35 by default —
+  15 minutes after the file cleanup so they don't contend on the table at the
+  same time). Set `WIS2_RAW_LOG_PRUNE_SCHEDULE_ENABLED=0` to turn off the
+  automatic run and only prune manually.
+- A `DELETE` frees space logically; Postgres reclaims the underlying disk
+  pages via autovacuum, or run `VACUUM (ANALYZE) raw_payload_logs;` manually
+  for an immediate, non-exclusive-lock reclaim after a large prune.
+
+### Safety rules
+
+Same shape as the file cleanup: only `processing_status IN (processed,
+skipped, failed)` by default (pass `--status` explicitly to also include
+`pending`/`downloaded`), and only rows past the retention cutoff.
 
 ### Command usage
 

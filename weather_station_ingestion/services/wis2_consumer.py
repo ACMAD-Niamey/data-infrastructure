@@ -134,6 +134,16 @@ class WIS2Consumer:
                 raw_log.save(update_fields=["processing_status", "decision"])
                 return
 
+            if not settings.WIS2_DOWNLOAD_ENABLED:
+                # Master .env switch to cut load: keep the notification row
+                # (topic/data_id/pubtime — useful for audit and for sizing
+                # true message volume) but skip the network fetch, file
+                # write, and parsing entirely.
+                raw_log.processing_status = RawPayloadLog.ProcessingStatus.SKIPPED
+                raw_log.decision = "skipped_downloads_disabled"
+                raw_log.save(update_fields=["processing_status", "decision"])
+                return
+
             download_result = self.downloader.download(notification.canonical_url)
 
             classification = PayloadClassifierFactory.classify(
