@@ -105,8 +105,10 @@ class DatasetAvailabilityView(APIView):
                 name="cadence",
                 type=str,
                 location=OpenApiParameter.QUERY,
-                description="Temporal cadence to aggregate availability (daily, dekadal, or monthly)",
-                enum=["daily", "dekadal", "monthly"],
+                description="Temporal cadence to aggregate availability (daily, dekadal, monthly, "
+                            "annual, or seasonal — seasonal buckets by year-month like monthly; "
+                            "period-token names like AMJ/SON aren't exposed here yet).",
+                enum=["daily", "dekadal", "monthly", "annual", "seasonal"],
                 default="daily",
             ),
         ],
@@ -140,8 +142,12 @@ class DatasetAvailabilityView(APIView):
         cadence = (request.query_params.get("cadence") or "daily").lower()
         # If you have cadence in Wagtail, you can fetch it here instead.
         # For now, allow cadence in querystring or default daily.
-        if cadence not in ("daily", "dekadal", "monthly", "annual", ""):
-            return Response({"detail": "cadence must be daily|dekadal|monthly|annual"}, status=400)
+        # "seasonal" (e.g. combined_drought_forecast/hazard_*) has no bucketing
+        # branch of its own below — it falls into the "monthly" `else` and is
+        # exposed to the UI as plain year-month dates for now, not period
+        # tokens (AMJ/SON/...); that's a later addition, not a blocker.
+        if cadence not in ("daily", "dekadal", "monthly", "annual", "seasonal", ""):
+            return Response({"detail": "cadence must be daily|dekadal|monthly|annual|seasonal"}, status=400)
         if cadence == "":
             cadence = "daily"
 
@@ -189,7 +195,7 @@ class DatasetAvailabilityView(APIView):
                 seen[str(d.year)] = True
             available = list(seen.keys())
 
-        else:  # monthly
+        else:  # monthly (also covers "seasonal" — bucketed by year-month, no period token)
             seen = OrderedDict()
             for d in rows:
                 k = f"{d.year:04d}-{d.month:02d}"
@@ -226,7 +232,7 @@ class DatasetVisualizationView(APIView):
                 type=str,
                 location=OpenApiParameter.QUERY,
                 description="Temporal cadence for visualization",
-                enum=["daily", "dekadal", "monthly"],
+                enum=["daily", "dekadal", "monthly", "annual", "seasonal"],
                 required=True,
             ),
         ],
