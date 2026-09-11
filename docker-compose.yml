@@ -179,6 +179,11 @@ services:
     volumes:
       - ${PGDATA_VOLUME}:/var/lib/postgresql
       - ./docker/db/initdb:/docker-entrypoint-initdb.d
+      # Secondary tablespace for large/cold tables (see
+      # observations/migrations/0003_move_observations_to_hdd_tablespace.py).
+      # Host dir must exist and be owned by the postgres OS user inside the
+      # container before that migration's CREATE TABLESPACE runs.
+      - ${PG_HDD_TABLESPACE_VOLUME}:/mnt/blockstorage/pg_hdd_ts
     networks:
       - data_infra_network
 
