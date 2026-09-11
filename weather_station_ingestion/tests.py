@@ -8,6 +8,7 @@ from django.utils import timezone
 
 from weather_station_ingestion.models import RawPayloadLog
 from weather_station_ingestion.services.wis2_consumer import WIS2Consumer
+from weather_station_ingestion.tasks import prune_wis2_raw_logs_task
 
 
 def _make_log(*, status, days_old, **extra):
@@ -77,6 +78,48 @@ class PruneWis2RawLogsCommandTests(TestCase):
 
         self.assertFalse(RawPayloadLog.objects.filter(pk=just_past.pk).exists())
         self.assertTrue(RawPayloadLog.objects.filter(pk=just_before.pk).exists())
+
+
+# ---------------------------------------------------------------------------
+# prune_wis2_raw_logs_task (Celery) -- kwargs flow through to the command
+# ---------------------------------------------------------------------------
+
+
+class PruneWis2RawLogsTaskTests(TestCase):
+    def test_no_args_uses_command_defaults(self):
+        old_processed = _make_log(status=RawPayloadLog.ProcessingStatus.PROCESSED, days_old=10)
+
+        prune_wis2_raw_logs_task()
+
+        self.assertFalse(RawPayloadLog.objects.filter(pk=old_processed.pk).exists())
+
+    def test_kwargs_reach_the_command(self):
+        # older_than_days=3 + batch_size=1 + statuses=["pending"], exercised
+        # together -- this is exactly the one-off manual invocation shape
+        # (prune_wis2_raw_logs_task.delay(batch_size=50000)).
+        old_pending_1 = _make_log(status=RawPayloadLog.ProcessingStatus.PENDING, days_old=5)
+        old_pending_2 = _make_log(status=RawPayloadLog.ProcessingStatus.PENDING, days_old=5)
+        old_processed = _make_log(status=RawPayloadLog.ProcessingStatus.PROCESSED, days_old=5)
+        recent_pending = _make_log(status=RawPayloadLog.ProcessingStatus.PENDING, days_old=1)
+
+        prune_wis2_raw_logs_task(
+            older_than_days=3, batch_size=1, statuses=["pending"]
+        )
+
+        remaining = set(RawPayloadLog.objects.values_list("pk", flat=True))
+        self.assertNotIn(old_pending_1.pk, remaining)
+        self.assertNotIn(old_pending_2.pk, remaining)
+        # status filter narrowed to "pending" only -- processed row untouched
+        self.assertIn(old_processed.pk, remaining)
+        # not past the 3-day cutoff
+        self.assertIn(recent_pending.pk, remaining)
+
+    def test_dry_run_kwarg_deletes_nothing(self):
+        old_processed = _make_log(status=RawPayloadLog.ProcessingStatus.PROCESSED, days_old=10)
+
+        prune_wis2_raw_logs_task(dry_run=True)
+
+        self.assertTrue(RawPayloadLog.objects.filter(pk=old_processed.pk).exists())
 
 
 # ---------------------------------------------------------------------------
