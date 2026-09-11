@@ -82,10 +82,12 @@ class UILayersResponseSerializer(serializers.Serializer):
 class DatasetAvailabilityRequestSerializer(serializers.Serializer):
     """Request serializer for dataset availability"""
     cadence = serializers.ChoiceField(
-        choices=["daily", "dekadal", "monthly", "annual"],
+        choices=["daily", "dekadal", "monthly", "annual", "seasonal"],
         required=False,
         default="daily",
-        help_text="Temporal cadence to aggregate availability"
+        help_text="Temporal cadence to aggregate availability. 'seasonal' is "
+                   "bucketed like 'monthly' (year-month dates, not period "
+                   "tokens like AMJ/SON) until the UI exposes those."
     )
 
 
@@ -114,9 +116,13 @@ class DatasetVisualizationRequestSerializer(serializers.Serializer):
         help_text="Specific date to visualize (YYYY-MM or YYYY-MM-DD)"
     )
     cadence = serializers.ChoiceField(
-        choices=["daily", "dekadal", "monthly", "annual"],
+        choices=["daily", "dekadal", "monthly", "annual", "seasonal"],
         required=True,
-        help_text="Temporal cadence for visualization"
+        help_text="Temporal cadence for visualization. 'seasonal' resolves "
+                   "to a month-range STAC query, same as 'monthly' — "
+                   "DatasetVisualization.get_dataset_items() already falls "
+                   "back to the monthly handler for any cadence it doesn't "
+                   "recognize."
     )
 
 class DatasetVisualizationResponseSerializer(serializers.Serializer):

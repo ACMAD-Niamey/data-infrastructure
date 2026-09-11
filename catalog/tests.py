@@ -253,6 +253,23 @@ class DatasetAvailabilityViewTests(TestCase):
         self.assertIn("2026-02", response.data["available"])
 
     @patch("catalog.views.connections")
+    def test_seasonal_cadence_buckets_like_monthly(self, mock_conns):
+        # combined_drought_forecast_* / combined_drought_hazard_* are registered
+        # with cadence="seasonal" — the UI doesn't have period-token names
+        # (AMJ/SON/...) yet, so this buckets by year-month same as "monthly"
+        # instead of 400ing.
+        dates = [date(2026, 9, 1), date(2026, 10, 5)]
+        cur = _make_pgstac_cursor(dates, min_d=date(2026, 9, 1), max_d=date(2026, 10, 5))
+        mock_conns.__getitem__.return_value.cursor.return_value = cur
+
+        response = self.client.get(
+            "/api/catalog/datasets/combined_drought_hazard_era5/availability/?cadence=seasonal"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("2026-09", response.data["available"])
+        self.assertIn("2026-10", response.data["available"])
+
+    @patch("catalog.views.connections")
     def test_dekadal_cadence_maps_to_dekad_start_dates(self, mock_conns):
         # day 5 -> 1st, day 15 -> 11th, day 25 -> 21st
         dates = [date(2026, 4, 5), date(2026, 4, 15), date(2026, 4, 25)]
@@ -358,6 +375,24 @@ class DatasetVisualizationViewTests(TestCase):
             "/api/catalog/datasets/spi/visualization/?date=2026-04"
         )
         self.assertEqual(response.status_code, 400)
+
+    @patch("catalog.views.DatasetVisualization")
+    def test_seasonal_cadence_is_accepted(self, mock_viz_cls):
+        # Was previously rejected by the request serializer before ever
+        # reaching DatasetVisualization (which already defaults an unknown
+        # cadence to a month-range STAC query).
+        mock_viz = MagicMock()
+        mock_viz.cadence = "seasonal"
+        mock_viz.legend_dict = None
+        mock_viz.get_visualization.return_value = {"tiles": "http://titiler/tiles/{z}/{x}/{y}"}
+        mock_viz_cls.return_value = mock_viz
+
+        response = self.client.get(
+            "/api/catalog/datasets/combined_drought_hazard_era5/visualization/"
+            "?date=2026-09&cadence=seasonal"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("titiler_url", response.data)
 
 
 # ---------------------------------------------------------------------------
