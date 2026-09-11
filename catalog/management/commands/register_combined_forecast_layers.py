@@ -1,19 +1,21 @@
-"""Register the combined drought forecast datasets + layer styles.
+"""Register the combined drought forecast + hazard datasets and layer styles.
 
-Creates (idempotently) two raster ``DatasetPage``s under a project and their
-``Layer`` style snippets, matching the class raster the ``adma_data_pipeline``
+Creates (idempotently) four raster ``DatasetPage``s under a project and their
+``Layer`` style snippets, matching the class rasters the ``adma_data_pipeline``
 forecast-combine job publishes to MinIO + pgSTAC:
 
-    combined_drought_forecast_era5   (CDI reference = ERA5)
-    combined_drought_forecast_gpcc   (CDI reference = GPCC)
+    combined_drought_forecast_era5   combined_drought_hazard_era5    (CDI reference = ERA5)
+    combined_drought_forecast_gpcc   combined_drought_hazard_gpcc    (CDI reference = GPCC)
 
 The **palette + legend are pulled from the Africa Drought Advisory backend**
-(``GET {DROUGHT_BACKEND_URL}/api/data_api/rs_data/get_layer_style?key=``) so the
-CMS-editable ``LayerStyle`` there stays the single source of truth. The bundled
-``FALLBACK_PALETTE`` is used only when that fetch fails (or ``--offline``).
+(``GET {DROUGHT_BACKEND_URL}/api/data_api/rs_data/get_layer_style?key=``) —
+``combined_forecast`` for the forecast pair, ``combined_hazard`` for the hazard
+pair — so the CMS-editable ``LayerStyle`` there stays the single source of
+truth. The bundled ``FALLBACK_PALETTE``s are used only when that fetch fails
+(or ``--offline``).
 
-Both datasets share the ``seasonal`` cadence. Run once per environment; re-runs
-update the datasets + styles in place.
+All four datasets share the ``seasonal`` cadence. Run once per environment;
+re-runs update the datasets + styles in place.
 
     python manage.py register_combined_forecast_layers --project multi-hazard --icon-slug drought
 """
@@ -29,24 +31,38 @@ from django.db import transaction
 
 logger = logging.getLogger(__name__)
 
-#: Style key to look up in the drought backend (one style, shared by both grids).
-STYLE_KEY = "combined_forecast"
-
-#: Fallback only. Keep in sync with the backend ``LayerStyle`` "combined_forecast"
-#: (ColorBrewer RdBu, reversed: wet = blue, dry = red). Class 0 = NoData.
-FALLBACK_PALETTE = {
-    1: ("#2166ac", "Full-confidence wetter"),
-    2: ("#67a9cf", "Leaning wetter"),
-    3: ("#f7f7f7", "Near-normal / conflicting"),
-    4: ("#ef8a62", "Leaning drier"),
-    5: ("#b2182b", "Full-confidence drier"),
+#: Fallback only, per style key. Keep in sync with the backend ``LayerStyle``
+#: rows of the same key. Class 0 = NoData in both.
+FALLBACK_PALETTES = {
+    # ColorBrewer RdBu (5), reversed: wet = blue, dry = red.
+    "combined_forecast": {
+        1: ("#2166ac", "Full-confidence wetter"),
+        2: ("#67a9cf", "Leaning wetter"),
+        3: ("#f7f7f7", "Near-normal / conflicting"),
+        4: ("#ef8a62", "Leaning drier"),
+        5: ("#b2182b", "Full-confidence drier"),
+    },
+    # CDI-anchored 9-class hazard ramp (S = cdi_tier + forecast, 0..4 step 0.5).
+    "combined_hazard": {
+        1: ("#f5f5f5", "No drought hazard"),
+        2: ("#fbfa86", "Very low"),
+        3: ("#ffff01", "Low (Watch)"),
+        4: ("#ffd001", "Low-moderate"),
+        5: ("#ffa601", "Moderate (Warning)"),
+        6: ("#ff5301", "Moderate-high"),
+        7: ("#ff0000", "High (Alert)"),
+        8: ("#d20a0b", "Very high"),
+        9: ("#a50f15", "Extreme"),
+    },
 }
 
 DATASETS = [
     {
         "dataset_id": "combined_drought_forecast_era5",
+        "style_key": "combined_forecast",
         "title": "Combined drought forecast (ERA5)",
         "resolution": "~1° (ERA5 CDI grid)",
+        "legend_description": "1-5 signed forecast class: wetter (blue) -> near-normal -> drier (red).",
         "description": (
             "Seasonal signed drought forecast fusing the ACMAD rainfall tercile "
             "forecast with the Copernicus UNWDC forecast, on the ERA5 CDI grid."
@@ -54,26 +70,59 @@ DATASETS = [
     },
     {
         "dataset_id": "combined_drought_forecast_gpcc",
+        "style_key": "combined_forecast",
         "title": "Combined drought forecast (GPCC)",
         "resolution": "~1° (GPCC CDI grid)",
+        "legend_description": "1-5 signed forecast class: wetter (blue) -> near-normal -> drier (red).",
         "description": (
             "Seasonal signed drought forecast fusing the ACMAD rainfall tercile "
             "forecast with the Copernicus UNWDC forecast, on the GPCC CDI grid."
         ),
     },
+    {
+        "dataset_id": "combined_drought_hazard_era5",
+        "style_key": "combined_hazard",
+        "title": "Combined monitoring & forecast hazard (ERA5)",
+        "resolution": "~1° (ERA5 CDI grid)",
+        "legend_description": (
+            "9-class blended hazard S = CDI tier + forecast: 1 = no drought hazard, "
+            "3 = Watch, 5 = Warning, 7 = Alert, 9 = extreme; 0 = NoData."
+        ),
+        "description": (
+            "Combined monitoring & forecast hazard indicator (S = cdi_tier + forecast) "
+            "fusing CDI drought monitoring with the combined ACMAD + UNWDC forecast, "
+            "on the ERA5 CDI grid."
+        ),
+    },
+    {
+        "dataset_id": "combined_drought_hazard_gpcc",
+        "style_key": "combined_hazard",
+        "title": "Combined monitoring & forecast hazard (GPCC)",
+        "resolution": "~1° (GPCC CDI grid)",
+        "legend_description": (
+            "9-class blended hazard S = CDI tier + forecast: 1 = no drought hazard, "
+            "3 = Watch, 5 = Warning, 7 = Alert, 9 = extreme; 0 = NoData."
+        ),
+        "description": (
+            "Combined monitoring & forecast hazard indicator (S = cdi_tier + forecast) "
+            "fusing CDI drought monitoring with the combined ACMAD + UNWDC forecast, "
+            "on the GPCC CDI grid."
+        ),
+    },
 ]
 
 
-def _fallback_style() -> dict:
-    """Normalized style dict built from :data:`FALLBACK_PALETTE`."""
-    codes = sorted(FALLBACK_PALETTE)
+def _fallback_style(style_key: str) -> dict:
+    """Normalized style dict built from :data:`FALLBACK_PALETTES`."""
+    palette = FALLBACK_PALETTES[style_key]
+    codes = sorted(palette)
     return {
         "scheme": "discrete",
         "opacity": 0.9,
         "min": float(codes[0]),
         "max": float(codes[-1]),
-        "legend": {FALLBACK_PALETTE[c][1]: FALLBACK_PALETTE[c][0] for c in codes},
-        "stops": [(float(c), FALLBACK_PALETTE[c][0]) for c in codes],
+        "legend": {palette[c][1]: palette[c][0] for c in codes},
+        "stops": [(float(c), palette[c][0]) for c in codes],
         "source": "fallback",
     }
 
@@ -121,12 +170,12 @@ def _normalize_backend_style(data: dict) -> dict | None:
 def _fetch_style(key: str, *, offline: bool = False, timeout: float = 10.0) -> dict:
     """Pull the canonical style from the drought backend; fall back on any error."""
     if offline:
-        return _fallback_style()
+        return _fallback_style(key)
 
     base = getattr(settings, "DROUGHT_BACKEND_URL", "").rstrip("/")
     if not base:
-        logger.warning("DROUGHT_BACKEND_URL not set — using fallback palette")
-        return _fallback_style()
+        logger.warning("DROUGHT_BACKEND_URL not set — using fallback palette for %s", key)
+        return _fallback_style(key)
 
     url = f"{base}/api/data_api/rs_data/get_layer_style"
     try:
@@ -135,23 +184,34 @@ def _fetch_style(key: str, *, offline: bool = False, timeout: float = 10.0) -> d
         normalized = _normalize_backend_style(resp.json())
     except (requests.RequestException, ValueError) as exc:
         logger.warning("get_layer_style(%s) failed (%s) — using fallback palette", key, exc)
-        return _fallback_style()
+        return _fallback_style(key)
 
     if normalized is None:
         logger.warning("get_layer_style(%s) had no usable palette — using fallback", key)
-        return _fallback_style()
+        return _fallback_style(key)
     return normalized
 
 
 class Command(BaseCommand):
-    help = "Register the combined_drought_forecast_{era5,gpcc} datasets + layer styles."
+    help = (
+        "Register the combined_drought_forecast_{era5,gpcc} and "
+        "combined_drought_hazard_{era5,gpcc} datasets + layer styles."
+    )
 
     def add_arguments(self, parser):
         parser.add_argument("--project", default="multi-hazard", help="ProjectPage slug.")
         parser.add_argument("--hazard-key", default="drought", help="HazardCategory key.")
         parser.add_argument("--icon-slug", default="", help="Existing LayerIcon slug to assign.")
-        parser.add_argument("--style-key", default=STYLE_KEY, help="Drought-backend get_layer_style key.")
-        parser.add_argument("--offline", action="store_true", help="Skip the backend fetch; use FALLBACK_PALETTE.")
+        parser.add_argument(
+            "--style-key", default="",
+            help="Override: use this get_layer_style key for every dataset "
+                 "(default: each dataset's own style_key — combined_forecast / combined_hazard).",
+        )
+        parser.add_argument(
+            "--dataset-id", action="append", default=[],
+            help="Register only this dataset_id (repeatable). Default: all four.",
+        )
+        parser.add_argument("--offline", action="store_true", help="Skip the backend fetch; use the fallback palette.")
         parser.add_argument("--publish", action="store_true", help="Publish the dataset pages.")
 
     @transaction.atomic
@@ -174,13 +234,27 @@ class Command(BaseCommand):
             if not icon:
                 self.stderr.write(self.style.WARNING(f"No LayerIcon '{opts['icon_slug']}' — leaving icon unset"))
 
-        style = _fetch_style(opts["style_key"], offline=opts["offline"])
-        self.stdout.write(
-            f"style source: {style['source']} "
-            f"({len(style['stops'])} stops, scheme={style['scheme']})"
-        )
+        wanted = set(opts["dataset_id"]) or None
+        specs = [s for s in DATASETS if wanted is None or s["dataset_id"] in wanted]
+        if not specs:
+            self.stderr.write(self.style.ERROR(f"No dataset matches --dataset-id {sorted(wanted)}"))
+            return
 
-        for spec in DATASETS:
+        # One backend fetch per distinct style key (forecast pair shares one, hazard pair another).
+        style_cache: dict[str, dict] = {}
+
+        def style_for(spec: dict) -> dict:
+            key = opts["style_key"] or spec["style_key"]
+            if key not in style_cache:
+                style_cache[key] = _fetch_style(key, offline=opts["offline"])
+                s = style_cache[key]
+                self.stdout.write(
+                    f"style '{key}' source: {s['source']} ({len(s['stops'])} stops, scheme={s['scheme']})"
+                )
+            return style_cache[key]
+
+        for spec in specs:
+            style = style_for(spec)
             page = DatasetPage.objects.filter(dataset_id=spec["dataset_id"]).first()
             if page is None:
                 page = DatasetPage(
@@ -234,9 +308,7 @@ class Command(BaseCommand):
                     "resolution": spec["resolution"],
                     "update_frequency": "Seasonal (rolling 3-month)",
                     "source_organization": "ACMAD / Africa Drought System",
-                    "legend_description": (
-                        "1–5 signed forecast class: wetter (blue) → near-normal → drier (red)."
-                    ),
+                    "legend_description": spec["legend_description"],
                 },
             )
             layer.color_stops.all().delete()
