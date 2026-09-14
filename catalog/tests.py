@@ -309,6 +309,43 @@ class DatasetAvailabilityViewTests(TestCase):
         self.assertEqual(available, ["2024", "2025"])
 
     @patch("catalog.views.connections")
+    def test_multi_layer_dataset_queries_the_primary_layers_collection(self, mock_conns):
+        # Regression: a multi-layer dataset's data lives under its primary
+        # Layer's stac_collection_id, not dataset_id itself - querying pgSTAC
+        # with the bare dataset_id (as before this fix) always returned empty,
+        # which is why ingested multi-layer datasets never showed availability.
+        from wagtail.models import Page
+
+        from catalog.models import DatasetPage, Layer, ProjectPage
+
+        root = Page.get_first_root_node()
+        project = root.add_child(instance=ProjectPage(title="P", slug="p-avail"))
+        ds = DatasetPage(
+            title="Tercile", slug="ds-tercile", dataset_id="pecipitation-tercile-monthly",
+            dataset_type="raster", cadence="monthly", allow_multiple_layers=True,
+        )
+        project.add_child(instance=ds)
+        Layer.objects.create(
+            dataset=ds, title="CPC-UNI", layer_id="pecipitation-tercile-cpc-uni-monthly",
+            layer_type="raster", stac_collection_id="pecipitation-tercile-cpc-uni-monthly",
+            default_visible=True,
+        )
+
+        dates = [date(2026, 7, 1)]
+        cur = _make_pgstac_cursor(dates, min_d=date(2026, 7, 1), max_d=date(2026, 7, 1))
+        mock_conns.__getitem__.return_value.cursor.return_value = cur
+
+        response = self.client.get(
+            "/api/catalog/datasets/pecipitation-tercile-monthly/availability/?cadence=monthly"
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["dataset_id"], "pecipitation-tercile-monthly")
+        self.assertEqual(response.data["available"], ["2026-07"])
+        queried_collection = cur.execute.call_args_list[0].args[1][0]
+        self.assertEqual(queried_collection, "pecipitation-tercile-cpc-uni-monthly")
+
+    @patch("catalog.views.connections")
     def test_response_echoes_dataset_id_and_cadence(self, mock_conns):
         dates = [date(2026, 4, 1)]
         cur = _make_pgstac_cursor(dates, min_d=date(2026, 4, 1), max_d=date(2026, 4, 1))

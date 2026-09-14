@@ -151,6 +151,15 @@ class DatasetAvailabilityView(APIView):
         if cadence == "":
             cadence = "daily"
 
+        # A multi-layer dataset's data lives under its primary Layer's STAC
+        # collection, not dataset_id itself - resolve it the same way
+        # DatasetVisualizationView does, so availability isn't always empty
+        # for those datasets.
+        from catalog.models import DatasetPage
+
+        dataset_page = DatasetPage.objects.filter(dataset_id=dataset_id).first()
+        collection = dataset_page.effective_stac_collection if dataset_page else dataset_id
+
         # Fetch distinct UTC dates from pgSTAC
         sql_dates = """
             SELECT DISTINCT (datetime AT TIME ZONE 'UTC')::date AS d
@@ -167,10 +176,10 @@ class DatasetAvailabilityView(APIView):
         """
 
         with connections["pgstac"].cursor() as cur:
-            cur.execute(sql_minmax, [dataset_id])
+            cur.execute(sql_minmax, [collection])
             min_d, max_d = cur.fetchone()
 
-            cur.execute(sql_dates, [dataset_id])
+            cur.execute(sql_dates, [collection])
             rows = [r[0] for r in cur.fetchall()]  # list[date]
 
         if not rows:
