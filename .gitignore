@@ -5,6 +5,7 @@ __pycache__/
 *media
 *staticfiles
 *geomgr_pgdata
+*pg_hdd_ts*
 data
 e-safari-ui/build/
 nginx/webroot/
