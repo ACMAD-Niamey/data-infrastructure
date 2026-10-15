@@ -96,7 +96,7 @@ def dataset_to_api_dict(dataset: DatasetPage, request, category_override: str | 
         "has_stac_collection": style.has_stac_collection,
     } if style else None
 
-    return {
+    payload = {
         "id": dataset.dataset_id,
         "title": dataset.title,
         "type": _layer_type_for_dataset(dataset, style),
@@ -119,6 +119,26 @@ def dataset_to_api_dict(dataset: DatasetPage, request, category_override: str | 
         "ui": ui,
         "legend": legend,
         "updated_at": updated_at,
+    }
+    if dataset.dataset_type == "station_timeseries":
+        payload["station_timeseries"] = station_timeseries_payload(dataset)
+    return payload
+
+
+def station_timeseries_payload(dataset: DatasetPage) -> dict:
+    """What the UI needs to draw a station layer via TiPG and chart its series.
+
+    The visibility flags are echoed here so the UI can hide a raw/cleaned
+    toggle; the series API enforces the same flags server-side, so the UI is
+    never the only gate.
+    """
+    return {
+        # TiPG collection (schema.view) serving the points as vector tiles.
+        "tipg_collection": "tiles.station_timeseries_mvt",
+        # Filter value for the view's dataset_code column.
+        "dataset_code": dataset.dataset_id,
+        "show_raw_values": dataset.show_raw_values,
+        "show_cleaned_values": dataset.show_cleaned_values,
     }
 
 

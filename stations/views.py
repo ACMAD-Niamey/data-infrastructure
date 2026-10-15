@@ -11,6 +11,7 @@ from rest_framework.views import APIView
 from rest_framework import status
 
 from observations.services.observation_reader import ObservationReader
+from stations.services.value_visibility import RAW, VALUE_COLUMNS, allowed_values
 from observations.serializers import (
     CountryBoundsOptionSerializer,
     StationFacetsSerializer,
@@ -281,6 +282,18 @@ class StationStatsView(APIView):
                 enum=["raw", "hourly", "daily", "monthly", "yearly"],
             ),
             OpenApiParameter(
+                name="value",
+                location=OpenApiParameter.QUERY,
+                description=(
+                    "`raw` (default) or `cleaned`. Rejected with 403 when the "
+                    "station's dataset does not publish that flavour; the "
+                    "response lists the permitted ones in `available_values`."
+                ),
+                required=False,
+                type=OpenApiTypes.STR,
+                enum=["raw", "cleaned"],
+            ),
+            OpenApiParameter(
                 name="start",
                 location=OpenApiParameter.QUERY,
                 description=(
@@ -342,6 +355,13 @@ class StationStatsView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        value = request.query_params.get("value", RAW).strip().lower()
+        if value not in VALUE_COLUMNS:
+            return Response(
+                {"detail": f"Invalid 'value'. Choose from: {', '.join(VALUE_COLUMNS)}."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         start = request.query_params.get("start", _default_start()).strip()
         end = request.query_params.get("end", _default_end()).strip()
 
@@ -353,12 +373,23 @@ class StationStatsView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        available = allowed_values(station_code)
+        if value not in available:
+            return Response(
+                {
+                    "detail": f"'{value}' values are not published for this station.",
+                    "available_values": available,
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         cache_key = ":".join(
             [
                 "station_stats",
                 station_code.strip(),
                 variable,
                 agg,
+                value,
                 start,
                 end,
             ]
@@ -373,6 +404,7 @@ class StationStatsView(APIView):
             start=start,
             end=end,
             agg=agg,
+            value_field=VALUE_COLUMNS[value],
         )
 
         if agg == "raw":
@@ -385,6 +417,8 @@ class StationStatsView(APIView):
             "station_name": info.get("name"),
             "variable": variable,
             "aggregation": agg,
+            "value": value,
+            "available_values": available,
             "start": start,
             "end": end,
             "data": bucket_serializer.data,
