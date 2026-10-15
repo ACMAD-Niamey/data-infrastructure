@@ -134,7 +134,7 @@ def station_timeseries_payload(dataset: DatasetPage) -> dict:
     """
     return {
         # TiPG collection (schema.view) serving the points as vector tiles.
-        "tipg_collection": "tiles.station_timeseries_mvt",
+        "tipg_collection": "public.station_timeseries_mvt",
         # Filter value for the view's dataset_code column.
         "dataset_code": dataset.dataset_id,
         "show_raw_values": dataset.show_raw_values,

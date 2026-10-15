@@ -106,6 +106,6 @@ GET  /api/stations/{station_code}/stats/?variable=temp&agg=hourly&value=raw
 - Station position is the median of the in-area GPS fixes; the place name comes from Nominatim once per station, falling back to "Niamey".
 - Values are stored as logged (`cleaned_value` empty, `qc_flag=unchecked`); sentinel readings such as `lux = -1` are kept for now.
 - Re-uploading a file is safe (upsert on station, variable, time).
-- Map: TiPG collection `tiles.station_timeseries_mvt`, filter `dataset_code='{dataset_id}'`; also echoed in `/api/catalog/ui/layers` under `station_timeseries`.
+- Map: TiPG collection `public.station_timeseries_mvt`, filter `dataset_code='{dataset_id}'`; also echoed in `/api/catalog/ui/layers` under `station_timeseries`.
 
 Bulk load from a campaign folder: `manage.py ingest_station_timeseries <dataset_id> <folder>`.

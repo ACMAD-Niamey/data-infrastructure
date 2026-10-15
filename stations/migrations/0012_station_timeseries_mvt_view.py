@@ -10,14 +10,15 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
-        # A dedicated view (not stations_mvt) because these points are filtered
-        # by dataset_code, which lives in metadata_json. Exposing it as a real
-        # column lets TiPG's ?filter= / CQL2 select one dataset's locations.
+        # A dedicated view because these points are filtered by dataset_code,
+        # which lives in metadata_json. Exposing it as a real column lets TiPG's
+        # ?filter= / CQL2 select one dataset's locations.
+        # Created in `public`, not `tiles`: TiPG here only scans `public` (its
+        # schema setting is TIPG_DB_SCHEMAS, and the compose file sets the
+        # non-existent TIPG_DB_SCHEMA), so a `tiles` view would be unreachable.
         migrations.RunSQL(
             sql="""
-            CREATE SCHEMA IF NOT EXISTS tiles;
-
-            CREATE OR REPLACE VIEW tiles.station_timeseries_mvt AS
+            CREATE OR REPLACE VIEW public.station_timeseries_mvt AS
             SELECT
                 s.id,
                 s.station_code,
@@ -34,6 +35,6 @@ class Migration(migrations.Migration):
               AND s.geom IS NOT NULL
               AND s.metadata_json ? 'dataset_code';
             """,
-            reverse_sql="DROP VIEW IF EXISTS tiles.station_timeseries_mvt;",
+            reverse_sql="DROP VIEW IF EXISTS public.station_timeseries_mvt;",
         ),
     ]
