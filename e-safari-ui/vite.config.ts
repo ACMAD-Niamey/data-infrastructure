@@ -32,6 +32,15 @@ export default defineConfig(({ mode }) => {
           target: 'http://localhost',
           changeOrigin: true,
         },
+        // TiPG vector tiles and uploaded media (layer icons) live behind the same nginx.
+        '/tipg': {
+          target: 'http://localhost',
+          changeOrigin: true,
+        },
+        '/media': {
+          target: 'http://localhost',
+          changeOrigin: true,
+        },
       },
     },
     optimizeDeps: {

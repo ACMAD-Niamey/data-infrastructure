@@ -297,3 +297,51 @@ def process_deletion_run(run_id: int):
         run.error_message = str(e)
         run.save(update_fields=["status", "error_message", "updated_at"])
         return {"ok": False, "error": str(e)}
+
+@shared_task
+def process_station_timeseries_run(run_id: int):
+    """Load every uploaded logger CSV of a run. A bad file fails on its own and
+    is reported in payload['results'] without discarding the files that loaded."""
+    from catalog.models import DatasetPage
+    from ingest.station_timeseries.service import StationTimeseriesIngestService
+
+    run = IngestionRun.objects.get(id=run_id)
+    run.status = "processing"
+    run.save(update_fields=["status", "updated_at"])
+
+    payload = run.payload or {}
+    results: list[dict] = []
+    try:
+        dataset = DatasetPage.objects.get(dataset_id=run.dataset_id)
+        service = StationTimeseriesIngestService()
+        context = {k: payload.get(k, "") for k in ("group", "commune")}
+        for file_path in payload.get("files", []):
+            try:
+                summary = service.ingest_file(
+                    file_path,
+                    dataset_id=dataset.dataset_id,
+                    dataset_title=dataset.title,
+                    context=context,
+                )
+                results.append({
+                    "file": os.path.basename(file_path),
+                    "station_code": summary.station_code,
+                    "observations_written": summary.observations_written,
+                    "rows_before_deployment": summary.rows_before_deployment,
+                    "rows_skipped": summary.rows_skipped,
+                })
+            except Exception as exc:  # noqa: BLE001 - isolate per file
+                log.exception("Station timeseries file failed: %s", file_path)
+                results.append({"file": os.path.basename(file_path), "error": str(exc)})
+
+        failed = [r for r in results if "error" in r]
+        run.status = "failed" if failed and len(failed) == len(results) else "completed"
+        if failed:
+            run.error_message = "; ".join(f"{r['file']}: {r['error']}" for r in failed)
+    except Exception as exc:  # noqa: BLE001
+        run.status = "failed"
+        run.error_message = str(exc)
+    finally:
+        run.payload = {**payload, "results": results}
+        run.save(update_fields=["status", "error_message", "payload", "updated_at"])
+    return {"status": run.status, "results": results}

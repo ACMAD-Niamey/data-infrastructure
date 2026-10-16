@@ -1,6 +1,6 @@
 import axios from "axios";
 import { catalogBaseUrl } from "../config/api";
-import { deriveSelectors } from "../lib/cadenceSelectors";
+import { selectorsForLayer } from "../lib/cadenceSelectors";
 import type { CatalogLayer } from "../types/catalogLayer";
 
 export type UILayersResponse = {
@@ -19,10 +19,17 @@ const client = axios.create({
 });
 
 function enrichLayer(raw: UILayersResponse["layers"][number]): CatalogLayer {
-  const cadence = raw.dataset.cadence;
+  // The API's default opacity is a 0-1 fraction, but the UI works in percent. Rasters
+  // always carry an explicit percent from their style; station layers have no style, so
+  // convert here or their points render at <1% opacity.
+  const ui =
+    raw.dataset.dataset_type === "station_timeseries" && raw.ui.opacity <= 1
+      ? { ...raw.ui, opacity: raw.ui.opacity * 100 }
+      : raw.ui;
   return {
     ...raw,
-    selectors: deriveSelectors(cadence, "en"),
+    ui,
+    selectors: selectorsForLayer(raw, "en"),
     labels: {
       title: { en: raw.title, fr: raw.title },
       description: { en: raw.description.plain, fr: raw.description.plain },

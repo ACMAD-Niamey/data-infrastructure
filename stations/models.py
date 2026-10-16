@@ -83,6 +83,15 @@ class Station(models.Model):
         help_text="True when at least one observation exists for this station.",
     )
     description = models.TextField(blank=True, null=True)
+    metadata_json = models.JSONField(
+        blank=True,
+        null=True,
+        help_text=(
+            "Free-form, source-specific attributes (e.g. campaign, dataset_code, "
+            "exposure, commune). Kept off the typed columns so new station "
+            "sources need no schema change."
+        ),
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -190,6 +199,9 @@ class StationSensor(models.Model):
         SOLAR_RADIATION = "solar_radiation", "Solar Radiation"
         SOIL_MOISTURE = "soil_moisture", "Soil Moisture"
         SOIL_TEMP = "soil_temp", "Soil Temperature"
+        GLOBE_TEMP = "globe_temp", "Black Globe Temperature"
+        ILLUMINANCE = "lux", "Illuminance"
+        BATTERY = "battery_v", "Battery Voltage"
         WATER_LEVEL = "water_level", "Water Level"
         OTHER = "other", "Other"
 

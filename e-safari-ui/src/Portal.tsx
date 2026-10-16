@@ -15,6 +15,10 @@ import RightBar from './components/RightBar';
 import { add_image_layer, remove_image_layer } from './components/Maputils.js';
 import { useMap } from './components/MapContext.jsx';
 import { useCatalogLayers } from './hooks/useCatalogLayers';
+import { setStationOpacity, useStationLayers } from './hooks/useStationLayers';
+import { stationSelectorOptions } from './lib/stationSelectors';
+import { StationAnalysis } from './components/analysis/StationAnalysis';
+import type { StationLocation } from './services/stationsApi';
 import { buildVisualizationDate } from './lib/cadenceSelectors';
 import {
   defaultSelectionFromAvailability,
@@ -62,6 +66,8 @@ const Portal = ({ language }: PortalProps) => {
   // Flips true after the very first auto-zoom; never resets so only one auto-zoom ever occurs
   const hasInitialZoomedRef = useRef<boolean>(false);
   const [layerBounds, setLayerBounds] = useState<Record<string, BoundsObject | null>>({});
+  // Location open in the Analysis tab (set by clicking a station point).
+  const [selectedStation, setSelectedStation] = useState<{ layerId: string; station: StationLocation } | null>(null);
   const [searchParams] = useSearchParams();
   const preselectLayerId = searchParams.get('layer') ?? undefined;
 
@@ -77,6 +83,45 @@ const Portal = ({ language }: PortalProps) => {
   } = useCatalogLayers(language, preselectLayerId);
 
   const { mapRef } = useMap() ?? { mapRef: { current: null } };
+
+  const { locations: stationLocations } = useStationLayers({
+    mapRef,
+    activeLayers,
+    opacities,
+    selectedSite: selectedStation?.station.site ?? null,
+    language,
+    onSelect: (layerId, station) => {
+      setSelectedStation({ layerId, station });
+      setRightBarTab('Analysis');
+    },
+    onBounds: (layerId, bounds) => {
+      setLayerBounds((prev) => ({ ...prev, [layerId]: bounds }));
+      // Same one-time auto-zoom rasters get, so the points are in view on first load.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const map = mapRef?.current as any;
+      if (!hasInitialZoomedRef.current && bounds && map) {
+        map.fitBounds([[bounds.minx, bounds.miny], [bounds.maxx, bounds.maxy]], { padding: 80, maxZoom: 13 });
+        hasInitialZoomedRef.current = true;
+      }
+    },
+  });
+
+  // Switching a station layer off closes its Analysis view.
+  useEffect(() => {
+    if (selectedStation && !activeLayerIds.includes(selectedStation.layerId)) setSelectedStation(null);
+  }, [activeLayerIds, selectedStation]);
+
+  // Station layers have fixed options (variable / aggregation / value), so they
+  // are seeded here instead of coming from the availability API like rasters.
+  useEffect(() => {
+    layers
+      .filter((l) => l.dataset.dataset_type === 'station_timeseries')
+      .forEach((layer) => {
+        setLayerSelectionOptions((previous) =>
+          previous[layer.id] ? previous : { ...previous, [layer.id]: stationSelectorOptions(layer, language) },
+        );
+      });
+  }, [layers, language]);
 
   // The legend store is a module-level singleton that outlives this component's mount
   // (e.g. Home -> Geoportal -> Home -> Geoportal with a different layer), so without this
@@ -105,6 +150,7 @@ const Portal = ({ language }: PortalProps) => {
     setOpacities((prev) => ({ ...prev, [layerId]: value }));
     const map = mapRef?.current;
     const rasterId = `raster-${layerId}`;
+    setStationOpacity(map, layerId, value);
     if (map && map.getLayer(rasterId)) {
       map.setPaintProperty(rasterId, 'raster-opacity', value / 100);
     }
@@ -311,6 +357,16 @@ const Portal = ({ language }: PortalProps) => {
     map.fitBounds([[minx, miny], [maxx, maxy]], { padding: 40 });
   };
 
+  // Both sensors (sun + shade) of the clicked location, so they chart together.
+  const siteMates = selectedStation
+    ? (stationLocations[selectedStation.layerId] ?? []).filter(
+        (s) => s.site !== null && s.site === selectedStation.station.site,
+      )
+    : [];
+  const sensorsAtSelectedSite = selectedStation
+    ? siteMates.length > 0 ? siteMates : [selectedStation.station]
+    : [];
+
   return (
     <div className="h-full min-h-0 overflow-hidden flex flex-col bg-gray-50">
       <SubHeader
@@ -395,6 +451,15 @@ const Portal = ({ language }: PortalProps) => {
             selectedFeature={selectedFeature}
             activeTab={rightBarTab}
             onTabChange={setRightBarTab}
+            analysis={
+              selectedStation ? (
+                <StationAnalysis
+                  sensors={sensorsAtSelectedSite}
+                  selection={layerSelections[selectedStation.layerId] || {}}
+                  language={language}
+                />
+              ) : null
+            }
           />
 
           <Button

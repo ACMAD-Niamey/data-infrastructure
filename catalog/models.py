@@ -532,6 +532,7 @@ class DatasetPage(Page):
     DATASET_TYPES = [
         ("raster", "Raster"),
         ("vector", "Vector"),
+        ("station_timeseries", "Station time series"),
     ]
 
     CADENCES = [
@@ -547,7 +548,7 @@ class DatasetPage(Page):
         unique=True,
         help_text="Stable id used by infra and APIs, e.g. cdi, spi, sma",
     )
-    dataset_type = models.CharField(max_length=10, choices=DATASET_TYPES)
+    dataset_type = models.CharField(max_length=20, choices=DATASET_TYPES)
     cadence = models.CharField(max_length=10, choices=CADENCES)
 
     # links to infra (we will use these later)
@@ -571,6 +572,18 @@ class DatasetPage(Page):
 
     # controls what shows up in the UI config API
     is_published_for_ui = models.BooleanField(default=False)
+
+    # Station time-series datasets only. Both values are always stored; these
+    # flags only decide what the public API/UI may expose, so cleaning can be
+    # added later and switched on without re-ingesting.
+    show_raw_values = models.BooleanField(
+        default=True,
+        help_text="Station time-series datasets: expose raw values in the API/UI.",
+    )
+    show_cleaned_values = models.BooleanField(
+        default=False,
+        help_text="Station time-series datasets: expose cleaned values in the API/UI.",
+    )
 
     hazard_category = models.ForeignKey(
         "catalog.HazardCategory",
@@ -612,6 +625,13 @@ class DatasetPage(Page):
         FieldPanel("stac_collection_id"),
         FieldPanel("allow_multiple_layers"),
         FieldPanel("is_published_for_ui"),
+        MultiFieldPanel(
+            [
+                FieldPanel("show_raw_values"),
+                FieldPanel("show_cleaned_values"),
+            ],
+            heading="Station time series: visible values",
+        ),
     ]
 
     parent_page_types = ["catalog.ProjectPage"]

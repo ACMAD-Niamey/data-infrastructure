@@ -331,6 +331,7 @@ class StationStatsViewTests(TestCase):
             start="2026-01-01",
             end="2026-04-30",
             agg="monthly",
+            value_field="raw_value",
         )
 
     # -- payload structure ---------------------------------------------------

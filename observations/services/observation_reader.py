@@ -97,6 +97,8 @@ class ObservationReader:
     # ------------------------------------------------------------------
 
     # Valid aggregation levels and their date_trunc unit
+    _VALUE_FIELDS = ("raw_value", "cleaned_value")
+
     _AGG_TRUNC = {
         "hourly": "hour",
         "daily": "day",
@@ -349,6 +351,7 @@ class ObservationReader:
         start: str,
         end: str,
         agg: str = "daily",
+        value_field: str = "raw_value",
     ) -> list[dict]:
         """
         Return aggregated (or raw) time-series for one variable at one station.
@@ -360,6 +363,8 @@ class ObservationReader:
         start : str          ISO date/datetime, inclusive  e.g. "2026-04-01"
         end : str            ISO date/datetime, inclusive  e.g. "2026-04-27"
         agg : str            "raw" | "hourly" | "daily" | "monthly"
+        value_field : str    "raw_value" | "cleaned_value" (whitelisted; it is
+                             interpolated into SQL, never taken from input as-is)
 
         Returns
         -------
@@ -368,19 +373,24 @@ class ObservationReader:
             avg / min / max / count  – for aggregated modes
             value / unit             – for raw mode
         """
+        if value_field not in self._VALUE_FIELDS:
+            raise ValueError(f"Unsupported value_field '{value_field}'")
+        col = value_field
+
         if agg == "raw":
-            sql = """
+            sql = f"""
                 SELECT
                     o.observed_at                                             AS period,
                     CASE
-                        WHEN o.unit = 'Pa' THEN ROUND((o.raw_value / 100)::numeric, 2)
-                        ELSE ROUND(o.raw_value::numeric, 4)
+                        WHEN o.unit = 'Pa' THEN ROUND((o.{col} / 100)::numeric, 2)
+                        ELSE ROUND(o.{col}::numeric, 4)
                     END                                                       AS value,
                     CASE WHEN o.unit = 'Pa' THEN 'hPa' ELSE o.unit END       AS unit
                 FROM observations o
                 JOIN stations s ON s.id = o.station_id
                 WHERE s.station_code  = %s
                   AND o.variable_code = %s
+                  AND o.{col} IS NOT NULL
                   AND o.observed_at  >= %s::date
                   AND o.observed_at  <  %s::date + interval '1 day'
                 ORDER BY o.observed_at
@@ -392,26 +402,27 @@ class ObservationReader:
                 return [dict(zip(cols, row)) for row in cur.fetchall()]
 
         trunc_unit = self._AGG_TRUNC.get(agg, "day")
-        sql = """
+        sql = f"""
             SELECT
                 date_trunc(%s, o.observed_at)                                AS period,
                 ROUND(AVG(
-                    CASE WHEN o.unit = 'Pa' THEN o.raw_value / 100
-                         ELSE o.raw_value END
+                    CASE WHEN o.unit = 'Pa' THEN o.{col} / 100
+                         ELSE o.{col} END
                 )::numeric, 4)                                               AS avg,
                 ROUND(MIN(
-                    CASE WHEN o.unit = 'Pa' THEN o.raw_value / 100
-                         ELSE o.raw_value END
+                    CASE WHEN o.unit = 'Pa' THEN o.{col} / 100
+                         ELSE o.{col} END
                 )::numeric, 4)                                               AS min,
                 ROUND(MAX(
-                    CASE WHEN o.unit = 'Pa' THEN o.raw_value / 100
-                         ELSE o.raw_value END
+                    CASE WHEN o.unit = 'Pa' THEN o.{col} / 100
+                         ELSE o.{col} END
                 )::numeric, 4)                                               AS max,
                 COUNT(*)                                                     AS count
             FROM observations o
             JOIN stations s ON s.id = o.station_id
             WHERE s.station_code  = %s
               AND o.variable_code = %s
+                  AND o.{col} IS NOT NULL
               AND o.observed_at  >= %s::date
               AND o.observed_at  <  %s::date + interval '1 day'
             GROUP BY period

@@ -1,9 +1,11 @@
 from minio import Minio
+from minio.commonconfig import CopySource
 from tempfile import NamedTemporaryFile
 from rio_cogeo.cogeo import cog_translate
 from rio_cogeo.profiles import cog_profiles
 import sys
 import os
+import uuid
 from pathlib import Path
 from dotenv import load_dotenv
 import logging
@@ -25,7 +27,7 @@ client = Minio(
 )
 
 bucket = "geodata"
-key = sys.argv[1]  #"path/your_big.tif"  
+key = sys.argv[1]  #"path/your_big.tif"
 dest_key = key.replace(".tif", "_optimized.tif")
 
 with NamedTemporaryFile(suffix=".tif") as src_tmp, NamedTemporaryFile(suffix=".tif") as dst_tmp:
@@ -57,7 +59,19 @@ with NamedTemporaryFile(suffix=".tif") as src_tmp, NamedTemporaryFile(suffix=".t
          resampling="average",
     )
 
-    # Upload to SAME key (overwrites)
-    client.fput_object(bucket, dest_key, dst_tmp.name)
+    # Upload to a staging key first, then server-side copy into the final
+    # dest_key in one atomic call. TiTiler/GDAL's vsicurl caches a 404 the
+    # moment anything requests dest_key while it's mid-upload, and that
+    # negative cache entry sticks around for the life of the TiTiler
+    # process — so dest_key must never be observable in a partial state.
+    # Note: copy_object is a single-request server-side copy, capped at
+    # 5GiB by the S3/MinIO API — fine for current COG sizes, but a source
+    # file above that would need a multipart copy instead.
+    staging_key = f"{dest_key}.staging-{uuid.uuid4().hex}"
+    try:
+        client.fput_object(bucket, staging_key, dst_tmp.name)
+        client.copy_object(bucket, dest_key, CopySource(bucket, staging_key))
+    finally:
+        client.remove_object(bucket, staging_key)
 
 log.info("File replaced with optimized COG.")

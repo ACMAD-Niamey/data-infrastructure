@@ -1,4 +1,5 @@
 import type { Language } from "../types";
+import { stationSelectors } from "./stationSelectors";
 import type { LayerSelectionValue, SelectorConfig, SelectorKey } from "../types/catalogLayer";
 
 const labels = {
@@ -8,6 +9,16 @@ const labels = {
   dekad: { en: "Dekad", fr: "Décade" },
   season: { en: "Season", fr: "Saison" },
 };
+
+/** Raster layers pick dates from their cadence; station layers pick what to chart. */
+export function selectorsForLayer(
+  layer: { dataset: { dataset_type: string; cadence: string } },
+  language: Language,
+): SelectorConfig[] {
+  return layer.dataset.dataset_type === "station_timeseries"
+    ? stationSelectors()
+    : deriveSelectors(layer.dataset.cadence, language);
+}
 
 export function deriveSelectors(cadence: string, language: Language): SelectorConfig[] {
   const L = (key: keyof typeof labels) => ({

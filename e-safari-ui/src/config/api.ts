@@ -30,3 +30,6 @@ export const catalogBaseUrl = normalizeApiBaseUrl(
 
 /** Optional separate layers selector API; empty disables remote options fetch. */
 export const layersApiBaseUrl = (viteEnv.VITE_LAYERS_API_BASE_URL || "").replace(/\/+$/, "");
+
+/** TiPG (vector tiles / OGC features) as proxied by nginx under /tipg. */
+export const tipgBaseUrl = `${catalogBaseUrl}/tipg`;
