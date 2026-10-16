@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import type { MutableRefObject } from "react";
+import type { Language } from "../types";
 import type { CatalogLayer } from "../types/catalogLayer";
+import { addLegendOnce, renderPointLegend } from "../components/LegendUtils";
+import { useLegendStore } from "../components/stores/useLegendStore";
 import {
   fetchStationLocations,
   stationTileUrl,
@@ -11,6 +14,7 @@ import type { BoundsObject } from "../services/layersApi";
 // TiPG names the vector-tile layer "default" for every collection.
 const SOURCE_LAYER = "default";
 // Sun/shade is the campaign's core comparison, so exposure drives the colour.
+export const EXPOSURE_HEX = { sun: "#f59e0b", shade: "#2563eb" } as const;
 const EXPOSURE_COLOR = ["match", ["get", "exposure"], "sun", "#f59e0b", "shade", "#2563eb", "#6b7280"];
 
 const sourceId = (layerId: string) => `stations-${layerId}`;
@@ -24,6 +28,7 @@ type Params = {
   opacities: Record<string, number>;
   /** Site name of the location currently open in the Analysis tab. */
   selectedSite: string | null;
+  language: Language;
   onSelect: (layerId: string, station: StationLocation) => void;
   onBounds: (layerId: string, bounds: BoundsObject | null) => void;
 };
@@ -33,7 +38,7 @@ type Params = {
  * (small) location list so a click can be paired with the sun/shade twin.
  */
 export function useStationLayers({
-  mapRef, activeLayers, opacities, selectedSite, onSelect, onBounds,
+  mapRef, activeLayers, opacities, selectedSite, language, onSelect, onBounds,
 }: Params) {
   const [locations, setLocations] = useState<Record<string, StationLocation[]>>({});
   const fetchedRef = useRef<Set<string>>(new Set());
@@ -66,6 +71,24 @@ export function useStationLayers({
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeLayers]);
+
+  // Sun/shade key on the Legend tab, through the same store the raster legends use.
+  const legendTitlesRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const labels = language === "fr"
+      ? [{ label: "Soleil", color: EXPOSURE_HEX.sun }, { label: "Ombre", color: EXPOSURE_HEX.shade }]
+      : [{ label: "Sun", color: EXPOSURE_HEX.sun }, { label: "Shade", color: EXPOSURE_HEX.shade }];
+    const wanted = new Set(stationLayers.map((l) => l.title));
+    legendTitlesRef.current.forEach((title) => {
+      useLegendStore.getState().removeLegendByTitle(title); // also refreshes the language
+    });
+    legendTitlesRef.current = wanted;
+    wanted.forEach((title) => addLegendOnce(renderPointLegend(labels, title), title));
+    return () => {
+      legendTitlesRef.current.forEach((title) => useLegendStore.getState().removeLegendByTitle(title));
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeLayers, language]);
 
   // Add / remove map layers to match the active set.
   useEffect(() => {
@@ -131,9 +154,15 @@ export function useStationLayers({
     // The basemap control swaps the whole style (setStyle) some time after the map
     // loads, which silently drops every source/layer added before it. Re-applying on
     // each style change (apply is idempotent) keeps the points on top of any basemap.
+    // "idle" is the backstop: it fires once the map has settled, so even if the style
+    // swap finished without a further "styledata", the layers are restored then.
     if (map.isStyleLoaded()) apply();
     map.on("styledata", apply);
-    return () => map.off("styledata", apply);
+    map.on("idle", apply);
+    return () => {
+      map.off("styledata", apply);
+      map.off("idle", apply);
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeLayers, mapRef]);
 

@@ -89,6 +89,7 @@ const Portal = ({ language }: PortalProps) => {
     activeLayers,
     opacities,
     selectedSite: selectedStation?.station.site ?? null,
+    language,
     onSelect: (layerId, station) => {
       setSelectedStation({ layerId, station });
       setRightBarTab('Analysis');

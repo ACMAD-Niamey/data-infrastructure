@@ -15,6 +15,9 @@ export const STATION_VARIABLES = [
   { value: "battery_v", unit: "V", en: "Battery", fr: "Batterie" },
 ] as const;
 
+/** Pseudo-variable: the Analysis tab stacks one chart per recorded variable. */
+export const ALL_VARIABLES = "all";
+
 const AGGREGATIONS = [
   { value: "hourly", en: "Hourly", fr: "Horaire" },
   { value: "daily", en: "Daily", fr: "Journalier" },
@@ -49,13 +52,20 @@ export function stationSelectorOptions(
     items.map((i) => ({ value: i.value, label: i[language] }));
 
   return {
-    variable: pick(STATION_VARIABLES),
+    variable: [
+      { value: ALL_VARIABLES, label: language === "fr" ? "Toutes les variables" : "All variables" },
+      ...pick(STATION_VARIABLES),
+    ],
     agg: pick(AGGREGATIONS),
     value: pick(VALUES).filter(
       (o) => (o.value === "raw" ? cfg?.show_raw_values ?? true : cfg?.show_cleaned_values ?? false),
     ),
   };
 }
+
+/** Variables charted by "All variables". Battery is logger housekeeping, not a heat
+ * measurement, so it is only available by picking it explicitly. */
+export const ALL_VIEW_VARIABLES = STATION_VARIABLES.filter((v) => v.value !== "battery_v");
 
 export function variableMeta(code: string) {
   return STATION_VARIABLES.find((v) => v.value === code);
