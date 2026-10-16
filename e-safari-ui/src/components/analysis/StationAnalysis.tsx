@@ -37,6 +37,20 @@ function seriesFor(sensors: StationLocation[], t: (typeof copy)["en"]) {
   }));
 }
 
+/** Orange sun / blue shade key, pinned under the location name while charts scroll. */
+function SensorLegend({ sensors, t }: { sensors: StationLocation[]; t: (typeof copy)["en"] }) {
+  return (
+    <div className="flex items-center gap-4 mt-1" aria-label="legend">
+      {seriesFor(sensors, t).map((s) => (
+        <span key={s.field} className="inline-flex items-center gap-1.5 text-gray-700">
+          <span style={{ width: 12, height: 12, borderRadius: 6, background: s.color, display: "inline-block" }} />
+          {s.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 type ChartProps = {
   sensors: StationLocation[];
   variable: string;
@@ -159,13 +173,22 @@ export function StationAnalysis({ sensors: unordered, selection, language }: Pro
   const variables = isAll ? ALL_VIEW_VARIABLES : STATION_VARIABLES.filter((v) => v.value === variable);
 
   return (
-    <div className="p-3" style={{ fontSize: 12 }}>
-      <div className="font-semibold text-gray-800">{sensors[0]?.site ?? sensors[0]?.name}</div>
-      <div className="text-gray-500 mb-2">
-        {sensors[0]?.commune ? `${sensors[0].commune}` : ""}
-        {!isAll && variableMeta(variable) ? ` · ${variableMeta(variable)![language]} (${variableMeta(variable)!.unit})` : ""}
+    <div style={{ fontSize: 12 }}>
+      {/* Sticky within the panel's own scroll area (#contentContainer), so the location
+          and the colour key stay visible while the stacked charts scroll underneath. */}
+      <div
+        className="px-3 pt-3 pb-2"
+        style={{ position: "sticky", top: 0, zIndex: 2, background: "#fff", borderBottom: "1px solid #e5e7eb" }}
+      >
+        <div className="font-semibold text-gray-800">{sensors[0]?.site ?? sensors[0]?.name}</div>
+        <div className="text-gray-500">
+          {sensors[0]?.commune ? `${sensors[0].commune}` : ""}
+          {!isAll && variableMeta(variable) ? ` · ${variableMeta(variable)![language]} (${variableMeta(variable)!.unit})` : ""}
+        </div>
+        <SensorLegend sensors={sensors} t={t} />
       </div>
 
+      <div className="p-3">
       {!span && <p className="text-gray-500">{t.loading}</p>}
       {span && !span.start && <p className="text-gray-500">{t.empty}</p>}
 
@@ -178,6 +201,7 @@ export function StationAnalysis({ sensors: unordered, selection, language }: Pro
                          height={isAll ? 150 : 240} showLegend={!isAll} />
         </div>
       ))}
+      </div>
     </div>
   );
 }
