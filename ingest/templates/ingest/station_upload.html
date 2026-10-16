@@ -1,0 +1,19 @@
+{% extends "wagtailadmin/base.html" %}
+{% load wagtailadmin_tags %}
+
+{% block titletag %}Upload station time series{% endblock %}
+
+{% block content %}
+  {% include "wagtailadmin/shared/header.html" with title="Upload station time series" icon="upload" %}
+  <div class="nice-padding">
+    <form method="post" enctype="multipart/form-data">
+      {% csrf_token %}
+      <ul class="fields">
+        {% for field in form %}
+          <li>{% include "wagtailadmin/shared/field.html" with field=field %}</li>
+        {% endfor %}
+      </ul>
+      <button type="submit" class="button">Upload and ingest</button>
+    </form>
+  </div>
+{% endblock %}

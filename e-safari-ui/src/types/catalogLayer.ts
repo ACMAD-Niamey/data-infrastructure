@@ -1,6 +1,9 @@
 import type { Language } from "../types";
 
-export type SelectorKey = "year" | "month" | "date" | "dekad" | "season";
+// year..season drive raster dates; variable/value/agg drive station time series.
+export type SelectorKey =
+  | "year" | "month" | "date" | "dekad" | "season"
+  | "variable" | "value" | "agg";
 
 export type LayerLabel = {
   en: string;
@@ -40,6 +43,14 @@ export type CatalogLayerDetails = {
   legend_description: string;
 };
 
+/** Present only on `station_timeseries` datasets (point locations + series). */
+export type StationTimeseriesConfig = {
+  tipg_collection: string;
+  dataset_code: string;
+  show_raw_values: boolean;
+  show_cleaned_values: boolean;
+};
+
 export type CatalogLayer = {
   id: string;
   title: string;
@@ -64,6 +75,7 @@ export type CatalogLayer = {
     color_class: string;
   };
   details?: CatalogLayerDetails | null;
+  station_timeseries?: StationTimeseriesConfig;
   selectors: SelectorConfig[];
   labels: {
     title: LayerLabel;

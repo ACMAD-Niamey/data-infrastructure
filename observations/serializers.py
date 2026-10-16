@@ -121,6 +121,8 @@ class StationStatsResponseSerializer(serializers.Serializer):
     station_name = serializers.CharField(allow_null=True)
     variable = serializers.CharField()
     aggregation = serializers.CharField()
+    value = serializers.CharField()
+    available_values = serializers.ListField(child=serializers.CharField())
     start = serializers.CharField()
     end = serializers.CharField()
     data = serializers.ListField()

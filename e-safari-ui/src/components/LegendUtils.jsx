@@ -28,6 +28,24 @@ export function renderLegend(colorMap, title = "") {
 
 
 
+/** Round swatches, matching how station layers are drawn (points, not areas). */
+export function renderPointLegend(items, title = "") {
+  return (
+    <div className="legend-block is-size-7" key={title} title={title}>
+      {title && <div style={{ fontWeight: "bold", marginBottom: "0.5em" }}>{title}</div>}
+      <div style={{ display: "flex", flexDirection: "column", gap: "0.3em" }}>
+        {items.map(({ label, color }) => (
+          <div key={label} style={{ display: "flex", alignItems: "center", gap: "0.5em" }}>
+            <div style={{ width: "14px", height: "14px", borderRadius: "50%", backgroundColor: color,
+                          border: "1.5px solid #fff", boxShadow: "0 0 0 1px #999" }} />
+            <span style={{ fontSize: "13px" }}>{label}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export const addLegendOnce = (legend, title) => {
     const { legends, addLegend } = useLegendStore.getState();
     const exists = legends.some((lg) => lg.props?.title === title);

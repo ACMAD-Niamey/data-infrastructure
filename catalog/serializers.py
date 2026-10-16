@@ -19,7 +19,7 @@ class DatasetSerializer(serializers.Serializer):
     id = serializers.CharField(max_length=80)
     title = serializers.CharField(max_length=255)
     cadence = serializers.ChoiceField(choices=["daily", "dekadal", "monthly", "seasonal", "annual"])
-    dataset_type = serializers.ChoiceField(choices=["raster", "vector"])
+    dataset_type = serializers.ChoiceField(choices=["raster", "vector", "station_timeseries"])
     stac_collection = serializers.CharField(max_length=120)
 
 

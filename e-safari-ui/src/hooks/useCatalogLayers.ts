@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Language } from "../types";
 import type { CatalogLayer, LayerSelectionValue } from "../types/catalogLayer";
-import { deriveSelectors } from "../lib/cadenceSelectors";
+import { selectorsForLayer } from "../lib/cadenceSelectors";
 import { fetchProjectLayers, getProjectSlug } from "../services/catalogLayersApi";
 
 export function useCatalogLayers(language: Language, preselectLayerId?: string) {
@@ -28,7 +28,7 @@ export function useCatalogLayers(language: Language, preselectLayerId?: string) 
       const fetched = await fetchProjectLayers(projectSlug);
       const withLang = fetched.map((layer) => ({
         ...layer,
-        selectors: deriveSelectors(layer.dataset.cadence, language),
+        selectors: selectorsForLayer(layer, language),
         labels: {
           title: { en: layer.title, fr: layer.title },
           description: {
