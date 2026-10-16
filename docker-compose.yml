@@ -27,6 +27,14 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/geodatamanager
       TIPG_DB_SCHEMA: tiles
       TIPG_CATALOG_TTL: 100
+      # TiPG builds its catalog on every start and every TTL refresh. With the default
+      # (true) it runs `SELECT min(), max() FROM observations` for temporal tables, a full
+      # scan of a table that is now ~316M rows / 91 GB. That never finishes in practice,
+      # so TiPG never gets past startup and the map layers go down. We only serve tiles
+      # and features, so the temporal extent is not needed.
+      # NB: TiPG reads settings with the TIPG_DB_ prefix; TIPG_DB_SCHEMA and
+      # TIPG_ONLY_SPATIAL_TABLES below are not valid names and have no effect.
+      TIPG_DB_DATETIME_EXTENT: "false"
       DB_MIN_CONN_SIZE: 1
       DB_MAX_CONN_SIZE: 10
       # optional but helpful
