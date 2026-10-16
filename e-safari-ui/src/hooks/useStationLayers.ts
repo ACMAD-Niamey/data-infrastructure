@@ -39,6 +39,9 @@ export function useStationLayers({
   const fetchedRef = useRef<Set<string>>(new Set());
   const onSelectRef = useRef(onSelect);
   onSelectRef.current = onSelect;
+  // Read inside the style callback, which outlives any single render.
+  const selectedSiteRef = useRef(selectedSite);
+  selectedSiteRef.current = selectedSite;
 
   const stationLayers = activeLayers.filter((l) => l.dataset.dataset_type === "station_timeseries" && l.station_timeseries);
 
@@ -83,14 +86,18 @@ export function useStationLayers({
         });
 
       stationLayers.forEach((layer) => {
-        if (map.getSource(sourceId(layer.id))) return;
+        // Keyed on the layer, not the source: adding the source can itself fire
+        // "styledata" before the layers below exist.
+        if (map.getLayer(circleId(layer.id))) return;
         const cfg = layer.station_timeseries!;
-        map.addSource(sourceId(layer.id), {
-          type: "vector",
-          tiles: [stationTileUrl(cfg.tipg_collection, cfg.dataset_code)],
-          minzoom: 0,
-          maxzoom: 14,
-        });
+        if (!map.getSource(sourceId(layer.id))) {
+          map.addSource(sourceId(layer.id), {
+            type: "vector",
+            tiles: [stationTileUrl(cfg.tipg_collection, cfg.dataset_code)],
+            minzoom: 0,
+            maxzoom: 14,
+          });
+        }
         map.addLayer({
           id: circleId(layer.id),
           type: "circle",
@@ -110,7 +117,7 @@ export function useStationLayers({
           type: "circle",
           source: sourceId(layer.id),
           "source-layer": SOURCE_LAYER,
-          filter: ["==", ["get", "site"], ""],
+          filter: ["==", ["get", "site"], selectedSiteRef.current ?? ""],
           paint: {
             "circle-radius": ["interpolate", ["linear"], ["zoom"], 8, 9, 14, 14],
             "circle-color": "rgba(0,0,0,0)",
@@ -121,9 +128,12 @@ export function useStationLayers({
       });
     };
 
+    // The basemap control swaps the whole style (setStyle) some time after the map
+    // loads, which silently drops every source/layer added before it. Re-applying on
+    // each style change (apply is idempotent) keeps the points on top of any basemap.
     if (map.isStyleLoaded()) apply();
-    else map.once("load", apply);
-    return () => map.off("load", apply);
+    map.on("styledata", apply);
+    return () => map.off("styledata", apply);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeLayers, mapRef]);
 
@@ -146,11 +156,11 @@ export function useStationLayers({
       };
       const enter = () => { map.getCanvas().style.cursor = "pointer"; };
       const leave = () => { map.getCanvas().style.cursor = ""; };
-      if (map.getLayer(id)) {
-        map.on("click", id, onClick);
-        map.on("mouseenter", id, enter);
-        map.on("mouseleave", id, leave);
-      }
+      // Bound unconditionally: layer-scoped listeners also fire for a layer that is
+      // (re-)added later, e.g. after a basemap style swap.
+      map.on("click", id, onClick);
+      map.on("mouseenter", id, enter);
+      map.on("mouseleave", id, leave);
       return { id, onClick, enter, leave };
     });
 
